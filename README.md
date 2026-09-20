@@ -74,8 +74,27 @@ Open `http://localhost:7777`, or let an agent open a review for you with the
 `start_review` tool. The daemon takes `--port` and `--repo`, and stores reviews
 under `.git/yart/reviews/` so nothing appears in `git status`.
 
-For UI work, `pnpm dev` runs Vite on port 5173 with `/api` proxied to the daemon
-on 7777, so run both.
+### Developing against yart's own diff
+
+```sh
+pnpm dev:actual
+```
+
+Starts the daemon and Vite, opens a review over whatever this branch changed
+against its merge base with `main`, and prints the URL. Pass a revision to review
+against something else.
+
+It develops against a real diff rather than a fixture, because a fixture only
+ever exercises the shapes it happens to contain — the repository's own history
+supplies renames, deletions, binary files and long hunks for free. Re-running on
+the same branch advances the existing review instead of opening another, so
+comments left earlier follow your new commits and the re-anchoring is exercised
+every time you iterate.
+
+A daemon that is already listening is reused rather than replaced.
+
+For UI work without a review, `pnpm dev` runs Vite alone on 5173 with `/api`
+proxied to the daemon on 7777.
 
 Other scripts:
 

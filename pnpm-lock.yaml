@@ -129,6 +129,15 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@26.6.2)(vite@8.3.0)
 
+  scripts:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.2
+        version: 26.6.2
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
 packages:
 
   /@cacheable/memory@2.2.0:
