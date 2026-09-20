@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "daemon": "pnpm --filter @yart/daemon start",
+    "mcp": "pnpm --filter @yart/mcp start",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -30,6 +31,7 @@
     "eslint": "^10.11.0",
     "eslint-plugin-check-file": "^3.3.2",
     "globals": "^17.12.0",
+    "prettier": "^3.9.8",
     "typescript-eslint": "^8.70.0"
   }
 }

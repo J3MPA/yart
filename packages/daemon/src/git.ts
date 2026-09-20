@@ -53,10 +53,21 @@ export const runGit = async (repo_path: string, args: readonly string[]): Promis
   }
 }
 
-/** Resolves a revision to its full commit sha. */
+/**
+ * Resolves a revision to its full commit sha.
+ *
+ * git reports an unresolvable revision as "Needed a single revision", which
+ * does not say which one; the name is put back into the message because the
+ * caller may be an agent that has to correct it.
+ */
 export const resolveRev = async (repo_path: string, rev: string): Promise<string> => {
-  const out = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`])
-  return out.trim()
+  try {
+    const out = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`])
+    return out.trim()
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    throw new GitError(`Cannot resolve revision "${rev}": ${detail}`, ['rev-parse', rev])
+  }
 }
 
 /** Absolute path to the repository root containing `cwd`. */
