@@ -93,6 +93,21 @@
   opacity: 1;
 }
 
+.row_clickable {
+  cursor: pointer;
+}
+
+.row_clickable:hover {
+  outline: 1px solid var(--yart-color-accent);
+  outline-offset: -1px;
+}
+
+/* Clicking anywhere on the row comments on it, but the code itself keeps a text
+   cursor so it still reads as selectable — which it is. */
+.row_clickable .code {
+  cursor: text;
+}
+
 .row_added {
   background-color: var(--yart-color-add-bg);
 }
