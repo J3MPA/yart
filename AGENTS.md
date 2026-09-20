@@ -5,15 +5,15 @@
 These are a project requirement and are enforced by ESLint
 (`@typescript-eslint/naming-convention`). They are not stylistic preferences.
 
-| Kind                                        | Case               | Example                  |
-| ------------------------------------------- | ------------------ | ------------------------ |
-| Variables, function parameters              | `snake_case`       | `line_map`, `blob_sha`   |
-| Object, interface and type properties       | `snake_case`       | `anchor_state`           |
-| Functions, methods, action creators         | `camelCase`        | `reanchorThread`         |
-| Type aliases, interfaces, enums             | `PascalCase`       | `LineAnchor`             |
-| Singletons                                  | `PascalCase`       | `Store`                  |
-| Constants                                   | `UPPER_SNAKE_CASE` | `DEFAULT_CONTEXT_RADIUS` |
-| Files and directories                       | `kebab-case`       | `line-map.ts`            |
+| Kind                                  | Case               | Example                  |
+| ------------------------------------- | ------------------ | ------------------------ |
+| Variables, function parameters        | `snake_case`       | `line_map`, `blob_sha`   |
+| Object, interface and type properties | `snake_case`       | `anchor_state`           |
+| Functions, methods, action creators   | `camelCase`        | `reanchorThread`         |
+| Type aliases, interfaces, enums       | `PascalCase`       | `LineAnchor`             |
+| Singletons                            | `PascalCase`       | `Store`                  |
+| Constants                             | `UPPER_SNAKE_CASE` | `DEFAULT_CONTEXT_RADIUS` |
+| Files and directories                 | `kebab-case`       | `line-map.ts`            |
 
 Properties are `snake_case` including on serialized types: `Thread` and `Comment`
 travel over MCP as JSON and are written to disk, so the wire format matches the
@@ -50,6 +50,11 @@ source.
 
   Class and object method shorthand is unaffected, since neither is a hoisting
   question and arrows would change `this`.
+
+- Formatting is Prettier's and is not a matter of taste: no semicolons, single
+  quotes, 100 columns. `pnpm format` applies it and `pnpm format:check` verifies
+  it. Prettier owns layout; ESLint owns naming and the rules above, and the two
+  do not overlap.
 - American English throughout: code, comments, commit messages, documentation.
 - Only add a comment when it carries information the code does not: a non-obvious
   constraint, a subtle invariant, the reason behind a workaround. Do not restate

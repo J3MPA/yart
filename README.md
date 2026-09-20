@@ -16,14 +16,14 @@ Local diff viewers solve the reading half of that problem and then stop at a
 as structured data over the Model Context Protocol, so the agent can act on them,
 reply to them, and mark threads resolved — without anything being pushed to GitHub.
 
-|                          | Copy-paste diff viewers    | yart                            |
-| ------------------------ | -------------------------- | ------------------------------- |
-| Who starts the review    | You, manually              | The agent, via a tool call      |
-| How comments travel      | Prose blob, pasted         | Structured `{file, line, side}` |
-| Agent can reply / resolve | No                         | Yes                             |
-| State across rounds      | None                       | Threads persist                 |
+|                           | Copy-paste diff viewers | yart                            |
+| ------------------------- | ----------------------- | ------------------------------- |
+| Who starts the review     | You, manually           | The agent, via a tool call      |
+| How comments travel       | Prose blob, pasted      | Structured `{file, line, side}` |
+| Agent can reply / resolve | No                      | Yes                             |
+| State across rounds       | None                    | Threads persist                 |
 
-The last row is the point. Review is a *loop* — change, review, comment, fix,
+The last row is the point. Review is a _loop_ — change, review, comment, fix,
 re-review showing only what is still open — and a clipboard has no memory.
 
 ## How it will work
@@ -41,12 +41,12 @@ more than one agent at a time.
 
 Planned tool surface:
 
-| Tool                | Purpose                                                  |
-| ------------------- | -------------------------------------------------------- |
-| `start_review`      | Open a review over a diff range, return its URL          |
-| `await_review`      | Block until the review is submitted, return the comments |
-| `get_review`        | Non-blocking read of current comments                    |
-| `resolve_comment`   | Agent marks a thread addressed, with a note              |
+| Tool              | Purpose                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `start_review`    | Open a review over a diff range, return its URL          |
+| `await_review`    | Block until the review is submitted, return the comments |
+| `get_review`      | Non-blocking read of current comments                    |
+| `resolve_comment` | Agent marks a thread addressed, with a note              |
 
 ## Status
 
@@ -56,8 +56,8 @@ Early — the scaffold is in place, the product is not.
 - [x] Design token foundation
 - [x] Comment anchoring model
 - [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
+- [x] MCP server
 - [ ] Diff parsing and rendering in the UI
-- [ ] MCP server
 - [ ] Clipboard export (fallback for non-MCP agents)
 
 ## Getting started
@@ -79,6 +79,7 @@ Other scripts:
 pnpm build      # typecheck, then production build
 pnpm typecheck  # types only
 pnpm lint       # ESLint, including the naming conventions
+pnpm format     # Prettier
 pnpm test       # unit tests
 ```
 
@@ -94,7 +95,7 @@ apps/
 packages/
   core/             Domain model — anchoring, threads (no I/O)
   daemon/           Git adapter, review store, HTTP API, CLI
-                    (reserved: MCP server)
+  mcp/              MCP server — the agent's side of the loop
 ```
 
 ## Comment anchoring
@@ -114,13 +115,13 @@ line number always denotes the same text. Each thread keeps three things:
 When the agent pushes a new revision, every thread is re-anchored against it and
 lands in one of three states:
 
-| State      | Meaning                                                 |
-| ---------- | ------------------------------------------------------- |
-| `current`  | Same file, same line as at creation                     |
-| `shifted`  | The line survives, but moved or the file was renamed    |
-| `outdated` | The line is gone; only `context` remains                |
+| State      | Meaning                                              |
+| ---------- | ---------------------------------------------------- |
+| `current`  | Same file, same line as at creation                  |
+| `shifted`  | The line survives, but moved or the file was renamed |
+| `outdated` | The line is gone; only `context` remains             |
 
-State is *derived* from `origin` versus `anchor` on every pass rather than
+State is _derived_ from `origin` versus `anchor` on every pass rather than
 accumulated, so a bug in one round cannot poison later ones.
 
 Two deliberate judgment calls:
@@ -134,7 +135,7 @@ Two deliberate judgment calls:
   outdated every thread in a file would make review unusable. Set
   `ignore_whitespace: false` to opt out.
 
-`reanchorThread` takes the line mapping as an *input* rather than computing it,
+`reanchorThread` takes the line mapping as an _input_ rather than computing it,
 so the model is a pure lookup and does not care where the diff came from. A
 mapping can be built from text with `buildLineMap` (which uses
 [`diff`](https://github.com/kpdecker/jsdiff)), or later from `git diff` output —
@@ -146,7 +147,8 @@ Naming is a project requirement rather than a preference, and is enforced by
 ESLint: variables and properties are `snake_case`, functions are `camelCase`,
 types are `PascalCase`, constants are `UPPER_SNAKE_CASE`, and files and
 directories are `kebab-case`. Callables are const arrows rather than `function`
-declarations. Properties stay
+declarations, and Prettier owns formatting (no semicolons, single quotes, 100
+columns). Properties stay
 `snake_case` on serialized types too, so the JSON that travels over MCP matches
 the source. The full rules and their exceptions are in
 [`AGENTS.md`](AGENTS.md).
@@ -173,20 +175,85 @@ invisible to `git status`, and in a directory yart will never be asked to show.
 
 **An HTTP API.**
 
-| Route                                          | Purpose                             |
-| ---------------------------------------------- | ----------------------------------- |
-| `POST /api/reviews`                            | Open a review over a range          |
-| `GET /api/reviews` · `GET /api/reviews/:id`    | List, or fetch one                  |
-| `GET /api/reviews/:id/file?path=`              | Both sides of a file, for rendering |
-| `POST /api/reviews/:id/threads`                | Comment on a line                   |
-| `POST /api/reviews/:id/threads/:tid/comments`  | Reply in a thread                   |
-| `PATCH /api/reviews/:id/threads/:tid`          | Open or resolve a thread            |
-| `POST /api/reviews/:id/submit`                 | Hand the review back                |
-| `POST /api/reviews/:id/advance`                | Move to a new head, re-anchoring    |
+| Route                                         | Purpose                             |
+| --------------------------------------------- | ----------------------------------- |
+| `POST /api/reviews`                           | Open a review over a range          |
+| `GET /api/reviews` · `GET /api/reviews/:id`   | List, or fetch one                  |
+| `GET /api/reviews/:id/file?path=`             | Both sides of a file, for rendering |
+| `POST /api/reviews/:id/threads`               | Comment on a line                   |
+| `POST /api/reviews/:id/threads/:tid/comments` | Reply in a thread                   |
+| `PATCH /api/reviews/:id/threads/:tid`         | Open or resolve a thread            |
+| `POST /api/reviews/:id/submit`                | Hand the review back                |
+| `POST /api/reviews/:id/advance`               | Move to a new head, re-anchoring    |
 
 `advance` is where the loop closes: it diffs the old head against the new one,
 builds a line map per changed file, and re-anchors every thread, so the next
 round shows what is still open rather than starting over.
+
+## The MCP server
+
+`packages/mcp` is how an agent drives a review. It is a shim: it holds no state
+and makes no decisions, it translates MCP tool calls into daemon HTTP requests.
+
+The first tool call starts a daemon if none is listening, so an agent does not
+have to ask anyone to run one first. The daemon is spawned detached, because an
+MCP server dies with its client and a review has to outlive that.
+
+| Tool              | What the agent does with it                                 |
+| ----------------- | ----------------------------------------------------------- |
+| `start_review`    | Open a review after making changes; returns an id and a URL |
+| `await_review`    | Block until the human submits, then read their comments     |
+| `get_review`      | Read current state without blocking                         |
+| `list_reviews`    | List reviews in this repository                             |
+| `reply_to_thread` | Explain a change, or push back on a comment                 |
+| `resolve_thread`  | Mark a comment addressed                                    |
+| `advance_review`  | Re-anchor every comment onto new commits                    |
+
+Comments come back rendered as text rather than JSON, because the consumer is a
+model deciding what to edit and a comment is easier to act on next to the code
+it points at:
+
+```
+[ce53cb3a-…] a.txt:3  (moved from a.txt:2)
+      alpha
+  >   TARGET
+      gamma
+  human: this name is unclear
+  agent: renamed it
+```
+
+`await_review` returns instead of hanging when its timeout passes, handing back
+whatever has been written so far — a timeout is not a failure, and the agent can
+simply call it again.
+
+### Registering it
+
+With Claude Code, from the repository you want to review:
+
+```sh
+claude mcp add yart -- node --experimental-strip-types /absolute/path/to/yart/packages/mcp/src/cli.ts
+```
+
+With Claude Desktop, add to its MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "yart": {
+      "command": "node",
+      "args": [
+        "--experimental-strip-types",
+        "/absolute/path/to/yart/packages/mcp/src/cli.ts",
+        "--repo",
+        "/absolute/path/to/the/repository"
+      ]
+    }
+  }
+}
+```
+
+Both connect to the same daemon, which is the point of keeping it a separate
+process.
 
 ## Design system
 

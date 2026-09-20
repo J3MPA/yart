@@ -1,40 +1,40 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import type { LineMap } from '@yart/core';
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import type { LineMap } from '@yart/core'
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile)
 
 /**
  * Git reports an absent blob — one side of an add or delete — as all zeroes.
  * Matched by shape rather than by a fixed width so the check holds whatever
  * hash length the repository uses.
  */
-const NULL_BLOB = /^0+$/;
+const NULL_BLOB = /^0+$/
 
 /** Output can be large for a wide range; 64 MB is well past any real diff. */
-const MAX_BUFFER = 64 * 1024 * 1024;
+const MAX_BUFFER = 64 * 1024 * 1024
 
-export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied';
+export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied'
 
 export interface ChangedFile {
-  status: ChangeStatus;
+  status: ChangeStatus
   /** Path in the head revision, or the deleted path when the file is gone. */
-  path: string;
+  path: string
   /** Present only for renames and copies. */
-  old_path: string | null;
+  old_path: string | null
   /** Blob in the base revision; `null` when the file was added. */
-  base_blob_sha: string | null;
+  base_blob_sha: string | null
   /** Blob in the head revision; `null` when the file was deleted. */
-  head_blob_sha: string | null;
+  head_blob_sha: string | null
 }
 
 export class GitError extends Error {
-  readonly args: readonly string[];
+  readonly args: readonly string[]
 
   constructor(message: string, args: readonly string[]) {
-    super(message);
-    this.name = 'GitError';
-    this.args = args;
+    super(message)
+    this.name = 'GitError'
+    this.args = args
   }
 }
 
@@ -45,44 +45,55 @@ export const runGit = async (repo_path: string, args: readonly string[]): Promis
       // eslint-disable-next-line @typescript-eslint/naming-convention -- Node's option name
       maxBuffer: MAX_BUFFER,
       encoding: 'utf8',
-    });
-    return stdout;
+    })
+    return stdout
   } catch (cause) {
-    const stderr = (cause as { stderr?: string }).stderr?.trim();
-    throw new GitError(stderr || `git ${args.join(' ')} failed`, args);
+    const stderr = (cause as { stderr?: string }).stderr?.trim()
+    throw new GitError(stderr || `git ${args.join(' ')} failed`, args)
   }
-};
+}
 
-/** Resolves a revision to its full commit sha. */
+/**
+ * Resolves a revision to its full commit sha.
+ *
+ * git reports an unresolvable revision as "Needed a single revision", which
+ * does not say which one; the name is put back into the message because the
+ * caller may be an agent that has to correct it.
+ */
 export const resolveRev = async (repo_path: string, rev: string): Promise<string> => {
-  const out = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`]);
-  return out.trim();
-};
+  try {
+    const out = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`])
+    return out.trim()
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    throw new GitError(`Cannot resolve revision "${rev}": ${detail}`, ['rev-parse', rev])
+  }
+}
 
 /** Absolute path to the repository root containing `cwd`. */
 export const findRepoRoot = async (cwd: string): Promise<string> => {
-  const out = await runGit(cwd, ['rev-parse', '--show-toplevel']);
-  return out.trim();
-};
+  const out = await runGit(cwd, ['rev-parse', '--show-toplevel'])
+  return out.trim()
+}
 
 const toStatus = (code: string): ChangeStatus => {
   switch (code[0]) {
     case 'A':
-      return 'added';
+      return 'added'
     case 'D':
-      return 'deleted';
+      return 'deleted'
     case 'R':
-      return 'renamed';
+      return 'renamed'
     case 'C':
-      return 'copied';
+      return 'copied'
     default:
-      return 'modified';
+      return 'modified'
   }
-};
+}
 
 const blobOrNull = (sha: string): string | null => {
-  return NULL_BLOB.test(sha) ? null : sha;
-};
+  return NULL_BLOB.test(sha) ? null : sha
+}
 
 /**
  * Lists what changed between two revisions, with the blob on each side.
@@ -107,35 +118,35 @@ export const listChangedFiles = async (
     '--no-color',
     base,
     head,
-  ]);
+  ])
 
-  const fields = out.split('\0');
-  const files: ChangedFile[] = [];
+  const fields = out.split('\0')
+  const files: ChangedFile[] = []
 
-  let index = 0;
+  let index = 0
   while (index < fields.length) {
-    const meta = fields[index];
+    const meta = fields[index]
     if (meta === undefined || !meta.startsWith(':')) {
-      index += 1;
-      continue;
+      index += 1
+      continue
     }
 
     // ":<old_mode> <new_mode> <old_sha> <new_sha> <status>"
-    const parts = meta.slice(1).split(' ');
-    const old_sha = parts[2];
-    const new_sha = parts[3];
-    const code = parts[4];
+    const parts = meta.slice(1).split(' ')
+    const old_sha = parts[2]
+    const new_sha = parts[3]
+    const code = parts[4]
     if (old_sha === undefined || new_sha === undefined || code === undefined) {
-      index += 1;
-      continue;
+      index += 1
+      continue
     }
 
-    const status = toStatus(code);
-    const moved = status === 'renamed' || status === 'copied';
-    const first_path = fields[index + 1];
-    const second_path = moved ? fields[index + 2] : undefined;
+    const status = toStatus(code)
+    const moved = status === 'renamed' || status === 'copied'
+    const first_path = fields[index + 1]
+    const second_path = moved ? fields[index + 2] : undefined
 
-    if (first_path === undefined || (moved && second_path === undefined)) break;
+    if (first_path === undefined || (moved && second_path === undefined)) break
 
     files.push({
       status,
@@ -143,49 +154,49 @@ export const listChangedFiles = async (
       old_path: moved ? first_path : null,
       base_blob_sha: blobOrNull(old_sha),
       head_blob_sha: blobOrNull(new_sha),
-    });
+    })
 
-    index += moved ? 3 : 2;
+    index += moved ? 3 : 2
   }
 
-  return files;
-};
+  return files
+}
 
 /** Reads a blob's contents by hash. */
 export const readBlob = async (repo_path: string, blob_sha: string): Promise<string> => {
-  return runGit(repo_path, ['cat-file', 'blob', blob_sha]);
-};
+  return runGit(repo_path, ['cat-file', 'blob', blob_sha])
+}
 
 /** Counts lines the way `splitLines` does, treating a trailing newline as a terminator. */
 const countLines = (content: string): number => {
-  if (content === '') return 0;
-  const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content;
-  return trimmed.split('\n').length;
-};
-
-interface Hunk {
-  old_start: number;
-  old_count: number;
-  new_start: number;
-  new_count: number;
+  if (content === '') return 0
+  const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content
+  return trimmed.split('\n').length
 }
 
-const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+interface Hunk {
+  old_start: number
+  old_count: number
+  new_start: number
+  new_count: number
+}
+
+const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
 export const parseHunkHeaders = (diff_output: string): Hunk[] => {
-  const hunks: Hunk[] = [];
+  const hunks: Hunk[] = []
   for (const raw_line of diff_output.split('\n')) {
-    const match = HUNK_HEADER.exec(raw_line);
-    if (match === null) continue;
+    const match = HUNK_HEADER.exec(raw_line)
+    if (match === null) continue
     hunks.push({
       old_start: Number(match[1]),
       old_count: match[2] === undefined ? 1 : Number(match[2]),
       new_start: Number(match[3]),
       new_count: match[4] === undefined ? 1 : Number(match[4]),
-    });
+    })
   }
-  return hunks;
-};
+  return hunks
+}
 
 /**
  * Turns hunk headers into a line map.
@@ -199,33 +210,33 @@ export const parseHunkHeaders = (diff_output: string): Hunk[] => {
  * line is still unchanged and must be carried across.
  */
 export const lineMapFromHunks = (hunks: readonly Hunk[], old_total: number): LineMap => {
-  const map = new Map<number, number>();
-  let old_line = 1;
-  let new_line = 1;
+  const map = new Map<number, number>()
+  let old_line = 1
+  let new_line = 1
 
   for (const hunk of hunks) {
-    const unchanged_until = hunk.old_count === 0 ? hunk.old_start : hunk.old_start - 1;
+    const unchanged_until = hunk.old_count === 0 ? hunk.old_start : hunk.old_start - 1
     while (old_line <= unchanged_until) {
-      map.set(old_line, new_line);
-      old_line += 1;
-      new_line += 1;
+      map.set(old_line, new_line)
+      old_line += 1
+      new_line += 1
     }
-    old_line = hunk.old_count === 0 ? hunk.old_start + 1 : hunk.old_start + hunk.old_count;
-    new_line = hunk.new_count === 0 ? hunk.new_start + 1 : hunk.new_start + hunk.new_count;
+    old_line = hunk.old_count === 0 ? hunk.old_start + 1 : hunk.old_start + hunk.old_count
+    new_line = hunk.new_count === 0 ? hunk.new_start + 1 : hunk.new_start + hunk.new_count
   }
 
   while (old_line <= old_total) {
-    map.set(old_line, new_line);
-    old_line += 1;
-    new_line += 1;
+    map.set(old_line, new_line)
+    old_line += 1
+    new_line += 1
   }
 
-  return map;
-};
+  return map
+}
 
 export interface GitLineMapOptions {
   /** Mirrors the text-diff default: a reindent should not outdate every thread. */
-  ignore_whitespace?: boolean;
+  ignore_whitespace?: boolean
 }
 
 /**
@@ -241,16 +252,16 @@ export const buildLineMapFromGit = async (
   head_blob_sha: string,
   options: GitLineMapOptions = {},
 ): Promise<LineMap> => {
-  const { ignore_whitespace = true } = options;
+  const { ignore_whitespace = true } = options
 
-  const args = ['diff', '--no-color', '--unified=0'];
-  if (ignore_whitespace) args.push('--ignore-all-space');
-  args.push(base_blob_sha, head_blob_sha);
+  const args = ['diff', '--no-color', '--unified=0']
+  if (ignore_whitespace) args.push('--ignore-all-space')
+  args.push(base_blob_sha, head_blob_sha)
 
   const [diff_output, base_content] = await Promise.all([
     runGit(repo_path, args),
     readBlob(repo_path, base_blob_sha),
-  ]);
+  ])
 
-  return lineMapFromHunks(parseHunkHeaders(diff_output), countLines(base_content));
-};
+  return lineMapFromHunks(parseHunkHeaders(diff_output), countLines(base_content))
+}
