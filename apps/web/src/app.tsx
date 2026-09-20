@@ -8,7 +8,7 @@ import styles from './app.module.css';
 
 const LAYOUTS: readonly DiffLayout[] = ['unified', 'split'];
 
-export default function App() {
+const App = () => {
   const { layout, hide_unchanged } = useAppSelector((state) => state.diff_view);
   const dispatch = useAppDispatch();
 
@@ -61,4 +61,6 @@ export default function App() {
       </section>
     </main>
   );
-}
+};
+
+export default App;

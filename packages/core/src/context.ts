@@ -1,5 +1,5 @@
-import { splitLines } from './lines';
-import type { AnchorContext } from './types';
+import { splitLines } from './lines.ts';
+import type { AnchorContext } from './types.ts';
 
 export const DEFAULT_CONTEXT_RADIUS = 3;
 
@@ -10,11 +10,11 @@ export const DEFAULT_CONTEXT_RADIUS = 3;
  * @param line 1-based.
  * @throws RangeError if `line` is outside `content`.
  */
-export function captureContext(
+export const captureContext = (
   content: string,
   line: number,
   radius: number = DEFAULT_CONTEXT_RADIUS,
-): AnchorContext {
+): AnchorContext => {
   const lines = splitLines(content);
   const index = line - 1;
   const target = lines[index];
@@ -30,4 +30,4 @@ export function captureContext(
     line: target,
     after: lines.slice(index + 1, index + 1 + radius),
   };
-}
+};

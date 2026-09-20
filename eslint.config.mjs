@@ -10,17 +10,19 @@ import tseslint from 'typescript-eslint';
  * `const` holding a function is a function and stays camelCase, while a `const`
  * holding data is a variable and becomes snake_case. That requires type
  * information, which is why linting runs against the projects.
+ *
+ * `function_formats` exists because React components are PascalCase by
+ * framework requirement, and a component is just a const holding a function.
  */
-const NAMING_CONVENTION = [
+const namingRules = (function_formats) => [
   'error',
   { selector: 'typeLike', format: ['PascalCase'] },
   { selector: 'enumMember', format: ['UPPER_CASE'] },
 
-  { selector: 'function', format: ['camelCase'] },
   { selector: 'typeMethod', format: ['camelCase'] },
   { selector: 'objectLiteralMethod', format: ['camelCase'] },
   { selector: 'classMethod', format: ['camelCase'] },
-  { selector: 'variable', types: ['function'], format: ['camelCase'] },
+  { selector: 'variable', types: ['function'], format: function_formats },
 
   // PascalCase is permitted here only for singletons; the linter cannot tell a
   // singleton from any other object, so that part rests on review.
@@ -37,6 +39,24 @@ const NAMING_CONVENTION = [
   { selector: 'objectLiteralProperty', modifiers: ['requiresQuotes'], format: null },
 ];
 
+/**
+ * Callables are declared as const arrows.
+ *
+ * `func-style` bans the declaration form, and the selector bans the remaining
+ * non-arrow expression form. Class and object methods are untouched: method
+ * shorthand is not a hoisting question and arrows would change `this`.
+ */
+const ARROW_ONLY = {
+  'func-style': ['error', 'expression'],
+  'no-restricted-syntax': [
+    'error',
+    {
+      selector: 'VariableDeclarator > FunctionExpression',
+      message: 'Use an arrow function: const name = () => {}.',
+    },
+  ],
+};
+
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**', '**/*.config.{js,mjs}'] },
   js.configs.recommended,
@@ -52,7 +72,8 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/naming-convention': NAMING_CONVENTION,
+      '@typescript-eslint/naming-convention': namingRules(['camelCase']),
+      ...ARROW_ONLY,
     },
   },
   {
@@ -74,22 +95,10 @@ export default tseslint.config(
     },
   },
   {
-    // React components and hooks are PascalCase by framework requirement.
     files: ['apps/web/**/*.{ts,tsx}'],
-    languageOptions: {
-      globals: globals.browser,
-    },
+    languageOptions: { globals: globals.browser },
     rules: {
-      '@typescript-eslint/naming-convention': [
-        ...NAMING_CONVENTION.slice(0, 1),
-        ...NAMING_CONVENTION.slice(1).map((rule) =>
-          typeof rule === 'object' &&
-          (rule.selector === 'function' ||
-            (rule.selector === 'variable' && rule.types?.includes('function')))
-            ? { ...rule, format: ['camelCase', 'PascalCase'] }
-            : rule,
-        ),
-      ],
+      '@typescript-eslint/naming-convention': namingRules(['camelCase', 'PascalCase']),
     },
   },
 );

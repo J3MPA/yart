@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureContext } from './context';
+import { captureContext } from './context.ts';
 
 const CONTENT = 'one\ntwo\nthree\nfour\nfive\nsix\nseven\n';
 

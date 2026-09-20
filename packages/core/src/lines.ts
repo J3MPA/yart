@@ -6,9 +6,9 @@
  * file ending in a newline would gain a phantom final line that anchors could
  * point at.
  */
-export function splitLines(content: string): string[] {
+export const splitLines = (content: string): string[] => {
   if (content === '') return [];
   const lines = content.split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
   return lines;
-}
+};
