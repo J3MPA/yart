@@ -78,6 +78,13 @@ export interface Review {
   rounds: string[]
   created_at: string
   updated_at: string
+  /**
+   * When this review was archived, or null while it is active.
+   *
+   * A timestamp rather than a flag so the list can still be ordered once
+   * archived reviews are shown.
+   */
+  archived_at: string | null
 }
 
 export type DiffLineKind = 'context' | 'added' | 'removed'

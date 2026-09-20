@@ -63,6 +63,11 @@ export interface CreateReviewParams {
 const deriveTitle = async (repo_path: string, head_sha: string, base_sha: string) =>
   (await commitSubject(repo_path, head_sha)) ?? `${base_sha.slice(0, 8)}..${head_sha.slice(0, 8)}`
 
+export interface ListReviewsParams {
+  /** Return archived reviews instead of active ones. */
+  archived?: boolean
+}
+
 export interface SubmitParams {
   verdict?: ReviewVerdict
   body?: string | null
@@ -114,6 +119,7 @@ export class ReviewService {
       rounds: [head_sha],
       created_at,
       updated_at: created_at,
+      archived_at: null,
     }
 
     await this.store.save(review)
@@ -126,8 +132,11 @@ export class ReviewService {
     return this.upgradeTitle(review)
   }
 
-  async list(): Promise<Review[]> {
-    return Promise.all((await this.store.list()).map((review) => this.upgradeTitle(review)))
+  async list({ archived = false }: ListReviewsParams = {}): Promise<Review[]> {
+    const all = await Promise.all(
+      (await this.store.list()).map((review) => this.upgradeTitle(review)),
+    )
+    return all.filter((review) => (review.archived_at !== null) === archived)
   }
 
   /**
@@ -326,6 +335,16 @@ export class ReviewService {
       threads,
       rounds: [...review.rounds, head_sha],
     })
+  }
+
+  /**
+   * Archiving keeps the review and its comments; only the default listing
+   * stops showing it. Deleting is the irreversible one.
+   */
+  async setArchived(id: string, archived: boolean): Promise<Review> {
+    const review = await this.get(id)
+    if ((review.archived_at !== null) === archived) return review
+    return this.persist({ ...review, archived_at: archived ? nowIso() : null })
   }
 
   async remove(id: string): Promise<void> {

@@ -82,7 +82,17 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
 
   app.get('/health', (context) => context.json({ ok: true, repo_path }))
 
-  app.get('/api/reviews', async (context) => context.json(await service.list()))
+  app.get('/api/reviews', async (context) =>
+    context.json(await service.list({ archived: context.req.query('archived') === 'true' })),
+  )
+
+  app.patch('/api/reviews/:id', async (context) => {
+    const body = await context.req.json<{ archived?: boolean }>()
+    if (typeof body.archived !== 'boolean') {
+      throw new ReviewError('archived must be true or false', 400)
+    }
+    return context.json(await service.setArchived(context.req.param('id'), body.archived))
+  })
 
   app.post('/api/reviews', async (context) => {
     const body = await context.req.json<{ base?: string; head?: string; title?: string }>()

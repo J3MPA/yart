@@ -209,6 +209,34 @@ describe('the review loop', () => {
   })
 })
 
+describe('PATCH /api/reviews/:id', () => {
+  it('archives and restores a review', async () => {
+    const created = await openReview()
+
+    const archived = (await (
+      await patch(`/api/reviews/${created.id}`, { archived: true })
+    ).json()) as Review
+    expect(archived.archived_at).not.toBeNull()
+
+    const listed = (await (await app.request('/api/reviews')).json()) as Review[]
+    expect(listed.map((review) => review.id)).not.toContain(created.id)
+
+    const archived_list = (await (
+      await app.request('/api/reviews?archived=true')
+    ).json()) as Review[]
+    expect(archived_list.map((review) => review.id)).toContain(created.id)
+
+    await patch(`/api/reviews/${created.id}`, { archived: false })
+    const restored = (await (await app.request('/api/reviews')).json()) as Review[]
+    expect(restored.map((review) => review.id)).toContain(created.id)
+  })
+
+  it('rejects a non-boolean', async () => {
+    const created = await openReview()
+    expect((await patch(`/api/reviews/${created.id}`, { archived: 'yes' })).status).toBe(400)
+  })
+})
+
 describe('DELETE /api/reviews/:id', () => {
   it('removes a review', async () => {
     const created = await openReview()

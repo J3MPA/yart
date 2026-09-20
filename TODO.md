@@ -119,7 +119,6 @@ What remains:
 - Split view is unimplemented — the state exists, but only the unified layout
   renders.
 - No syntax highlighting in the diff.
-- No way to delete a review from the UI.
 - typescript-eslint resolves TypeScript 6 while every package compiles with
   TypeScript 7, so type-aware lint rules are evaluated against different
   inference than the compiler uses. Nothing is broken today, and installing

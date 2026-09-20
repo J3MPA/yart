@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
 import { DiffFile, type PendingComment } from './diff-file'
@@ -18,6 +18,16 @@ const VERDICT_CLASS: Record<ReviewVerdict, string> = {
 export interface ReviewPageProps {
   review_id: string
 }
+
+/** A dead end still needs a way out, so failures keep the way back. */
+const Missing = ({ children }: { children: ReactNode }) => (
+  <div className={styles.page}>
+    <a className={styles.back} href="/">
+      ← All reviews
+    </a>
+    <p className={styles.notice}>{children}</p>
+  </div>
+)
 
 export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const review_query = useGetReviewQuery(review_id)
@@ -40,14 +50,14 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   if (review_query.isError) {
     const described = describeQueryError(review_query.error)
     return (
-      <p className={styles.notice}>
+      <Missing>
         {described.is_missing ? `No review with id ${review_id}.` : described.message}
-      </p>
+      </Missing>
     )
   }
 
   if (review === undefined) {
-    return <p className={styles.notice}>No review with id {review_id}.</p>
+    return <Missing>No review with id {review_id}.</Missing>
   }
 
   const open_count = countOpen(review.threads)
@@ -62,6 +72,12 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
 
   return (
     <div className={styles.page}>
+      {/* A real link rather than history.back(): a review is usually reached by
+          a deep link from an agent, where there is nothing to go back to. */}
+      <a className={styles.back} href="/">
+        ← All reviews
+      </a>
+
       <header className={styles.header}>
         <h1 className={styles.title}>{review.title}</h1>
         <span className={styles.range}>

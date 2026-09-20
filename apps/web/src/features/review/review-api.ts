@@ -46,9 +46,21 @@ export const reviewApi = createApi({
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
-    listReviews: builder.query<Review[], void>({
-      query: () => '/reviews',
+    listReviews: builder.query<Review[], boolean | void>({
+      query: (archived) => (archived === true ? '/reviews?archived=true' : '/reviews'),
       providesTags: ['ReviewList'],
+    }),
+    setReviewArchived: builder.mutation<Review, { review_id: string; archived: boolean }>({
+      query: ({ review_id, archived }) => ({
+        url: `/reviews/${review_id}`,
+        method: 'PATCH',
+        body: { archived },
+      }),
+      invalidatesTags: ['ReviewList', 'Review'],
+    }),
+    deleteReview: builder.mutation<void, string>({
+      query: (review_id) => ({ url: `/reviews/${review_id}`, method: 'DELETE' }),
+      invalidatesTags: ['ReviewList'],
     }),
     getReview: builder.query<Review, string>({
       query: (review_id) => `/reviews/${review_id}`,
@@ -95,6 +107,8 @@ export const reviewApi = createApi({
 
 export const {
   useListReviewsQuery,
+  useSetReviewArchivedMutation,
+  useDeleteReviewMutation,
   useGetReviewQuery,
   useGetReviewDiffQuery,
   useAddThreadMutation,

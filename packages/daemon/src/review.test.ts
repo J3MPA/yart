@@ -297,6 +297,48 @@ describe('advanceHead', () => {
   })
 })
 
+describe('archiving', () => {
+  it('hides an archived review from the default listing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.setArchived(review.id, true)
+
+    expect((await service.list()).map((entry) => entry.id)).not.toContain(review.id)
+    expect((await service.list({ archived: true })).map((entry) => entry.id)).toContain(review.id)
+  })
+
+  it('keeps the review and its comments, unlike deleting', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.addThread(review.id, { path: 'a.txt', line: 2, body: 'why?' })
+    await service.setArchived(review.id, true)
+
+    const archived = await service.get(review.id)
+    expect(archived.archived_at).not.toBeNull()
+    expect(archived.threads).toHaveLength(1)
+  })
+
+  it('restores a review to the active listing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.setArchived(review.id, true)
+    await service.setArchived(review.id, false)
+
+    expect((await service.get(review.id)).archived_at).toBeNull()
+    expect((await service.list()).map((entry) => entry.id)).toContain(review.id)
+  })
+
+  it('is a no-op when already in that state', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    const first = await service.setArchived(review.id, true)
+    const again = await service.setArchived(review.id, true)
+    expect(again.archived_at).toBe(first.archived_at)
+  })
+
+  it('removes a deleted review entirely', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.remove(review.id)
+    await expect(service.get(review.id)).rejects.toMatchObject({ status: 404 })
+  })
+})
+
 describe('persistence', () => {
   it('round-trips a review through disk', async () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
