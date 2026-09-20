@@ -10,14 +10,16 @@ import {
   type Thread,
 } from '@yart/core'
 import {
+  branchAt,
   buildLineMapFromGit,
+  commitSubject,
   listChangedFiles,
   readBlob,
   resolveRev,
   type ChangedFile,
 } from './git.ts'
-import { ReviewStore } from './store.ts'
-import type { Review, ReviewFile } from './types.ts'
+import { placeholderTitle, ReviewStore } from './store.ts'
+import type { Review, ReviewFile, ReviewSubmission, ReviewVerdict } from './types.ts'
 
 export class ReviewError extends Error {
   readonly status: number
@@ -47,6 +49,28 @@ export interface CreateReviewParams {
   repo_path: string
   base: string
   head?: string
+  /** Overrides the default, which is the head commit's subject. */
+  title?: string
+}
+
+/**
+ * Names a review for a person scanning a list of them.
+ *
+ * The head commit's subject is almost always what the review is about, and it
+ * is already written; falling back to an abbreviated range at least stays
+ * stable, which `main..HEAD` does not.
+ */
+const deriveTitle = async (repo_path: string, head_sha: string, base_sha: string) =>
+  (await commitSubject(repo_path, head_sha)) ?? `${base_sha.slice(0, 8)}..${head_sha.slice(0, 8)}`
+
+export interface ListReviewsParams {
+  /** Return archived reviews instead of active ones. */
+  archived?: boolean
+}
+
+export interface SubmitParams {
+  verdict?: ReviewVerdict
+  body?: string | null
 }
 
 export interface AddThreadParams {
@@ -66,28 +90,36 @@ export class ReviewService {
     this.store = new ReviewStore(repo_path)
   }
 
-  async create({ repo_path, base, head = 'HEAD' }: CreateReviewParams): Promise<Review> {
+  async create({ repo_path, base, head = 'HEAD', title }: CreateReviewParams): Promise<Review> {
     const [base_sha, head_sha] = await Promise.all([
       resolveRev(repo_path, base),
       resolveRev(repo_path, head),
     ])
 
-    const changes = await listChangedFiles(repo_path, base_sha, head_sha)
+    const [changes, head_branch, derived_title] = await Promise.all([
+      listChangedFiles(repo_path, base_sha, head_sha),
+      branchAt(repo_path, head_sha),
+      deriveTitle(repo_path, head_sha, base_sha),
+    ])
     const created_at = nowIso()
 
     const review: Review = {
       id: randomUUID(),
       repo_path,
+      title: title ?? derived_title,
+      head_branch,
       base,
       head,
       base_sha,
       head_sha,
       status: 'open',
+      submissions: [],
       files: changes.map(toReviewFile),
       threads: [],
       rounds: [head_sha],
       created_at,
       updated_at: created_at,
+      archived_at: null,
     }
 
     await this.store.save(review)
@@ -97,11 +129,36 @@ export class ReviewService {
   async get(id: string): Promise<Review> {
     const review = await this.store.load(id)
     if (review === null) throw new ReviewError(`No review with id ${id}`, 404)
-    return review
+    return this.upgradeTitle(review)
   }
 
-  async list(): Promise<Review[]> {
-    return this.store.list()
+  async list({ archived = false }: ListReviewsParams = {}): Promise<Review[]> {
+    const all = await Promise.all(
+      (await this.store.list()).map((review) => this.upgradeTitle(review)),
+    )
+    return all.filter((review) => (review.archived_at !== null) === archived)
+  }
+
+  /**
+   * Replaces a placeholder title with the head commit's subject, once.
+   *
+   * Reviews written before titles existed would otherwise show a hash range
+   * forever. The result is persisted so this costs one git call per review
+   * rather than one per read.
+   */
+  private async upgradeTitle(review: Review): Promise<Review> {
+    if (review.title !== placeholderTitle(review)) return review
+
+    const subject = await commitSubject(review.repo_path, review.head_sha)
+    if (subject === null) return review
+
+    const upgraded: Review = {
+      ...review,
+      title: subject,
+      head_branch: review.head_branch ?? (await branchAt(review.repo_path, review.head_sha)),
+    }
+    await this.store.save(upgraded)
+    return upgraded
   }
 
   private async persist(review: Review): Promise<Review> {
@@ -181,9 +238,23 @@ export class ReviewService {
     return this.withThread(id, thread_id, (thread) => ({ ...thread, status }))
   }
 
-  async submit(id: string): Promise<Review> {
+  async submit(id: string, params: SubmitParams = {}): Promise<Review> {
     const review = await this.get(id)
-    return this.persist({ ...review, status: 'submitted' })
+    const { verdict = 'commented', body = null } = params
+
+    const submission: ReviewSubmission = {
+      id: randomUUID(),
+      verdict,
+      body: body === null || body.trim() === '' ? null : body.trim(),
+      head_sha: review.head_sha,
+      created_at: nowIso(),
+    }
+
+    return this.persist({
+      ...review,
+      status: 'submitted',
+      submissions: [...review.submissions, submission],
+    })
   }
 
   /**
@@ -258,11 +329,22 @@ export class ReviewService {
       ...review,
       head,
       head_sha,
+      head_branch: await branchAt(review.repo_path, head_sha),
       status: 'open',
       files: from_base.map(toReviewFile),
       threads,
       rounds: [...review.rounds, head_sha],
     })
+  }
+
+  /**
+   * Archiving keeps the review and its comments; only the default listing
+   * stops showing it. Deleting is the irreversible one.
+   */
+  async setArchived(id: string, archived: boolean): Promise<Review> {
+    const review = await this.get(id)
+    if ((review.archived_at !== null) === archived) return review
+    return this.persist({ ...review, archived_at: archived ? nowIso() : null })
   }
 
   async remove(id: string): Promise<void> {

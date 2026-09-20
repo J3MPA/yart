@@ -1,20 +1,41 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
 import { DiffFile, type PendingComment } from './diff-file'
+import { relativeTime, shortSha, VERDICT_LABEL } from './format'
 import { useGetReviewDiffQuery, useGetReviewQuery, useSubmitReviewMutation } from './review-api'
 import { describeQueryError } from './query-error'
+import { currentSubmission } from './submission'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import styles from './review.module.css'
+
+const VERDICT_CLASS: Record<ReviewVerdict, string> = {
+  approved: styles.verdict_approved as string,
+  changes_requested: styles.verdict_changes as string,
+  commented: styles.verdict_commented as string,
+}
 
 export interface ReviewPageProps {
   review_id: string
 }
+
+/** A dead end still needs a way out, so failures keep the way back. */
+const Missing = ({ children }: { children: ReactNode }) => (
+  <div className={styles.page}>
+    <a className={styles.back} href="/">
+      ← All reviews
+    </a>
+    <p className={styles.notice}>{children}</p>
+  </div>
+)
 
 export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const review_query = useGetReviewQuery(review_id)
   const diff_query = useGetReviewDiffQuery(review_id)
   const [submitReview, submit_state] = useSubmitReviewMutation()
   const [pending, setPending] = useState<PendingComment | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [summary, setSummary] = useState('')
 
   const review = review_query.data
   const threads_by_anchor = useMemo(
@@ -29,46 +50,87 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   if (review_query.isError) {
     const described = describeQueryError(review_query.error)
     return (
-      <p className={styles.notice}>
+      <Missing>
         {described.is_missing ? `No review with id ${review_id}.` : described.message}
-      </p>
+      </Missing>
     )
   }
 
   if (review === undefined) {
-    return <p className={styles.notice}>No review with id {review_id}.</p>
+    return <Missing>No review with id {review_id}.</Missing>
   }
 
   const open_count = countOpen(review.threads)
-  const submitted = review.status === 'submitted'
+  const submission = currentSubmission(review)
+  const submitted = submission !== null
+
+  const submit = (verdict: ReviewVerdict) => {
+    void submitReview({ review_id, verdict, body: summary })
+    setSummary('')
+    setSubmitting(false)
+  }
 
   return (
     <div className={styles.page}>
+      {/* A real link rather than history.back(): a review is usually reached by
+          a deep link from an agent, where there is nothing to go back to. */}
+      <a className={styles.back} href="/">
+        ← All reviews
+      </a>
+
       <header className={styles.header}>
-        <h1 className={styles.title}>Review</h1>
+        <h1 className={styles.title}>{review.title}</h1>
         <span className={styles.range}>
-          {review.base}..{review.head}
+          {review.head_branch === null ? '' : `${review.head_branch} · `}
+          {shortSha(review.base_sha)}..{shortSha(review.head_sha)} · round {review.rounds.length} ·{' '}
+          {relativeTime(review.created_at)}
         </span>
-        <span className={styles.range}>round {review.rounds.length}</span>
         <span className={styles.spacer} />
-        <span
-          className={[styles.badge, submitted ? styles.badge_submitted : '']
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {review.status}
-        </span>
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}
         </span>
         <Button
           tone="primary"
-          disabled={submitted || submit_state.isLoading}
-          onClick={() => void submitReview(review_id)}
+          disabled={submit_state.isLoading}
+          onClick={() => setSubmitting(!submitting)}
         >
-          {submitted ? 'Submitted' : 'Submit review'}
+          {submitting ? 'Cancel' : submitted ? 'Submit again' : 'Submit review'}
         </Button>
       </header>
+
+      {submission !== null && (
+        <div
+          className={[styles.verdict_banner, VERDICT_CLASS[submission.verdict]]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <div className={styles.verdict_label}>
+            {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
+          </div>
+          {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
+        </div>
+      )}
+
+      {submitting && (
+        <div className={styles.submit_panel}>
+          <div className={styles.submit_heading}>Finish your review</div>
+          <textarea
+            className={styles.textarea}
+            value={summary}
+            placeholder="Summary (optional)"
+            aria-label="Review summary"
+            autoFocus
+            onChange={(event) => setSummary(event.target.value)}
+          />
+          <div className={styles.submit_actions}>
+            <Button onClick={() => submit('commented')}>Comment</Button>
+            <Button tone="primary" onClick={() => submit('approved')}>
+              Approve
+            </Button>
+            <Button onClick={() => submit('changes_requested')}>Request changes</Button>
+          </div>
+        </div>
+      )}
 
       {diff_query.isError ? (
         <p className={styles.notice}>

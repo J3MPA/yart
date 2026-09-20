@@ -162,6 +162,31 @@ export const listChangedFiles = async (
   return files
 }
 
+/** Subject line of a commit, or null when the revision is not a commit. */
+export const commitSubject = async (repo_path: string, rev: string): Promise<string | null> => {
+  try {
+    const out = await runGit(repo_path, ['log', '-1', '--format=%s', rev])
+    const subject = out.trim()
+    return subject === '' ? null : subject
+  } catch {
+    return null
+  }
+}
+
+/** Branch whose tip is this revision, if exactly one is. */
+export const branchAt = async (repo_path: string, rev: string): Promise<string | null> => {
+  try {
+    const out = await runGit(repo_path, ['branch', '--points-at', rev, '--format=%(refname:short)'])
+    const names = out
+      .split('\n')
+      .map((name) => name.trim())
+      .filter((name) => name !== '')
+    return names.length === 1 ? (names[0] as string) : null
+  } catch {
+    return null
+  }
+}
+
 /** Reads a blob's contents by hash. */
 export const readBlob = async (repo_path: string, blob_sha: string): Promise<string> => {
   return runGit(repo_path, ['cat-file', 'blob', blob_sha])

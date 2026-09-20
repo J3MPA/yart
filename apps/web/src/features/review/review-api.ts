@@ -2,7 +2,7 @@
    this file is Redux Toolkit Query's own: endpoint keys become hook names
    (`getReview` -> `useGetReviewQuery`), and the rest are its config fields. */
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import type { DiffSide, FileDiff, Review, ThreadStatus } from '@yart/core'
+import type { DiffSide, FileDiff, Review, ReviewVerdict, ThreadStatus } from '@yart/core'
 
 export interface AddThreadArgs {
   review_id: string
@@ -16,6 +16,12 @@ export interface AddCommentArgs {
   review_id: string
   thread_id: string
   body: string
+}
+
+export interface SubmitReviewArgs {
+  review_id: string
+  verdict: ReviewVerdict
+  body?: string
 }
 
 export interface SetThreadStatusArgs {
@@ -40,9 +46,21 @@ export const reviewApi = createApi({
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
-    listReviews: builder.query<Review[], void>({
-      query: () => '/reviews',
+    listReviews: builder.query<Review[], boolean | void>({
+      query: (archived) => (archived === true ? '/reviews?archived=true' : '/reviews'),
       providesTags: ['ReviewList'],
+    }),
+    setReviewArchived: builder.mutation<Review, { review_id: string; archived: boolean }>({
+      query: ({ review_id, archived }) => ({
+        url: `/reviews/${review_id}`,
+        method: 'PATCH',
+        body: { archived },
+      }),
+      invalidatesTags: ['ReviewList', 'Review'],
+    }),
+    deleteReview: builder.mutation<void, string>({
+      query: (review_id) => ({ url: `/reviews/${review_id}`, method: 'DELETE' }),
+      invalidatesTags: ['ReviewList'],
     }),
     getReview: builder.query<Review, string>({
       query: (review_id) => `/reviews/${review_id}`,
@@ -76,8 +94,12 @@ export const reviewApi = createApi({
       }),
       invalidatesTags: ['Review'],
     }),
-    submitReview: builder.mutation<Review, string>({
-      query: (review_id) => ({ url: `/reviews/${review_id}/submit`, method: 'POST' }),
+    submitReview: builder.mutation<Review, SubmitReviewArgs>({
+      query: ({ review_id, verdict, body }) => ({
+        url: `/reviews/${review_id}/submit`,
+        method: 'POST',
+        body: { verdict, body },
+      }),
       invalidatesTags: ['Review', 'ReviewList'],
     }),
   }),
@@ -85,6 +107,8 @@ export const reviewApi = createApi({
 
 export const {
   useListReviewsQuery,
+  useSetReviewArchivedMutation,
+  useDeleteReviewMutation,
   useGetReviewQuery,
   useGetReviewDiffQuery,
   useAddThreadMutation,

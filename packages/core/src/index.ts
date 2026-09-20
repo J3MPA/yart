@@ -20,6 +20,8 @@ export type {
   Review,
   ReviewFile,
   ReviewStatus,
+  ReviewSubmission,
+  ReviewVerdict,
 } from './review.ts'
 
 export { splitLines } from './lines.ts'

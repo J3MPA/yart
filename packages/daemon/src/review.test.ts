@@ -28,6 +28,33 @@ const reviewAfter = async (change: () => void) => {
 }
 
 describe('create', () => {
+  it('names the review after the head commit subject', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    expect(review.title).toBe('change')
+  })
+
+  it('prefers an explicit title', async () => {
+    repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n')
+    repo.commit('change')
+    const review = await service.create({
+      repo_path: repo.path,
+      base,
+      head: 'HEAD',
+      title: 'auth refactor',
+    })
+    expect(review.title).toBe('auth refactor')
+  })
+
+  it('records the branch at the head', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    expect(review.head_branch).toBe('main')
+  })
+
+  it('starts with no submissions', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    expect(review.submissions).toEqual([])
+  })
+
   it('records the resolved revision shas', async () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
     expect(review.base_sha).toBe(base)
@@ -123,6 +150,40 @@ describe('comments and status', () => {
   it('marks the review submitted', async () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
     expect((await service.submit(review.id)).status).toBe('submitted')
+  })
+
+  it('records a verdict and a summary against the head it was passed on', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const submitted = await service.submit(review.id, {
+      verdict: 'changes_requested',
+      body: '  Naming needs another pass.  ',
+    })
+
+    expect(submitted.submissions).toHaveLength(1)
+    expect(submitted.submissions[0]).toMatchObject({
+      verdict: 'changes_requested',
+      body: 'Naming needs another pass.',
+      head_sha: review.head_sha,
+    })
+  })
+
+  it('defaults to a plain comment with no summary', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    expect((await service.submit(review.id)).submissions[0]).toMatchObject({
+      verdict: 'commented',
+      body: null,
+    })
+  })
+
+  it('keeps every submission, so a re-review does not erase the last one', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await service.submit(review.id, { verdict: 'changes_requested' })
+    const again = await service.submit(review.id, { verdict: 'approved' })
+
+    expect(again.submissions.map((entry) => entry.verdict)).toEqual([
+      'changes_requested',
+      'approved',
+    ])
   })
 })
 
@@ -233,6 +294,48 @@ describe('advanceHead', () => {
 
     expect(advanced.threads[0]?.anchor?.line).toBe(4)
     expect(advanced.threads[0]?.anchor_state).toBe('shifted')
+  })
+})
+
+describe('archiving', () => {
+  it('hides an archived review from the default listing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.setArchived(review.id, true)
+
+    expect((await service.list()).map((entry) => entry.id)).not.toContain(review.id)
+    expect((await service.list({ archived: true })).map((entry) => entry.id)).toContain(review.id)
+  })
+
+  it('keeps the review and its comments, unlike deleting', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.addThread(review.id, { path: 'a.txt', line: 2, body: 'why?' })
+    await service.setArchived(review.id, true)
+
+    const archived = await service.get(review.id)
+    expect(archived.archived_at).not.toBeNull()
+    expect(archived.threads).toHaveLength(1)
+  })
+
+  it('restores a review to the active listing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.setArchived(review.id, true)
+    await service.setArchived(review.id, false)
+
+    expect((await service.get(review.id)).archived_at).toBeNull()
+    expect((await service.list()).map((entry) => entry.id)).toContain(review.id)
+  })
+
+  it('is a no-op when already in that state', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    const first = await service.setArchived(review.id, true)
+    const again = await service.setArchived(review.id, true)
+    expect(again.archived_at).toBe(first.archived_at)
+  })
+
+  it('removes a deleted review entirely', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nONE\ngamma\ndelta\n'))
+    await service.remove(review.id)
+    await expect(service.get(review.id)).rejects.toMatchObject({ status: 404 })
   })
 })
 

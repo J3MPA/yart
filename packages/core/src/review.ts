@@ -25,6 +25,25 @@ export interface ReviewFile {
 export type ReviewStatus = 'open' | 'submitted'
 
 /**
+ * What a reviewer said when they handed the review back.
+ *
+ * Mirrors the three things a pull request review can be, because the agent has
+ * to act differently on each: approved means stop, changes requested means fix,
+ * commented means read them and use judgement.
+ */
+export type ReviewVerdict = 'commented' | 'approved' | 'changes_requested'
+
+export interface ReviewSubmission {
+  id: string
+  verdict: ReviewVerdict
+  /** Summary written when submitting, separate from any line comments. */
+  body: string | null
+  /** The head this verdict was passed on; a later head reopens the review. */
+  head_sha: string
+  created_at: string
+}
+
+/**
  * One review over a revision range.
  *
  * `head` advances as the agent responds, which is what makes review a loop
@@ -34,6 +53,16 @@ export type ReviewStatus = 'open' | 'submitted'
 export interface Review {
   id: string
   repo_path: string
+  /**
+   * What this review is called.
+   *
+   * Defaults to the head commit's subject, because a revision range is not a
+   * name: `main..HEAD` says nothing once HEAD has moved, and a full hash says
+   * nothing at all.
+   */
+  title: string
+  /** Branch at the head revision, when the head is a branch tip. */
+  head_branch: string | null
   /** The revisions as requested, kept for display; may be names like `main`. */
   base: string
   head: string
@@ -41,12 +70,21 @@ export interface Review {
   base_sha: string
   head_sha: string
   status: ReviewStatus
+  /** Every hand-back, oldest first. The last one is the current verdict. */
+  submissions: ReviewSubmission[]
   files: ReviewFile[]
   threads: Thread[]
   /** Head shas this review has been through, oldest first. */
   rounds: string[]
   created_at: string
   updated_at: string
+  /**
+   * When this review was archived, or null while it is active.
+   *
+   * A timestamp rather than a flag so the list can still be ordered once
+   * archived reviews are shown.
+   */
+  archived_at: string | null
 }
 
 export type DiffLineKind = 'context' | 'added' | 'removed'

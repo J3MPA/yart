@@ -42,8 +42,16 @@ const humanComments = async (review_id: string, line: number, body: string): Pro
   expect(response.ok).toBe(true)
 }
 
-const humanSubmits = async (review_id: string): Promise<void> => {
-  await fetch(`http://localhost:${port}/api/reviews/${review_id}/submit`, { method: 'POST' })
+const humanSubmits = async (
+  review_id: string,
+  verdict: 'commented' | 'approved' | 'changes_requested' = 'commented',
+  body?: string,
+): Promise<void> => {
+  await fetch(`http://localhost:${port}/api/reviews/${review_id}/submit`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ verdict, body }),
+  })
 }
 
 const idFrom = (rendered: string): string => {
@@ -107,6 +115,15 @@ describe('tool surface', () => {
 })
 
 describe('start_review', () => {
+  it('names the review after the head commit subject', async () => {
+    expect(await call('start_review', { base })).toContain('title:   change')
+  })
+
+  it('uses an explicit title when given one', async () => {
+    const rendered = await call('start_review', { base, title: 'auth refactor' })
+    expect(rendered).toContain('title:   auth refactor')
+  })
+
   it('opens a review and reports the changed files', async () => {
     const rendered = await call('start_review', { base })
     expect(rendered).toContain('modified  a.txt')
@@ -161,17 +178,35 @@ describe('await_review', () => {
     await humanSubmits(review_id)
 
     const rendered = await call('await_review', { review_id, timeout_seconds: 5 })
-    expect(rendered).toContain('Review submitted. Open comments (1)')
+    expect(rendered).toContain('Open comments (1)')
     expect(rendered).toContain('a.txt:2')
     expect(rendered).toContain('>   TARGET')
     expect(rendered).toContain('this name is unclear')
+  })
+
+  it('leads with the verdict, because it changes what the agent does next', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanComments(review_id, 2, 'rename this')
+    await humanSubmits(review_id, 'changes_requested', 'Naming needs another pass.')
+
+    const rendered = await call('await_review', { review_id, timeout_seconds: 5 })
+    expect(rendered).toContain('CHANGES REQUESTED')
+    expect(rendered).toContain('Naming needs another pass.')
+  })
+
+  it('reports an approval even with nothing open', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanSubmits(review_id, 'approved')
+
+    const rendered = await call('await_review', { review_id, timeout_seconds: 5 })
+    expect(rendered).toContain('APPROVED')
   })
 
   it('says so when a submitted review has nothing open', async () => {
     const review_id = idFrom(await call('start_review', { base }))
     await humanSubmits(review_id)
     expect(await call('await_review', { review_id, timeout_seconds: 5 })).toContain(
-      'no open comments',
+      'No open comments.',
     )
   })
 })

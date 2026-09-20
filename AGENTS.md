@@ -25,7 +25,7 @@ source.
   elements, so this is required by the framework rather than chosen. The file
   holding one is still `kebab-case`: `app.tsx` exports `App`.
 - **Root configuration files** keep the names their tooling expects —
-  `README.md`, `LICENSE`, `AGENTS.md`, `CLAUDE.md`, `package.json`,
+  `README.md`, `LICENSE`, `TODO.md`, `AGENTS.md`, `CLAUDE.md`, `package.json`,
   `tsconfig.base.json`,
   `eslint.config.mjs`.
 - **React hooks** are `camelCase` with a `use` prefix, as functions.

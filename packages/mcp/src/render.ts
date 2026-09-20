@@ -1,4 +1,4 @@
-import type { Thread } from '@yart/core'
+import type { ReviewSubmission, ReviewVerdict, Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 /**
@@ -48,6 +48,28 @@ export const renderThreads = (threads: readonly Thread[], heading: string): stri
   return [`${heading} (${threads.length}):`, '', threads.map(renderThread).join('\n\n')].join('\n')
 }
 
+const VERDICT_LABEL: Record<ReviewVerdict, string> = {
+  approved: 'APPROVED',
+  changes_requested: 'CHANGES REQUESTED',
+  commented: 'COMMENTED',
+}
+
+/** The verdict passed on the current head, if this round has been handed back. */
+export const currentSubmission = (review: Review): ReviewSubmission | null => {
+  for (let index = review.submissions.length - 1; index >= 0; index -= 1) {
+    const submission = review.submissions[index] as ReviewSubmission
+    if (submission.head_sha === review.head_sha) return submission
+  }
+  return null
+}
+
+export const renderVerdict = (review: Review): string => {
+  const submission = currentSubmission(review)
+  if (submission === null) return 'Not submitted yet.'
+  const summary = submission.body === null ? '' : `\n\n  ${submission.body}`
+  return `Verdict: ${VERDICT_LABEL[submission.verdict]}${summary}`
+}
+
 export const openThreads = (review: Review): Thread[] =>
   review.threads.filter((thread) => thread.status === 'open')
 
@@ -60,10 +82,13 @@ export const renderReview = (review: Review, url: string): string => {
   const open = openThreads(review)
   const outdated = review.threads.filter((thread) => thread.anchor_state === 'outdated').length
 
+  const submission = currentSubmission(review)
+
   return [
     `Review ${review.id}`,
+    `  title:   ${review.title}`,
     `  range:   ${review.base}..${review.head}  (round ${review.rounds.length})`,
-    `  status:  ${review.status}`,
+    `  status:  ${review.status}${submission === null ? '' : ` — ${VERDICT_LABEL[submission.verdict]}`}`,
     `  url:     ${url}`,
     `  threads: ${review.threads.length} total, ${open.length} open${outdated > 0 ? `, ${outdated} outdated` : ''}`,
     '',
