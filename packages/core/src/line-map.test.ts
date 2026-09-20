@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLineMap } from './line-map';
+import { buildLineMap } from './line-map.ts';
 
 describe('buildLineMap', () => {
   it('maps every line when content is identical', () => {

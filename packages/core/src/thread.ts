@@ -1,5 +1,5 @@
-import { captureContext, DEFAULT_CONTEXT_RADIUS } from './context';
-import type { Comment, LineAnchor, Thread } from './types';
+import { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts';
+import type { Comment, LineAnchor, Thread } from './types.ts';
 
 export interface CreateThreadParams {
   id: string;
@@ -17,13 +17,13 @@ export interface CreateThreadParams {
  * Ids and timestamps are supplied by the caller rather than generated here, so
  * that the model stays pure and tests stay deterministic.
  */
-export function createThread({
+export const createThread = ({
   id,
   anchor,
   content,
   comment,
   context_radius = DEFAULT_CONTEXT_RADIUS,
-}: CreateThreadParams): Thread {
+}: CreateThreadParams): Thread => {
   return {
     id,
     origin: anchor,
@@ -33,4 +33,4 @@ export function createThread({
     status: 'open',
     comments: [comment],
   };
-}
+};

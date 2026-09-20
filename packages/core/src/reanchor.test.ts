@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildLineMap, type LineMapOptions } from './line-map';
-import { deriveAnchorState, reanchorThread, reanchorThreads } from './reanchor';
-import { createThread } from './thread';
-import type { Comment, FileResolution, LineAnchor, Thread } from './types';
+import { buildLineMap, type LineMapOptions } from './line-map.ts';
+import { deriveAnchorState, reanchorThread, reanchorThreads } from './reanchor.ts';
+import { createThread } from './thread.ts';
+import type { Comment, FileResolution, LineAnchor, Thread } from './types.ts';
 
 const COMMENT: Comment = {
   id: 'c1',
@@ -14,17 +14,17 @@ const COMMENT: Comment = {
 const ORIGINAL = 'alpha\nbeta\ngamma\ndelta\n';
 const INDENTED = 'if (x) {\nf();\n}\n';
 
-function threadAt(line: number, content = ORIGINAL, overrides: Partial<LineAnchor> = {}): Thread {
+const threadAt = (line: number, content = ORIGINAL, overrides: Partial<LineAnchor> = {}): Thread => {
   return createThread({
     id: 't1',
     anchor: { path: 'src/a.ts', blob_sha: 'blob-old', line, side: 'head', ...overrides },
     content,
     comment: COMMENT,
   });
-}
+};
 
 /** Builds a `modified` resolution by diffing `before` against `after`. */
-function modified(
+const modified = (
   after: string,
   {
     before = ORIGINAL,
@@ -32,9 +32,9 @@ function modified(
     blob_sha = 'blob-new',
     options,
   }: { before?: string; path?: string; blob_sha?: string; options?: LineMapOptions } = {},
-): FileResolution {
+): FileResolution => {
   return { kind: 'modified', path, blob_sha, line_map: buildLineMap(before, after, options) };
-}
+};
 
 const DELETED: FileResolution = { kind: 'deleted' };
 

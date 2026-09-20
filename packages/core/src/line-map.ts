@@ -16,10 +16,10 @@ export interface LineMapOptions {
  * in a newline. Both sides get a terminator so that comparison is like-for-like;
  * `splitLines` discards it again, so numbering is unaffected.
  */
-function withTrailingNewline(content: string): string {
+const withTrailingNewline = (content: string): string => {
   if (content === '' || content.endsWith('\n')) return content;
   return `${content}\n`;
-}
+};
 
 /**
  * Maps line numbers from `before` to their counterparts in `after`.
@@ -30,11 +30,11 @@ function withTrailingNewline(content: string): string {
  *
  * Both sides are 1-based.
  */
-export function buildLineMap(
+export const buildLineMap = (
   before: string,
   after: string,
   options: LineMapOptions = {},
-): Map<number, number> {
+): Map<number, number> => {
   const { ignore_whitespace = true } = options;
   const map = new Map<number, number>();
 
@@ -62,4 +62,4 @@ export function buildLineMap(
   }
 
   return map;
-}
+};

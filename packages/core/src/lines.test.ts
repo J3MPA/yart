@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitLines } from './lines';
+import { splitLines } from './lines.ts';
 
 describe('splitLines', () => {
   it('returns no lines for empty content', () => {

@@ -37,6 +37,19 @@ source.
 
 ## Code style
 
+- Callables are declared as const arrows: `const doThing = () => {}`. The
+  `function` keyword is not used, and ESLint enforces this.
+
+  The reason is readability, not speed. A hoisted declaration can be called
+  above the line that defines it, so a reader cannot assume a name is already
+  defined and has to hold open the possibility that it appears later. Requiring
+  definition before use makes every file read procedurally, top to bottom, with
+  no forward references to track. It does not avoid any runtime work: scope
+  instantiation creates bindings for `const` and `function` alike, and only the
+  initialization differs.
+
+  Class and object method shorthand is unaffected, since neither is a hoisting
+  question and arrows would change `this`.
 - American English throughout: code, comments, commit messages, documentation.
 - Only add a comment when it carries information the code does not: a non-obvious
   constraint, a subtle invariant, the reason behind a workaround. Do not restate
