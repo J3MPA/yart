@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { LineMap } from '@yart/core'
+import type { ChangeStatus, LineMap } from '@yart/core'
 
 const execFileAsync = promisify(execFile)
 
@@ -14,7 +14,7 @@ const NULL_BLOB = /^0+$/
 /** Output can be large for a wide range; 64 MB is well past any real diff. */
 const MAX_BUFFER = 64 * 1024 * 1024
 
-export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied'
+export type { ChangeStatus } from '@yart/core'
 
 export interface ChangedFile {
   status: ChangeStatus

@@ -1,4 +1,4 @@
-export type { ChangeStatus, ChangedFile, GitLineMapOptions } from './git.ts'
+export type { ChangedFile, GitLineMapOptions } from './git.ts'
 export {
   buildLineMapFromGit,
   findRepoRoot,
