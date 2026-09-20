@@ -7,26 +7,27 @@ export type DiffLayout = 'unified' | 'split';
 export interface DiffViewState {
   layout: DiffLayout;
   /** Collapse runs of unchanged lines between hunks. */
-  hideUnchanged: boolean;
+  hide_unchanged: boolean;
 }
 
-const initialState: DiffViewState = {
+const initial_state: DiffViewState = {
   layout: 'unified',
-  hideUnchanged: true,
+  hide_unchanged: true,
 };
 
-const diffViewSlice = createSlice({
-  name: 'diffView',
-  initialState,
+const diff_view_slice = createSlice({
+  name: 'diff_view',
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit's option name
+  initialState: initial_state,
   reducers: {
     layoutChanged(state, action: PayloadAction<DiffLayout>) {
       state.layout = action.payload;
     },
     hideUnchangedToggled(state) {
-      state.hideUnchanged = !state.hideUnchanged;
+      state.hide_unchanged = !state.hide_unchanged;
     },
   },
 });
 
-export const { layoutChanged, hideUnchangedToggled } = diffViewSlice.actions;
-export default diffViewSlice.reducer;
+export const { layoutChanged, hideUnchangedToggled } = diff_view_slice.actions;
+export default diff_view_slice.reducer;

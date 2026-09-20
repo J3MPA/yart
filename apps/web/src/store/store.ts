@@ -1,12 +1,12 @@
 import { configureStore } from '@reduxjs/toolkit';
-import diffViewReducer from '@/features/diff/diffViewSlice';
+import diffViewReducer from '@/features/diff/diff-view-slice';
 
-export const store = configureStore({
+export const Store = configureStore({
   reducer: {
-    diffView: diffViewReducer,
+    diff_view: diffViewReducer,
   },
 });
 
-export type AppStore = typeof store;
+export type AppStore = typeof Store;
 export type RootState = ReturnType<AppStore['getState']>;
 export type AppDispatch = AppStore['dispatch'];

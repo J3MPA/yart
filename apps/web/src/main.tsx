@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
-import { store } from '@/app/store';
-import App from './App';
+import { Store } from '@/store/store';
+import App from './app';
 import '@/styles/tokens.css';
 import '@/styles/reset.css';
 
@@ -13,7 +13,7 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <Provider store={store}>
+    <Provider store={Store}>
       <App />
     </Provider>
   </StrictMode>,
