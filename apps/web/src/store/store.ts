@@ -1,4 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
+import { setupListeners } from '@reduxjs/toolkit/query'
 import diffViewReducer from '@/features/diff/diff-view-slice'
 import { reviewApi } from '@/features/review/review-api'
 
@@ -9,6 +10,9 @@ export const Store = configureStore({
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(reviewApi.middleware),
 })
+
+// Required for refetchOnFocus/refetchOnReconnect to fire.
+setupListeners(Store.dispatch)
 
 export type AppStore = typeof Store
 export type RootState = ReturnType<AppStore['getState']>

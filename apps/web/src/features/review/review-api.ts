@@ -30,7 +30,15 @@ export const reviewApi = createApi({
   // Threads change on nearly every interaction, so the review is refetched
   // rather than patched locally: the server owns anchor state and re-deriving
   // it in the browser would be a second implementation of it.
-  tagTypes: ['Review', 'ReviewList'],
+  //
+  // The diff is tagged separately because it does not change when someone
+  // comments — only when head advances. Sharing one tag made every comment
+  // re-run `git diff` over every file in the review.
+  tagTypes: ['Review', 'ReviewList', 'Diff'],
+  // Nothing in this app advances the review; an agent does, over MCP. Refetching
+  // when the window regains focus is how the page notices that happened.
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   endpoints: (builder) => ({
     listReviews: builder.query<Review[], void>({
       query: () => '/reviews',
@@ -42,7 +50,7 @@ export const reviewApi = createApi({
     }),
     getReviewDiff: builder.query<FileDiff[], string>({
       query: (review_id) => `/reviews/${review_id}/diff`,
-      providesTags: ['Review'],
+      providesTags: ['Diff'],
     }),
     addThread: builder.mutation<Review, AddThreadArgs>({
       query: ({ review_id, ...body }) => ({
