@@ -55,9 +55,8 @@ Early — the scaffold is in place, the product is not.
 - [x] pnpm workspace, React + TypeScript + Redux Toolkit
 - [x] Design token foundation
 - [x] Comment anchoring model
-- [ ] Diff parsing and rendering
-- [ ] Thread storage and review rounds
-- [ ] Review daemon
+- [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
+- [ ] Diff parsing and rendering in the UI
 - [ ] MCP server
 - [ ] Clipboard export (fallback for non-MCP agents)
 
@@ -67,8 +66,12 @@ Requires Node 20+ and pnpm.
 
 ```sh
 pnpm install
-pnpm dev        # http://localhost:7777
+pnpm daemon     # the review daemon, against the current repository
+pnpm dev        # the UI in development, http://localhost:7777
 ```
+
+The daemon takes `--port` and `--repo`, and stores reviews under
+`.git/yart/reviews/` so nothing appears in `git status`.
 
 Other scripts:
 
@@ -90,7 +93,8 @@ apps/
       styles/       Design tokens and reset
 packages/
   core/             Domain model — anchoring, threads (no I/O)
-                    (reserved: daemon, MCP server)
+  daemon/           Git adapter, review store, HTTP API, CLI
+                    (reserved: MCP server)
 ```
 
 ## Comment anchoring
@@ -141,10 +145,48 @@ swapping one for the other does not touch the anchoring logic.
 Naming is a project requirement rather than a preference, and is enforced by
 ESLint: variables and properties are `snake_case`, functions are `camelCase`,
 types are `PascalCase`, constants are `UPPER_SNAKE_CASE`, and files and
-directories are `kebab-case`. Properties stay
+directories are `kebab-case`. Callables are const arrows rather than `function`
+declarations. Properties stay
 `snake_case` on serialized types too, so the JSON that travels over MCP matches
 the source. The full rules and their exceptions are in
 [`AGENTS.md`](AGENTS.md).
+
+## The daemon
+
+`packages/daemon` is the long-lived process the UI and the MCP server both talk
+to. It is deliberately separate from the MCP server: MCP servers live and die
+with their client, while a review has to outlast a session and be shared by more
+than one agent at once.
+
+It owns three things.
+
+**A git adapter.** Revision ranges, changed files with the blob on each side,
+rename detection, and blob contents. It also builds line maps from `git diff
+--unified=0`, reading only hunk headers: everything outside a hunk is unchanged
+and maps across with a running offset, everything inside is replaced and maps
+nowhere. Using git rather than diffing text in process is faster and, more
+importantly, means the tool that produced the blob hashes is the one comparing
+them, so two implementations cannot disagree about what changed.
+
+**Review state**, persisted as JSON under `.git/yart/reviews/`. Per-repository,
+invisible to `git status`, and in a directory yart will never be asked to show.
+
+**An HTTP API.**
+
+| Route                                          | Purpose                             |
+| ---------------------------------------------- | ----------------------------------- |
+| `POST /api/reviews`                            | Open a review over a range          |
+| `GET /api/reviews` · `GET /api/reviews/:id`    | List, or fetch one                  |
+| `GET /api/reviews/:id/file?path=`              | Both sides of a file, for rendering |
+| `POST /api/reviews/:id/threads`                | Comment on a line                   |
+| `POST /api/reviews/:id/threads/:tid/comments`  | Reply in a thread                   |
+| `PATCH /api/reviews/:id/threads/:tid`          | Open or resolve a thread            |
+| `POST /api/reviews/:id/submit`                 | Hand the review back                |
+| `POST /api/reviews/:id/advance`                | Move to a new head, re-anchoring    |
+
+`advance` is where the loop closes: it diffs the old head against the new one,
+builds a line map per changed file, and re-anchors every thread, so the next
+round shows what is still open rather than starting over.
 
 ## Design system
 
