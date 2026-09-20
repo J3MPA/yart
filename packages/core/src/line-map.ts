@@ -1,4 +1,4 @@
-import { diffLines } from 'diff';
+import { diffLines } from 'diff'
 
 export interface LineMapOptions {
   /**
@@ -7,7 +7,7 @@ export interface LineMapOptions {
    * Defaults to `true`: agents reformat constantly, and a reindent that
    * outdated every thread in the file would make review unusable.
    */
-  ignore_whitespace?: boolean;
+  ignore_whitespace?: boolean
 }
 
 /**
@@ -17,9 +17,9 @@ export interface LineMapOptions {
  * `splitLines` discards it again, so numbering is unaffected.
  */
 const withTrailingNewline = (content: string): string => {
-  if (content === '' || content.endsWith('\n')) return content;
-  return `${content}\n`;
-};
+  if (content === '' || content.endsWith('\n')) return content
+  return `${content}\n`
+}
 
 /**
  * Maps line numbers from `before` to their counterparts in `after`.
@@ -35,31 +35,31 @@ export const buildLineMap = (
   after: string,
   options: LineMapOptions = {},
 ): Map<number, number> => {
-  const { ignore_whitespace = true } = options;
-  const map = new Map<number, number>();
+  const { ignore_whitespace = true } = options
+  const map = new Map<number, number>()
 
-  let before_line = 1;
-  let after_line = 1;
+  let before_line = 1
+  let after_line = 1
 
   const parts = diffLines(withTrailingNewline(before), withTrailingNewline(after), {
     // eslint-disable-next-line @typescript-eslint/naming-convention -- jsdiff's option name
     ignoreWhitespace: ignore_whitespace,
-  });
+  })
 
   for (const part of parts) {
-    const count = part.count ?? 0;
+    const count = part.count ?? 0
     if (part.added) {
-      after_line += count;
+      after_line += count
     } else if (part.removed) {
-      before_line += count;
+      before_line += count
     } else {
       for (let offset = 0; offset < count; offset += 1) {
-        map.set(before_line + offset, after_line + offset);
+        map.set(before_line + offset, after_line + offset)
       }
-      before_line += count;
-      after_line += count;
+      before_line += count
+      after_line += count
     }
   }
 
-  return map;
-};
+  return map
+}

@@ -21,7 +21,9 @@
     "test": "pnpm -r test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "daemon": "pnpm --filter @yart/daemon start"
+    "daemon": "pnpm --filter @yart/daemon start",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

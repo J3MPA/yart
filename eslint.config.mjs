@@ -1,7 +1,7 @@
-import js from '@eslint/js';
-import checkFile from 'eslint-plugin-check-file';
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
+import js from '@eslint/js'
+import checkFile from 'eslint-plugin-check-file'
+import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
 /**
  * Naming rules are the project's, not stylistic defaults — see AGENTS.md.
@@ -37,7 +37,7 @@ const namingRules = (function_formats) => [
   { selector: 'import', format: null },
   // Keys that are not valid identifiers, such as a path alias, are not names.
   { selector: 'objectLiteralProperty', modifiers: ['requiresQuotes'], format: null },
-];
+]
 
 /**
  * Callables are declared as const arrows.
@@ -55,7 +55,7 @@ const ARROW_ONLY = {
       message: 'Use an arrow function: const name = () => {}.',
     },
   ],
-};
+}
 
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**', '**/*.config.{js,mjs}'] },
@@ -101,4 +101,4 @@ export default tseslint.config(
       '@typescript-eslint/naming-convention': namingRules(['camelCase', 'PascalCase']),
     },
   },
-);
+)

@@ -1,0 +1,3 @@
+dist/
+# Generated; reformatting it would produce a misleading diff on every install.
+pnpm-lock.yaml

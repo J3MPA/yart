@@ -7,8 +7,8 @@
  * point at.
  */
 export const splitLines = (content: string): string[] => {
-  if (content === '') return [];
-  const lines = content.split('\n');
-  if (lines[lines.length - 1] === '') lines.pop();
-  return lines;
-};
+  if (content === '') return []
+  const lines = content.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines
+}

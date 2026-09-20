@@ -1,23 +1,21 @@
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import {
   hideUnchangedToggled,
   layoutChanged,
   type DiffLayout,
-} from '@/features/diff/diff-view-slice';
-import styles from './app.module.css';
+} from '@/features/diff/diff-view-slice'
+import styles from './app.module.css'
 
-const LAYOUTS: readonly DiffLayout[] = ['unified', 'split'];
+const LAYOUTS: readonly DiffLayout[] = ['unified', 'split']
 
 const App = () => {
-  const { layout, hide_unchanged } = useAppSelector((state) => state.diff_view);
-  const dispatch = useAppDispatch();
+  const { layout, hide_unchanged } = useAppSelector((state) => state.diff_view)
+  const dispatch = useAppDispatch()
 
   return (
     <main className={styles.shell}>
       <h1 className={styles.title}>yart</h1>
-      <p className={styles.tagline}>
-        Local, GitHub-style code review for AI-generated diffs.
-      </p>
+      <p className={styles.tagline}>Local, GitHub-style code review for AI-generated diffs.</p>
 
       <section className={styles.panel}>
         <h2 className={styles.panel_heading}>Scaffold check</h2>
@@ -28,9 +26,7 @@ const App = () => {
               key={option}
               type="button"
               className={
-                option === layout
-                  ? `${styles.button} ${styles.button_active}`
-                  : styles.button
+                option === layout ? `${styles.button} ${styles.button_active}` : styles.button
               }
               onClick={() => dispatch(layoutChanged(option))}
             >
@@ -39,20 +35,14 @@ const App = () => {
           ))}
           <button
             type="button"
-            className={
-              hide_unchanged
-                ? `${styles.button} ${styles.button_active}`
-                : styles.button
-            }
+            className={hide_unchanged ? `${styles.button} ${styles.button_active}` : styles.button}
             onClick={() => dispatch(hideUnchangedToggled())}
           >
             hide unchanged
           </button>
         </div>
 
-        <pre className={styles.state}>
-          {JSON.stringify({ layout, hide_unchanged }, null, 2)}
-        </pre>
+        <pre className={styles.state}>{JSON.stringify({ layout, hide_unchanged }, null, 2)}</pre>
 
         <div className={styles.swatches}>
           <div className={`${styles.swatch} ${styles.swatch_add}`}>+ added</div>
@@ -60,7 +50,7 @@ const App = () => {
         </div>
       </section>
     </main>
-  );
-};
+  )
+}
 
-export default App;
+export default App

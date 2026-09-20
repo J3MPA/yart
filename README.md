@@ -16,14 +16,14 @@ Local diff viewers solve the reading half of that problem and then stop at a
 as structured data over the Model Context Protocol, so the agent can act on them,
 reply to them, and mark threads resolved — without anything being pushed to GitHub.
 
-|                          | Copy-paste diff viewers    | yart                            |
-| ------------------------ | -------------------------- | ------------------------------- |
-| Who starts the review    | You, manually              | The agent, via a tool call      |
-| How comments travel      | Prose blob, pasted         | Structured `{file, line, side}` |
-| Agent can reply / resolve | No                         | Yes                             |
-| State across rounds      | None                       | Threads persist                 |
+|                           | Copy-paste diff viewers | yart                            |
+| ------------------------- | ----------------------- | ------------------------------- |
+| Who starts the review     | You, manually           | The agent, via a tool call      |
+| How comments travel       | Prose blob, pasted      | Structured `{file, line, side}` |
+| Agent can reply / resolve | No                      | Yes                             |
+| State across rounds       | None                    | Threads persist                 |
 
-The last row is the point. Review is a *loop* — change, review, comment, fix,
+The last row is the point. Review is a _loop_ — change, review, comment, fix,
 re-review showing only what is still open — and a clipboard has no memory.
 
 ## How it will work
@@ -41,12 +41,12 @@ more than one agent at a time.
 
 Planned tool surface:
 
-| Tool                | Purpose                                                  |
-| ------------------- | -------------------------------------------------------- |
-| `start_review`      | Open a review over a diff range, return its URL          |
-| `await_review`      | Block until the review is submitted, return the comments |
-| `get_review`        | Non-blocking read of current comments                    |
-| `resolve_comment`   | Agent marks a thread addressed, with a note              |
+| Tool              | Purpose                                                  |
+| ----------------- | -------------------------------------------------------- |
+| `start_review`    | Open a review over a diff range, return its URL          |
+| `await_review`    | Block until the review is submitted, return the comments |
+| `get_review`      | Non-blocking read of current comments                    |
+| `resolve_comment` | Agent marks a thread addressed, with a note              |
 
 ## Status
 
@@ -114,13 +114,13 @@ line number always denotes the same text. Each thread keeps three things:
 When the agent pushes a new revision, every thread is re-anchored against it and
 lands in one of three states:
 
-| State      | Meaning                                                 |
-| ---------- | ------------------------------------------------------- |
-| `current`  | Same file, same line as at creation                     |
-| `shifted`  | The line survives, but moved or the file was renamed    |
-| `outdated` | The line is gone; only `context` remains                |
+| State      | Meaning                                              |
+| ---------- | ---------------------------------------------------- |
+| `current`  | Same file, same line as at creation                  |
+| `shifted`  | The line survives, but moved or the file was renamed |
+| `outdated` | The line is gone; only `context` remains             |
 
-State is *derived* from `origin` versus `anchor` on every pass rather than
+State is _derived_ from `origin` versus `anchor` on every pass rather than
 accumulated, so a bug in one round cannot poison later ones.
 
 Two deliberate judgment calls:
@@ -134,7 +134,7 @@ Two deliberate judgment calls:
   outdated every thread in a file would make review unusable. Set
   `ignore_whitespace: false` to opt out.
 
-`reanchorThread` takes the line mapping as an *input* rather than computing it,
+`reanchorThread` takes the line mapping as an _input_ rather than computing it,
 so the model is a pure lookup and does not care where the diff came from. A
 mapping can be built from text with `buildLineMap` (which uses
 [`diff`](https://github.com/kpdecker/jsdiff)), or later from `git diff` output —
@@ -173,16 +173,16 @@ invisible to `git status`, and in a directory yart will never be asked to show.
 
 **An HTTP API.**
 
-| Route                                          | Purpose                             |
-| ---------------------------------------------- | ----------------------------------- |
-| `POST /api/reviews`                            | Open a review over a range          |
-| `GET /api/reviews` · `GET /api/reviews/:id`    | List, or fetch one                  |
-| `GET /api/reviews/:id/file?path=`              | Both sides of a file, for rendering |
-| `POST /api/reviews/:id/threads`                | Comment on a line                   |
-| `POST /api/reviews/:id/threads/:tid/comments`  | Reply in a thread                   |
-| `PATCH /api/reviews/:id/threads/:tid`          | Open or resolve a thread            |
-| `POST /api/reviews/:id/submit`                 | Hand the review back                |
-| `POST /api/reviews/:id/advance`                | Move to a new head, re-anchoring    |
+| Route                                         | Purpose                             |
+| --------------------------------------------- | ----------------------------------- |
+| `POST /api/reviews`                           | Open a review over a range          |
+| `GET /api/reviews` · `GET /api/reviews/:id`   | List, or fetch one                  |
+| `GET /api/reviews/:id/file?path=`             | Both sides of a file, for rendering |
+| `POST /api/reviews/:id/threads`               | Comment on a line                   |
+| `POST /api/reviews/:id/threads/:tid/comments` | Reply in a thread                   |
+| `PATCH /api/reviews/:id/threads/:tid`         | Open or resolve a thread            |
+| `POST /api/reviews/:id/submit`                | Hand the review back                |
+| `POST /api/reviews/:id/advance`               | Move to a new head, re-anchoring    |
 
 `advance` is where the loop closes: it diffs the old head against the new one,
 builds a line map per changed file, and re-anchors every thread, so the next

@@ -1,14 +1,14 @@
-import { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts';
-import type { Comment, LineAnchor, Thread } from './types.ts';
+import { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'
+import type { Comment, LineAnchor, Thread } from './types.ts'
 
 export interface CreateThreadParams {
-  id: string;
+  id: string
   /** Where the comment was made. Becomes both `origin` and the initial `anchor`. */
-  anchor: LineAnchor;
+  anchor: LineAnchor
   /** Full text of `anchor.blob_sha`, used to capture surrounding context. */
-  content: string;
-  comment: Comment;
-  context_radius?: number;
+  content: string
+  comment: Comment
+  context_radius?: number
 }
 
 /**
@@ -32,5 +32,5 @@ export const createThread = ({
     anchor_state: 'current',
     status: 'open',
     comments: [comment],
-  };
-};
+  }
+}
