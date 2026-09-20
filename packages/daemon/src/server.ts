@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
-import type { CommentAuthor, DiffSide, Thread } from '@yart/core'
+import type { CommentAuthor, DiffSide, ReviewVerdict, Thread } from '@yart/core'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
@@ -14,6 +14,17 @@ export interface ServerOptions {
 }
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
+
+interface SubmitBody {
+  verdict?: ReviewVerdict
+  body?: string
+}
+
+const VERDICTS: ReadonlySet<string> = new Set<ReviewVerdict>([
+  'commented',
+  'approved',
+  'changes_requested',
+])
 
 const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -74,7 +85,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   app.get('/api/reviews', async (context) => context.json(await service.list()))
 
   app.post('/api/reviews', async (context) => {
-    const body = await context.req.json<{ base?: string; head?: string }>()
+    const body = await context.req.json<{ base?: string; head?: string; title?: string }>()
     if (typeof body.base !== 'string' || body.base === '') {
       throw new ReviewError('A base revision is required', 400)
     }
@@ -82,6 +93,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
       repo_path,
       base: body.base,
       head: body.head,
+      title: body.title,
     })
     return context.json(review, 201)
   })
@@ -179,9 +191,22 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
     )
   })
 
-  app.post('/api/reviews/:id/submit', async (context) =>
-    context.json(await service.submit(context.req.param('id'))),
-  )
+  app.post('/api/reviews/:id/submit', async (context) => {
+    // Annotated rather than asserted: a missing body is a valid submission, so
+    // the empty object has to widen to the parameter type without a cast.
+    const body: SubmitBody = await context.req.json<SubmitBody>().catch(() => ({}))
+
+    if (body.verdict !== undefined && !VERDICTS.has(body.verdict)) {
+      throw new ReviewError('Verdict must be "commented", "approved" or "changes_requested"', 400)
+    }
+
+    return context.json(
+      await service.submit(context.req.param('id'), {
+        verdict: body.verdict,
+        body: body.body,
+      }),
+    )
+  })
 
   app.post('/api/reviews/:id/advance', async (context) => {
     const body = await context.req.json<{ head?: string }>().catch(() => ({ head: undefined }))

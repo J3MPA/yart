@@ -1,7 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { DaemonClient, type DaemonClientOptions } from './daemon-client.ts'
-import { openThreads, renderReview, renderReviewWithThreads, renderThreads } from './render.ts'
+import {
+  openThreads,
+  renderReview,
+  renderReviewWithThreads,
+  renderThreads,
+  renderVerdict,
+} from './render.ts'
 
 const DEFAULT_WAIT_SECONDS = 300
 const MAX_WAIT_SECONDS = 1800
@@ -63,11 +69,19 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
           .string()
           .describe('Revision to compare from, such as a branch name, a commit sha, or HEAD~3.'),
         head: z.string().optional().describe('Revision to compare to. Defaults to HEAD.'),
+        title: z
+          .string()
+          .optional()
+          .describe(
+            'A short name for this review, shown in the list of them. ' +
+              'Defaults to the head commit subject. Give one when several reviews ' +
+              'are open at once and the commit subject would not tell them apart.',
+          ),
       },
     }),
-    async ({ base, head }) =>
+    async ({ base, head, title }) =>
       guard(async () => {
-        const review = await daemon.createReview(base, head)
+        const review = await daemon.createReview(base, head, title)
         return text(
           [
             renderReview(review, daemon.reviewUrl(review.id)),
@@ -114,12 +128,16 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
         }
 
         const open = openThreads(submitted)
+        const verdict = renderVerdict(submitted)
+
         if (open.length === 0) {
-          return text('Review submitted with no open comments. Nothing to address.')
+          return text(`${verdict}\n\nNo open comments.`)
         }
         return text(
           [
-            renderThreads(open, 'Review submitted. Open comments'),
+            verdict,
+            '',
+            renderThreads(open, 'Open comments'),
             '',
             'Address these, commit, then call advance_review to re-anchor them onto your changes.',
           ].join('\n'),

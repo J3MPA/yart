@@ -87,19 +87,28 @@ The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
 request.
 
-This is the largest item and decomposes into five pieces, only one of which is
-UI:
+Two pieces of this are done:
 
-- **Reviews need names.** A review is currently a UUID and a revision range,
-  which is useless as a tab label. Probably a `label` argument on `start_review`.
+- **Reviews are named.** A review carries a `title`, defaulting to the head
+  commit's subject, with `start_review` able to override it. The list shows that
+  plus the branch, an abbreviated range, a file count and how long ago it was
+  opened.
+- **Reviews have a verdict.** Submitting takes `commented`, `approved` or
+  `changes_requested` plus an optional summary, recorded against the head it was
+  passed on so advancing reopens the review. `await_review` leads with it,
+  because it decides what the agent does next.
+
+What remains:
+
 - **A changed-since-last-seen signal**, or "an agent answered" never surfaces.
   Needs per-review last-seen state.
 - **Live updates.** The UI only refetches when the window regains focus. For a
   tab to change while you are looking elsewhere, the daemon has to push (SSE) or
   the list has to be polled.
-- **An `approved` state.** A review is currently only `open` or `submitted`,
-  which is a handoff rather than an outcome. Approval should also be readable by
-  the agent, so it knows the work is accepted.
+- **Tabs themselves**, once there is something worth switching between.
+- **Replying to a submission.** A summary left with a verdict is currently
+  write-only: the agent can read it, but there is nowhere to answer it. Line
+  comments have threads; submissions do not.
 - **Worktree support**, which is item 2 above and must come first.
 
 ## Smaller things

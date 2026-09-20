@@ -7,4 +7,6 @@ export type {
   Review,
   ReviewFile,
   ReviewStatus,
+  ReviewSubmission,
+  ReviewVerdict,
 } from '@yart/core'

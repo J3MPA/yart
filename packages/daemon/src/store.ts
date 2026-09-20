@@ -12,6 +12,28 @@ export const storeDir = (repo_path: string): string => {
   return join(repo_path, '.git', 'yart', 'reviews')
 }
 
+/**
+ * The placeholder title a review written before titles existed gets.
+ *
+ * Exported so the service can recognise it and replace it with something a
+ * person would actually read; the store itself does no git.
+ */
+export const placeholderTitle = (review: Review): string =>
+  `${review.base_sha.slice(0, 8)}..${review.head_sha.slice(0, 8)}`
+
+/**
+ * Fills in fields added after a review was written.
+ *
+ * Reviews are long-lived local state, so an older file has to keep opening
+ * rather than crash the list it appears in.
+ */
+const withDefaults = (review: Review): Review => ({
+  ...review,
+  title: review.title ?? placeholderTitle(review),
+  head_branch: review.head_branch ?? null,
+  submissions: review.submissions ?? [],
+})
+
 export class ReviewStore {
   private readonly repo_path: string
 
@@ -33,7 +55,7 @@ export class ReviewStore {
   async load(id: string): Promise<Review | null> {
     try {
       const raw = await readFile(this.pathFor(id), 'utf8')
-      return JSON.parse(raw) as Review
+      return withDefaults(JSON.parse(raw) as Review)
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw cause
