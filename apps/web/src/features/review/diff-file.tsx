@@ -32,6 +32,14 @@ const MARKER: Record<DiffLine['kind'], string> = {
  * context line is addressed on the head because that is the version being
  * reviewed.
  */
+/**
+ * Whether the click was the end of a text selection rather than a plain click.
+ *
+ * The whole row is clickable, so selecting code would otherwise open a comment
+ * form every time someone tried to copy a line.
+ */
+const isSelecting = (): boolean => (window.getSelection()?.toString() ?? '') !== ''
+
 const sideFor = (line: DiffLine): { side: DiffSide; line: number } | null => {
   if (line.kind === 'removed') {
     return line.base_line === null ? null : { side: 'base', line: line.base_line }
@@ -89,16 +97,34 @@ export const DiffFile = ({
               pending.side === target.side &&
               pending.line === target.line
 
+            const toggleComment = () =>
+              onPendingChange(
+                is_pending || target === null
+                  ? null
+                  : { path: file.path, side: target.side, line: target.line },
+              )
+
             return (
               <div key={`${hunk.header}-${index}`}>
+                {/* The row is clickable for the mouse; the button inside it is
+                    what keyboard and assistive technology use. */}
                 <div
                   className={[
                     styles.row,
+                    target === null ? '' : styles.row_clickable,
                     line.kind === 'added' ? styles.row_added : '',
                     line.kind === 'removed' ? styles.row_removed : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
+                  onClick={
+                    target === null
+                      ? undefined
+                      : () => {
+                          if (isSelecting()) return
+                          toggleComment()
+                        }
+                  }
                 >
                   <span className={styles.gutter}>{line.base_line ?? ''}</span>
                   <span className={styles.gutter}>{line.head_line ?? ''}</span>
@@ -117,13 +143,12 @@ export const DiffFile = ({
                         type="button"
                         className={styles.add_button}
                         aria-label={`Comment on ${file.path} line ${target.line}`}
-                        onClick={() =>
-                          onPendingChange(
-                            is_pending
-                              ? null
-                              : { path: file.path, side: target.side, line: target.line },
-                          )
-                        }
+                        onClick={(event) => {
+                          // The row handles this too; without stopping here it
+                          // would toggle twice and cancel itself out.
+                          event.stopPropagation()
+                          toggleComment()
+                        }}
                       >
                         +
                       </button>
