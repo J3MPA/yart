@@ -1,0 +1,47 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--yart-font-sans);
+  font-size: var(--yart-text-md);
+  line-height: var(--yart-line-normal);
+  color: var(--yart-color-text);
+  background-color: var(--yart-color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--yart-font-mono);
+  font-size: 1em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--yart-line-tight);
+  font-weight: 600;
+}
