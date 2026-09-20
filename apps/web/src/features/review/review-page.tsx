@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/button'
 import { DiffFile, type PendingComment } from './diff-file'
 import { useGetReviewDiffQuery, useGetReviewQuery, useSubmitReviewMutation } from './review-api'
+import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import styles from './review.module.css'
 
@@ -24,6 +25,16 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   if (review_query.isLoading || diff_query.isLoading) {
     return <p className={styles.notice}>Loading review…</p>
   }
+
+  if (review_query.isError) {
+    const described = describeQueryError(review_query.error)
+    return (
+      <p className={styles.notice}>
+        {described.is_missing ? `No review with id ${review_id}.` : described.message}
+      </p>
+    )
+  }
+
   if (review === undefined) {
     return <p className={styles.notice}>No review with id {review_id}.</p>
   }
@@ -59,8 +70,14 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         </Button>
       </header>
 
-      {(diff_query.data ?? []).length === 0 && (
-        <p className={styles.notice}>Nothing changed in this range.</p>
+      {diff_query.isError ? (
+        <p className={styles.notice}>
+          Could not load the diff: {describeQueryError(diff_query.error).message}
+        </p>
+      ) : (
+        (diff_query.data ?? []).length === 0 && (
+          <p className={styles.notice}>Nothing changed in this range.</p>
+        )
       )}
 
       {(diff_query.data ?? []).map((file) => (
