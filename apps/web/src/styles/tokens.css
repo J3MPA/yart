@@ -1,0 +1,84 @@
+/*
+ * yart design tokens.
+ *
+ * The seed of the design system: every value the UI consumes resolves to one of
+ * these. Components reference tokens, never raw literals, so the whole surface
+ * can be re-themed from this file alone.
+ *
+ * Palette leans warm (ink on paper) rather than the cool slate-and-blue that
+ * most developer tooling defaults to.
+ */
+
+:root {
+  /* Neutrals — warm grey, light mode */
+  --yart-color-bg: #faf8f5;
+  --yart-color-surface: #ffffff;
+  --yart-color-surface-sunken: #f2efea;
+  --yart-color-border: #e0dad1;
+  --yart-color-border-strong: #c7bfb3;
+  --yart-color-text: #1f1c18;
+  --yart-color-text-muted: #6b635a;
+
+  /* Accent — muted ochre */
+  --yart-color-accent: #b07d2b;
+  --yart-color-accent-hover: #8f6420;
+  --yart-color-accent-contrast: #ffffff;
+
+  /* Diff semantics */
+  --yart-color-add-bg: #e6f2e2;
+  --yart-color-add-emphasis: #3f7d32;
+  --yart-color-remove-bg: #fbe9e7;
+  --yart-color-remove-emphasis: #b3432f;
+
+  /* Type */
+  --yart-font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --yart-font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --yart-text-xs: 0.75rem;
+  --yart-text-sm: 0.875rem;
+  --yart-text-md: 1rem;
+  --yart-text-lg: 1.25rem;
+  --yart-text-xl: 1.75rem;
+  --yart-line-tight: 1.25;
+  --yart-line-normal: 1.6;
+
+  /* Space — 4px base */
+  --yart-space-1: 0.25rem;
+  --yart-space-2: 0.5rem;
+  --yart-space-3: 0.75rem;
+  --yart-space-4: 1rem;
+  --yart-space-6: 1.5rem;
+  --yart-space-8: 2rem;
+
+  /* Radius */
+  --yart-radius-sm: 3px;
+  --yart-radius-md: 6px;
+  --yart-radius-lg: 10px;
+
+  /* Elevation */
+  --yart-shadow-sm: 0 1px 2px rgb(31 28 24 / 8%);
+  --yart-shadow-md: 0 4px 12px rgb(31 28 24 / 10%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --yart-color-bg: #17150f;
+    --yart-color-surface: #201d16;
+    --yart-color-surface-sunken: #12100b;
+    --yart-color-border: #332e24;
+    --yart-color-border-strong: #4d4536;
+    --yart-color-text: #f0ebe2;
+    --yart-color-text-muted: #a19685;
+
+    --yart-color-accent: #d9a648;
+    --yart-color-accent-hover: #e8bc68;
+    --yart-color-accent-contrast: #17150f;
+
+    --yart-color-add-bg: #1c2f18;
+    --yart-color-add-emphasis: #7cc267;
+    --yart-color-remove-bg: #351914;
+    --yart-color-remove-emphasis: #e0755d;
+
+    --yart-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --yart-shadow-md: 0 4px 12px rgb(0 0 0 / 50%);
+  }
+}
