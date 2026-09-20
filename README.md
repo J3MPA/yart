@@ -26,27 +26,65 @@ reply to them, and mark threads resolved — without anything being pushed to Gi
 The last row is the point. Review is a _loop_ — change, review, comment, fix,
 re-review showing only what is still open — and a clipboard has no memory.
 
-## How it will work
+## How it works
 
+```mermaid
+flowchart LR
+    CC["Claude Code"]
+    CD["Claude Desktop"]
+    MCP["MCP server<br/>@yart/mcp"]
+    DAEMON["Review daemon<br/>@yart/daemon"]
+    UI["Review UI<br/>apps/web"]
+    HUMAN(["You"])
+    GIT[("git")]
+    STORE[("reviews<br/>.git/yart")]
+
+    CC -- stdio --> MCP
+    CD -- stdio --> MCP
+    MCP -- HTTP --> DAEMON
+    HUMAN --> UI
+    UI -- "HTTP /api" --> DAEMON
+    DAEMON -. serves .-> UI
+    DAEMON -- "diff, blobs" --> GIT
+    DAEMON -- threads --> STORE
 ```
-Claude Code ─┐
-             ├─ MCP shim (stdio) ─→ HTTP ─→ review daemon ─→ browser UI
-Claude App ──┘                                    ↑
-                                              you, commenting
+
+The daemon is a separate, long-lived process from the MCP server. MCP servers live
+and die with their client, while a review has to outlast a session and be shared by
+more than one agent at once — so the state belongs in a process neither client owns.
+Both agents talk to the same daemon, and the first tool call starts one if none is
+listening.
+
+### The loop
+
+Review is a loop rather than a single pass, which is the whole reason the anchoring
+model exists:
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant Agent
+    participant MCP as MCP server
+    participant Daemon
+
+    Agent->>MCP: start_review(base)
+    MCP->>Daemon: POST /api/reviews
+    Daemon-->>Agent: review id and URL
+
+    You->>Daemon: comment on a line
+    You->>Daemon: submit review
+
+    Agent->>MCP: await_review(id)
+    MCP->>Daemon: poll until submitted
+    Daemon-->>Agent: open comments, with context
+
+    Note over Agent: changes the code and commits
+
+    Agent->>MCP: advance_review(id)
+    MCP->>Daemon: POST /advance
+    Daemon->>Daemon: re-anchor every thread
+    Daemon-->>Agent: what shifted, what went outdated
 ```
-
-The daemon is a separate long-lived process from the MCP shim. MCP servers live and
-die with their client; the review UI needs to outlast a session and be shared by
-more than one agent at a time.
-
-Planned tool surface:
-
-| Tool              | Purpose                                                  |
-| ----------------- | -------------------------------------------------------- |
-| `start_review`    | Open a review over a diff range, return its URL          |
-| `await_review`    | Block until the review is submitted, return the comments |
-| `get_review`      | Non-blocking read of current comments                    |
-| `resolve_comment` | Agent marks a thread addressed, with a note              |
 
 ## Status
 
@@ -146,6 +184,22 @@ lands in one of three states:
 
 State is _derived_ from `origin` versus `anchor` on every pass rather than
 accumulated, so a bug in one round cannot poison later ones.
+
+```mermaid
+stateDiagram-v2
+    [*] --> current: comment created
+    current --> shifted: line moved, or file renamed
+    shifted --> current: line moved back
+    current --> outdated: line rewritten or deleted
+    shifted --> outdated: line rewritten or deleted
+
+    note right of outdated
+        Terminal. Re-anchoring never revives
+        a thread, because any match would be
+        a guess. The captured context is all
+        that survives.
+    end note
+```
 
 Two deliberate judgment calls:
 
