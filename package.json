@@ -24,7 +24,8 @@
     "daemon": "pnpm --filter @yart/daemon start",
     "mcp": "pnpm --filter @yart/mcp start",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dev:actual": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

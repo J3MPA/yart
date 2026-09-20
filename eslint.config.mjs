@@ -23,6 +23,9 @@ const namingRules = (function_formats) => [
   { selector: 'objectLiteralMethod', format: ['camelCase'] },
   { selector: 'classMethod', format: ['camelCase'] },
   { selector: 'variable', types: ['function'], format: function_formats },
+  // A parameter holding a function is a function too — React event props and
+  // callback arguments such as Redux Toolkit's `getDefaultMiddleware`.
+  { selector: 'parameter', types: ['function'], format: ['camelCase'] },
 
   // PascalCase is permitted here only for singletons; the linter cannot tell a
   // singleton from any other object, so that part rests on review.

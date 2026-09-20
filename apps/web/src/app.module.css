@@ -1,5 +1,5 @@
 .shell {
-  max-width: 60rem;
+  max-width: 72rem;
   margin: 0 auto;
   padding: var(--yart-space-8) var(--yart-space-4);
 }
@@ -12,85 +12,4 @@
 .tagline {
   margin-top: var(--yart-space-2);
   color: var(--yart-color-text-muted);
-}
-
-.panel {
-  margin-top: var(--yart-space-6);
-  padding: var(--yart-space-4);
-  background-color: var(--yart-color-surface);
-  border: 1px solid var(--yart-color-border);
-  border-radius: var(--yart-radius-lg);
-  box-shadow: var(--yart-shadow-sm);
-}
-
-.panel_heading {
-  font-size: var(--yart-text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--yart-color-text-muted);
-}
-
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--yart-space-2);
-  margin-top: var(--yart-space-3);
-}
-
-.button {
-  padding: var(--yart-space-2) var(--yart-space-3);
-  font-size: var(--yart-text-sm);
-  color: var(--yart-color-text);
-  background-color: var(--yart-color-surface-sunken);
-  border: 1px solid var(--yart-color-border-strong);
-  border-radius: var(--yart-radius-md);
-  cursor: pointer;
-}
-
-.button:hover {
-  border-color: var(--yart-color-accent);
-}
-
-.button_active {
-  color: var(--yart-color-accent-contrast);
-  background-color: var(--yart-color-accent);
-  border-color: var(--yart-color-accent);
-}
-
-.button_active:hover {
-  background-color: var(--yart-color-accent-hover);
-  border-color: var(--yart-color-accent-hover);
-}
-
-.state {
-  margin-top: var(--yart-space-4);
-  padding: var(--yart-space-3);
-  font-family: var(--yart-font-mono);
-  font-size: var(--yart-text-sm);
-  background-color: var(--yart-color-surface-sunken);
-  border-radius: var(--yart-radius-md);
-}
-
-.swatches {
-  display: flex;
-  gap: var(--yart-space-2);
-  margin-top: var(--yart-space-3);
-}
-
-.swatch {
-  flex: 1;
-  padding: var(--yart-space-2);
-  font-size: var(--yart-text-xs);
-  font-family: var(--yart-font-mono);
-  border-radius: var(--yart-radius-sm);
-}
-
-.swatch_add {
-  color: var(--yart-color-add-emphasis);
-  background-color: var(--yart-color-add-bg);
-}
-
-.swatch_remove {
-  color: var(--yart-color-remove-emphasis);
-  background-color: var(--yart-color-remove-bg);
 }

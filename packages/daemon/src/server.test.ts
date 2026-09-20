@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Review } from './types.ts'
@@ -212,5 +215,84 @@ describe('DELETE /api/reviews/:id', () => {
     const response = await app.request(`/api/reviews/${created.id}`, { method: 'DELETE' })
     expect(response.status).toBe(204)
     expect((await app.request(`/api/reviews/${created.id}`)).status).toBe(404)
+  })
+})
+
+describe('GET /api/reviews/:id/diff', () => {
+  it('returns hunks with a line number on each side', async () => {
+    const created = await openReview()
+    const response = await app.request(`/api/reviews/${created.id}/diff`)
+    expect(response.status).toBe(200)
+
+    const files = (await response.json()) as {
+      path: string
+      is_binary: boolean
+      hunks: { lines: { kind: string; head_line: number | null; text: string }[] }[]
+    }[]
+    expect(files.map((file) => file.path)).toEqual(['a.txt'])
+
+    const lines = files[0]?.hunks.flatMap((hunk) => hunk.lines) ?? []
+    expect(lines.find((line) => line.kind === 'added')).toMatchObject({
+      head_line: 2,
+      text: 'TARGET',
+    })
+    expect(files[0]?.is_binary).toBe(false)
+  })
+
+  it('returns 404 for an unknown review', async () => {
+    expect((await app.request('/api/reviews/nope/diff')).status).toBe(404)
+  })
+})
+
+describe('serving the web UI', () => {
+  let ui_dir: string
+  let ui_app: Hono
+
+  beforeEach(() => {
+    ui_dir = mkdtempSync(join(tmpdir(), 'yart-ui-'))
+    writeFileSync(join(ui_dir, 'index.html'), '<!doctype html><title>yart</title>')
+    mkdirSync(join(ui_dir, 'assets'))
+    writeFileSync(join(ui_dir, 'assets', 'index.css'), '.a{color:red}')
+    ui_app = createServer({ repo_path: repo.path, ui_dir })
+  })
+
+  afterEach(() => {
+    rmSync(ui_dir, { recursive: true, force: true })
+  })
+
+  it('serves an asset with its content type', async () => {
+    const response = await ui_app.request('/assets/index.css')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('text/css')
+    expect(await response.text()).toBe('.a{color:red}')
+  })
+
+  it('falls back to index.html so client-side routes deep link', async () => {
+    const response = await ui_app.request('/reviews/some-id')
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('<title>yart</title>')
+  })
+
+  it('does not let a traversal escape the build directory', async () => {
+    const secret = join(ui_dir, '..', 'yart-secret.txt')
+    writeFileSync(secret, 'do not serve me')
+    try {
+      const response = await ui_app.request('/../yart-secret.txt')
+      expect(await response.text()).not.toContain('do not serve me')
+    } finally {
+      rmSync(secret, { force: true })
+    }
+  })
+
+  it('keeps API routes ahead of the fallback', async () => {
+    const response = await ui_app.request('/api/reviews')
+    expect(response.headers.get('content-type')).toContain('application/json')
+  })
+
+  it('explains itself when the UI has not been built', async () => {
+    const missing = createServer({ repo_path: repo.path, ui_dir: join(ui_dir, 'nope') })
+    const response = await missing.request('/reviews/x')
+    expect(response.status).toBe(503)
+    expect(await response.text()).toContain('has not been built')
   })
 })
