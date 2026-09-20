@@ -10,6 +10,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 7777,
+    // The daemon owns 7777 and serves the built UI from there; in development
+    // Vite sits beside it and proxies the API across.
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:7777',
+    },
   },
 })

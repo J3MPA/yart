@@ -1,10 +1,46 @@
+import { readFile } from 'node:fs/promises'
+import { extname, join, normalize, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import type { CommentAuthor, DiffSide, Thread } from '@yart/core'
+import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
 
 export interface ServerOptions {
   repo_path: string
+  /** Built web UI to serve. Defaults to this workspace's `apps/web/dist`. */
+  ui_dir?: string
+}
+
+const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
+
+const CONTENT_TYPES: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+}
+
+const NOT_BUILT =
+  '<!doctype html><title>yart</title><p style="font-family:sans-serif">' +
+  'The web UI has not been built. Run <code>pnpm build</code>, then reload.'
+
+/**
+ * Resolves a request path inside `ui_dir`, or null when it escapes.
+ *
+ * The daemon serves files from disk, so a path containing `..` must not be able
+ * to reach outside the build directory.
+ */
+const resolveAsset = (ui_dir: string, request_path: string): string | null => {
+  const relative = normalize(decodeURIComponent(request_path)).replace(/^[/\\]+/, '')
+  if (relative === '' || relative.split(/[/\\]/).includes('..')) return null
+  const full = join(ui_dir, relative)
+  return full.startsWith(ui_dir + sep) ? full : null
 }
 
 interface ErrorBody {
@@ -23,7 +59,7 @@ const messageFor = (cause: unknown): string => {
   return cause instanceof Error ? cause.message : 'Unexpected error'
 }
 
-export const createServer = ({ repo_path }: ServerOptions): Hono => {
+export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptions): Hono => {
   const service = new ReviewService(repo_path)
   const app = new Hono()
 
@@ -77,6 +113,12 @@ export const createServer = ({ repo_path }: ServerOptions): Hono => {
     ])
 
     return context.json({ ...file, base_content, head_content })
+  })
+
+  /** Every file's hunks, built by git so the rendering matches what anchors use. */
+  app.get('/api/reviews/:id/diff', async (context) => {
+    const review = await service.get(context.req.param('id'))
+    return context.json(await buildReviewDiff(review.repo_path, review.files))
   })
 
   app.post('/api/reviews/:id/threads', async (context) => {
@@ -144,6 +186,30 @@ export const createServer = ({ repo_path }: ServerOptions): Hono => {
   app.post('/api/reviews/:id/advance', async (context) => {
     const body = await context.req.json<{ head?: string }>().catch(() => ({ head: undefined }))
     return context.json(await service.advanceHead(context.req.param('id'), body.head ?? 'HEAD'))
+  })
+
+  /**
+   * The web UI, last so every API route wins.
+   *
+   * Unknown paths fall back to index.html rather than 404ing, because the UI
+   * routes client-side: a deep link like /reviews/<id> is a real page there and
+   * nothing on disk.
+   */
+  app.get('/*', async (context) => {
+    const asset = resolveAsset(ui_dir, new URL(context.req.url).pathname)
+    if (asset !== null) {
+      const body = await readFile(asset).catch(() => null)
+      if (body !== null) {
+        const type = CONTENT_TYPES[extname(asset)] ?? 'application/octet-stream'
+        return context.body(new Uint8Array(body), 200, { 'content-type': type })
+      }
+    }
+
+    const index = await readFile(join(ui_dir, 'index.html'), 'utf8').catch(() => null)
+    if (index === null) {
+      return context.html(NOT_BUILT, 503)
+    }
+    return context.html(index)
   })
 
   return app

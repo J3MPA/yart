@@ -57,7 +57,7 @@ Early — the scaffold is in place, the product is not.
 - [x] Comment anchoring model
 - [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
 - [x] MCP server
-- [ ] Diff parsing and rendering in the UI
+- [x] Review UI: diff rendering, inline comments, review rounds
 - [ ] Clipboard export (fallback for non-MCP agents)
 
 ## Getting started
@@ -66,12 +66,16 @@ Requires Node 20+ and pnpm.
 
 ```sh
 pnpm install
-pnpm daemon     # the review daemon, against the current repository
-pnpm dev        # the UI in development, http://localhost:7777
+pnpm build      # the daemon serves the built UI, so build it first
+pnpm daemon     # http://localhost:7777
 ```
 
-The daemon takes `--port` and `--repo`, and stores reviews under
-`.git/yart/reviews/` so nothing appears in `git status`.
+Open `http://localhost:7777`, or let an agent open a review for you with the
+`start_review` tool. The daemon takes `--port` and `--repo`, and stores reviews
+under `.git/yart/reviews/` so nothing appears in `git status`.
+
+For UI work, `pnpm dev` runs Vite on port 5173 with `/api` proxied to the daemon
+on 7777, so run both.
 
 Other scripts:
 
@@ -189,6 +193,29 @@ invisible to `git status`, and in a directory yart will never be asked to show.
 `advance` is where the loop closes: it diffs the old head against the new one,
 builds a line map per changed file, and re-anchors every thread, so the next
 round shows what is still open rather than starting over.
+
+## The review UI
+
+`apps/web` is what a human actually uses. The daemon serves it, so there is one
+address for both the API and the pages, and a deep link to a review works
+because unknown paths fall back to `index.html`.
+
+The diff is rendered unified, with a gutter per side: a line has a number in the
+base, in the head, or in both, and a comment attaches to whichever side the row
+actually exists on — a removed line is addressed in the base, an added or
+context line in the head. Hovering a row reveals a control to comment on it, and
+threads open inline beneath the line they belong to.
+
+**Hunks come from the daemon, not from diffing in the browser.** The temptation
+is to send both file contents and diff them client-side, but then the rendered
+diff and the anchors are computed by two different implementations, and when
+they disagree a comment lands on the wrong line. The daemon parses `git diff`
+and sends hunks with a line number already on each side.
+
+Comments whose line no longer exists cannot sit anywhere in the diff, so the
+file header lists them instead, above the hunks, with the text they were written
+against. They are the record of a conversation and dropping them would be worse
+than showing them out of place.
 
 ## The MCP server
 
