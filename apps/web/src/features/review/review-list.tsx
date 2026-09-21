@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Review } from '@yart/core'
-import { Button } from '@/components/button'
+import { Menu, MenuItem } from '@/components/menu'
 import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import {
   useDeleteReviewMutation,
@@ -65,38 +65,42 @@ const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: Rev
         {open} open / {review.threads.length}
       </span>
 
-      <div className={styles.list_actions}>
-        <Button
-          tone="quiet"
-          onClick={() => void setArchived({ review_id: review.id, archived: !archived })}
-        >
-          {archived ? 'Restore' : 'Archive'}
-        </Button>
-
-        {/* Two clicks rather than a browser dialog: deleting a review discards
-            every comment on it, and there is no undo. */}
-        {confirming_delete ? (
+      <Menu label={`Actions for ${review.title}`} onClose={() => onConfirmDelete(null)}>
+        {(close) => (
           <>
-            <Button
-              tone="quiet"
-              className={styles.danger}
+            <MenuItem
               onClick={() => {
-                void deleteReview(review.id)
-                onConfirmDelete(null)
+                void setArchived({ review_id: review.id, archived: !archived })
+                close()
               }}
             >
-              Really delete
-            </Button>
-            <Button tone="quiet" onClick={() => onConfirmDelete(null)}>
-              Keep
-            </Button>
+              {archived ? 'Restore' : 'Archive'}
+            </MenuItem>
+
+            {/* Two steps rather than a browser dialog: deleting a review
+                discards every comment on it, and there is no undo. */}
+            {confirming_delete ? (
+              <>
+                <MenuItem
+                  danger
+                  onClick={() => {
+                    void deleteReview(review.id)
+                    onConfirmDelete(null)
+                    close()
+                  }}
+                >
+                  Confirm delete
+                </MenuItem>
+                <MenuItem onClick={() => onConfirmDelete(null)}>Keep it</MenuItem>
+              </>
+            ) : (
+              <MenuItem danger onClick={() => onConfirmDelete(review.id)}>
+                Delete
+              </MenuItem>
+            )}
           </>
-        ) : (
-          <Button tone="quiet" onClick={() => onConfirmDelete(review.id)}>
-            Delete
-          </Button>
         )}
-      </div>
+      </Menu>
     </div>
   )
 }
@@ -110,25 +114,23 @@ export const ReviewList = () => {
 
   return (
     <>
-      <div className={styles.list_tabs}>
-        <Button
-          tone={archived ? 'default' : 'primary'}
-          onClick={() => {
-            setArchivedView(false)
-            setConfirming(null)
-          }}
-        >
-          Active
-        </Button>
-        <Button
-          tone={archived ? 'primary' : 'default'}
-          onClick={() => {
-            setArchivedView(true)
-            setConfirming(null)
-          }}
-        >
-          Archived
-        </Button>
+      <div className={styles.list_tabs} role="group" aria-label="Which reviews to show">
+        {([false, true] as const).map((is_archived) => (
+          <button
+            key={String(is_archived)}
+            type="button"
+            aria-pressed={archived === is_archived}
+            className={[styles.tab, archived === is_archived ? styles.tab_selected : '']
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              setArchivedView(is_archived)
+              setConfirming(null)
+            }}
+          >
+            {is_archived ? 'Archived' : 'Active'}
+          </button>
+        ))}
       </div>
 
       {is_loading && <p className={styles.notice}>Loading reviews…</p>}

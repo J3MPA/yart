@@ -41,11 +41,24 @@ Two pieces of this are done:
 
 What remains:
 
-- **A changed-since-last-seen signal**, or "an agent answered" never surfaces.
-  Needs per-review last-seen state.
-- **Live updates.** The UI only refetches when the window regains focus. For a
-  tab to change while you are looking elsewhere, the daemon has to push (SSE) or
-  the list has to be polled.
+- **A notification that the agent has answered.** This is the piece that makes
+  working in several chats worthwhile, and it is the one to build first: without
+  it there is nothing to switch to a tab _for_. A dot on the review in the list,
+  and something visible from outside the page — the document title, or the
+  favicon — so it can be noticed while attention is elsewhere.
+
+  What counts as answered needs deciding: a reply on a thread, a thread resolved,
+  the review advanced onto new work, or any of them. Whichever it is, the signal
+  should clear once the review has been looked at.
+
+  Seen-ness is per person and per device rather than a property of the review, so
+  it belongs in the browser rather than beside the review on disk — which also
+  keeps an agent from being able to mark its own work as read.
+
+- **Live updates.** The dot only appears on a refresh today, because the UI
+  refetches when the window regains focus and not otherwise. For it to appear
+  while you are looking elsewhere the daemon has to push, over server-sent
+  events, or the list has to be polled.
 - **Tabs themselves**, once there is something worth switching between.
 - **Replying to a submission.** A summary left with a verdict is currently
   write-only: the agent can read it, but there is nowhere to answer it. Line
@@ -53,6 +66,57 @@ What remains:
 - **Tabs across worktrees** now work at the storage level: reviews are kept in
   the repository's shared git directory, so every worktree sees one list and
   each review records which worktree it belongs to.
+
+## Finding: agents use the tools, but do not reach for them
+
+Established by running the MCP server against real sessions rather than by
+reasoning about it.
+
+**The tools work and are discoverable.** Told "I want to review the code", an
+agent with no instructions about yart found `start_review`, gave it a title of
+its own, waited on `await_review`, replied to a comment, and called
+`advance_review` after fixing. The whole loop, in order, unprompted.
+
+**Agents do not open a review on their own.** Finishing a change and deciding
+that someone should look at it is a judgement they have no reason to make, and
+no amount of wording in a tool description appears to change that. Stating the
+intent is what triggers it.
+
+**A conflicting instruction makes the tool invisible.** Two runs failed before
+this was understood, and neither was the model's fault: a line in the user's
+global `CLAUDE.md` named a different review mechanism, and the model obeyed the
+more specific instruction it already had. Nothing surfaced the conflict — the
+tools were connected and healthy the whole time. Worth remembering that when an
+agent ignores a tool, the first thing to look for is a competing instruction,
+not a weak description.
+
+The lever for proactive review is a `Stop` hook rather than better descriptions:
+a turn ends with a dirty tree, a review opens, no judgement involved. Deferred
+for now — saying "I want to review the code" works, and a hook that fires on
+every dirty turn would need care not to be noisy. If it is built, it should
+advance an existing review rather than open a second, do nothing when no files
+changed, and would mean `yart` growing a subcommand for hooks to call.
+
+## Syntax highlighting
+
+Wanted, and not simply a matter of dropping a library in.
+
+The constraint is that highlighting has to survive the per-line structure. Every
+diff row is a line with its own gutters and its own comment anchor, so the
+markup a highlighter produces must stay inside a line: anything that opens a
+span on one line and closes it on another will either break the rows or leak
+styling across them. Shiki can emit per-line output for this; the simpler
+highlighters generally assume they own a whole block.
+
+Two further things to settle. What gets highlighted is the file, not the diff —
+the `+` and `-` markers are ours and must not be fed to a grammar that will try
+to read them as source. And the theme has to come from the design tokens in both
+colour schemes, rather than importing a highlighter's own theme, or the diff will
+stop looking like the rest of the interface.
+
+Weight is worth watching: grammars and themes are large, and this is a local tool
+that should stay quick to start. Loading a grammar only for the languages a
+review actually contains would be the way to keep it honest.
 
 ## Discovery: how this gets distributed
 
@@ -90,12 +154,18 @@ to take back, and nobody has used this but its author.
 
 ## Smaller things
 
+- Deleting a review is confirmed by a second click inside the overflow menu.
+  That is cheap and reversible up to the second click, but it is thin for an
+  action that discards every comment on a review with no undo. A modal would
+  carry more weight and, more usefully, would have room to say what is about to
+  be lost — the review's title and how many comment threads go with it — which
+  the menu cannot.
+
 - The daemon has no crash recovery, no log file, and exits if its port is taken.
 - `GET /api/reviews/:id/diff` returns every file with no cap. Fine for
   agent-sized changes; a large refactor will feel it.
 - Split view is unimplemented — the state exists, but only the unified layout
   renders.
-- No syntax highlighting in the diff.
 - typescript-eslint resolves TypeScript 6 while every package compiles with
   TypeScript 7, so type-aware lint rules are evaluated against different
   inference than the compiler uses. Nothing is broken today, and installing

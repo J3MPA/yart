@@ -1,15 +1,24 @@
+/* Default buttons are deliberately low contrast. Only one action in a group
+   should be filled, or a row of buttons reads as several competing emphases. */
 .button {
   padding: var(--yart-space-2) var(--yart-space-3);
   font-size: var(--yart-text-sm);
+  line-height: 1.4;
   color: var(--yart-color-text);
-  background-color: var(--yart-color-surface-sunken);
-  border: 1px solid var(--yart-color-border-strong);
+  background-color: transparent;
+  border: 1px solid var(--yart-color-border);
   border-radius: var(--yart-radius-md);
   cursor: pointer;
 }
 
 .button:hover:not(:disabled) {
-  border-color: var(--yart-color-accent);
+  background-color: var(--yart-color-surface-sunken);
+  border-color: var(--yart-color-border-strong);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: 1px;
 }
 
 .button:disabled {
