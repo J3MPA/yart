@@ -53,6 +53,9 @@
 
 .file {
   margin-top: var(--yart-space-6);
+  /* A grid column is `min-width: auto` by default, so a long unbroken line
+     would widen the column and push the sidebar off the page. */
+  min-width: 0;
   background-color: var(--yart-color-surface);
   border: 1px solid var(--yart-color-border);
   border-radius: var(--yart-radius-lg);
@@ -78,15 +81,6 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--yart-color-text-muted);
-}
-
-.hunk_header {
-  padding: var(--yart-space-1) var(--yart-space-3);
-  font-family: var(--yart-font-mono);
-  font-size: var(--yart-text-xs);
-  color: var(--yart-color-text-muted);
-  background-color: var(--yart-color-surface-sunken);
-  border-top: 1px solid var(--yart-color-border);
 }
 
 .row {
@@ -480,4 +474,218 @@
   outline: 2px solid var(--yart-color-accent);
   outline-offset: 2px;
   border-radius: var(--yart-radius-sm);
+}
+
+/* The sidebar and the diff, side by side. The sidebar is fixed so that the
+   diff column's width does not shift from file to file. */
+.layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  gap: var(--yart-space-6);
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: var(--yart-space-4);
+  max-height: calc(100vh - 2 * var(--yart-space-4));
+  overflow: auto;
+  margin-top: var(--yart-space-6);
+}
+
+/* Below this the two columns no longer both fit, and a tree squeezed into a
+   few characters is worse than a list above the diff. */
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: static;
+    max-height: 22rem;
+  }
+}
+
+.diffs {
+  min-width: 0;
+}
+
+.tree {
+  background-color: var(--yart-color-surface);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-lg);
+  overflow: hidden;
+}
+
+.tree_header {
+  display: flex;
+  align-items: center;
+  gap: var(--yart-space-2);
+  padding: var(--yart-space-2) var(--yart-space-3);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  background-color: var(--yart-color-surface-sunken);
+  border-bottom: 1px solid var(--yart-color-border);
+}
+
+.tree_list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Indentation comes from nesting rather than a per-row inset, so a folded
+   directory needs no arithmetic to sit at the right depth. */
+.tree_list .tree_list {
+  padding-left: var(--yart-space-3);
+}
+
+.tree_directory {
+  padding: var(--yart-space-1) var(--yart-space-3);
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree_file {
+  display: flex;
+  align-items: baseline;
+  gap: var(--yart-space-2);
+  width: 100%;
+  padding: var(--yart-space-1) var(--yart-space-3);
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-xs);
+  text-align: left;
+  color: var(--yart-color-text);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.tree_file:hover {
+  background-color: var(--yart-color-surface-sunken);
+}
+
+/* The bar is drawn with a transparent border on every row, so marking one
+   shifts no text sideways. */
+.tree_file {
+  border-left: 2px solid transparent;
+}
+
+.tree_file_active,
+.tree_file_active:hover {
+  color: var(--yart-color-accent);
+  background-color: color-mix(in srgb, var(--yart-color-accent) 12%, transparent);
+  border-left-color: var(--yart-color-accent);
+}
+
+.tree_file:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: -2px;
+}
+
+.tree_status {
+  flex: none;
+  width: 1ch;
+  color: var(--yart-color-text-muted);
+}
+
+.tree_name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree_counts {
+  flex: none;
+  white-space: nowrap;
+}
+
+.tree_added {
+  color: var(--yart-color-add-emphasis);
+}
+
+.tree_removed {
+  color: var(--yart-color-remove-emphasis);
+}
+
+.tree_threads {
+  flex: none;
+  padding: 0 0.4rem;
+  font-size: var(--yart-text-xs);
+  border-radius: 999px;
+  color: var(--yart-color-accent-contrast);
+  background-color: var(--yart-color-accent);
+}
+
+/* Stands where the `@@` header used to: same grid as a diff row, so the
+   controls land in the gutters and the label lines up with the code. */
+.gap {
+  display: grid;
+  /* 7.75rem is the two gutters plus the marker column of a diff row. */
+  grid-template-columns: 7.75rem auto 1fr auto;
+  align-items: center;
+  column-gap: var(--yart-space-2);
+  padding-right: var(--yart-space-3);
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  background-color: var(--yart-color-surface-sunken);
+  border-top: 1px solid var(--yart-color-border);
+  border-bottom: 1px solid var(--yart-color-border);
+}
+
+.gap_controls {
+  display: flex;
+  justify-content: center;
+  gap: 1px;
+  border-right: 1px solid var(--yart-color-border);
+}
+
+.gap_button {
+  flex: 1;
+  padding: var(--yart-space-1) 0;
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-sm);
+  line-height: 1.5;
+  color: var(--yart-color-text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.gap_button:hover:not(:disabled) {
+  color: var(--yart-color-accent-contrast);
+  background-color: var(--yart-color-accent);
+}
+
+.gap_button:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: -2px;
+}
+
+.gap_button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.gap_label {
+  white-space: nowrap;
+}
+
+.gap_heading {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.gap_lines {
+  white-space: nowrap;
+  opacity: 0.6;
 }

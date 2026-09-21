@@ -5,24 +5,14 @@ Planned work, roughly in the order it should happen.
 Findings recorded here were verified rather than assumed, so they do not have to
 be rediscovered when the work starts.
 
-## 1. File tree and collapsed context
-
-Reviewing a 28-file change is currently one long blind scroll.
-
-- A sidebar of changed files, with open-thread counts and added/removed totals
-- Click to jump to a file
-- Collapse long runs of unchanged lines, expandable in place
-
-No model changes; this is all UI.
-
-## 2. Diff any two arbitrary points
+## 1. Diff any two arbitrary points
 
 A review can now be opened over any commit or tree, including a bare tree hash,
 so ad-hoc comparisons are possible through the API. What is missing is a way to
 ask for one: the UI offers no way to pick two revisions, and the MCP tools take
 them but nothing suggests the possibility.
 
-## 3. Concurrent reviews: naming, tabs, and approval
+## 2. Concurrent reviews: naming, tabs, and approval
 
 The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
@@ -165,7 +155,13 @@ to take back, and nobody has used this but its author.
 - `GET /api/reviews/:id/diff` returns every file with no cap. Fine for
   agent-sized changes; a large refactor will feel it.
 - Split view is unimplemented — the state exists, but only the unified layout
-  renders.
+  renders. `hide_unchanged` in the same slice is unused too: collapsing is now
+  per run, expanded from the band rather than from a global switch, and a switch
+  that opened every run at once would pull every file's full text over the wire.
+- `GET /api/reviews/:id/diff` now reads each text file's head blob as well as
+  diffing it, to report the file's length — without which nothing can say
+  whether a file continues past its last hunk. Two git invocations per file
+  instead of one.
 - typescript-eslint resolves TypeScript 6 while every package compiles with
   TypeScript 7, so type-aware lint rules are evaluated against different
   inference than the compiler uses. Nothing is broken today, and installing

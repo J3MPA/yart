@@ -1,11 +1,9 @@
-import { splitLines } from '@yart/core'
+import { parseHunkHeader, splitLines } from '@yart/core'
 import type { DiffHunk, FileDiff, ReviewFile } from '@yart/core'
 import { runGit, readBlob } from './git.ts'
 
 /** Lines of unchanged context git includes either side of a change. */
 export const DEFAULT_CONTEXT_LINES = 3
-
-const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/
 
 /**
  * Parses git's unified diff into hunks with a line number on each side.
@@ -21,12 +19,12 @@ export const parseUnifiedDiff = (diff_output: string): DiffHunk[] => {
   let head_line = 0
 
   for (const raw of diff_output.split('\n')) {
-    const header = HUNK_HEADER.exec(raw)
-    if (header !== null) {
+    const range = parseHunkHeader(raw)
+    if (range !== null) {
       current = { header: raw, lines: [] }
       hunks.push(current)
-      base_line = Number(header[1])
-      head_line = Number(header[2])
+      base_line = range.base_start
+      head_line = range.head_start
       continue
     }
     if (current === null) continue
@@ -89,17 +87,27 @@ export const buildFileDiff = async (
   const { context_lines = DEFAULT_CONTEXT_LINES } = options
 
   if (file.base_blob_sha === null && file.head_blob_sha === null) {
-    return { ...file, hunks: [], is_binary: false }
+    return { ...file, hunks: [], is_binary: false, head_line_count: null }
   }
 
   if (file.base_blob_sha === null) {
     const content = await readBlob(repo_path, file.head_blob_sha as string)
-    return { ...file, hunks: wholeFileHunk(content, 'added'), is_binary: false }
+    return {
+      ...file,
+      hunks: wholeFileHunk(content, 'added'),
+      is_binary: false,
+      head_line_count: splitLines(content).length,
+    }
   }
 
   if (file.head_blob_sha === null) {
     const content = await readBlob(repo_path, file.base_blob_sha)
-    return { ...file, hunks: wholeFileHunk(content, 'removed'), is_binary: false }
+    return {
+      ...file,
+      hunks: wholeFileHunk(content, 'removed'),
+      is_binary: false,
+      head_line_count: null,
+    }
   }
 
   const output = await runGit(repo_path, [
@@ -111,10 +119,21 @@ export const buildFileDiff = async (
   ])
 
   if (/^Binary files .* differ$/m.test(output)) {
-    return { ...file, hunks: [], is_binary: true }
+    return { ...file, hunks: [], is_binary: true, head_line_count: null }
   }
 
-  return { ...file, hunks: parseUnifiedDiff(output), is_binary: false }
+  // Read only once the file is known to be text, and only after the diff: a
+  // binary blob would be pulled into memory as a string for a length nothing
+  // can use. git reports only what changed, so the file's length is the one
+  // thing the diff cannot say about the run of lines after the last hunk.
+  const head_content = await readBlob(repo_path, file.head_blob_sha)
+
+  return {
+    ...file,
+    hunks: parseUnifiedDiff(output),
+    is_binary: false,
+    head_line_count: splitLines(head_content).length,
+  }
 }
 
 export const buildReviewDiff = async (

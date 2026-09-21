@@ -2,7 +2,14 @@
    this file is Redux Toolkit Query's own: endpoint keys become hook names
    (`getReview` -> `useGetReviewQuery`), and the rest are its config fields. */
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import type { DiffSide, FileDiff, Review, ReviewVerdict, ThreadStatus } from '@yart/core'
+import type {
+  DiffSide,
+  FileContents,
+  FileDiff,
+  Review,
+  ReviewVerdict,
+  ThreadStatus,
+} from '@yart/core'
 
 export interface AddThreadArgs {
   review_id: string
@@ -70,6 +77,13 @@ export const reviewApi = createApi({
       query: (review_id) => `/reviews/${review_id}/diff`,
       providesTags: ['Diff'],
     }),
+    // Fetched only when someone expands a collapsed run, and per file rather
+    // than with the diff: whole files for a 28-file review is a lot of text to
+    // send for the handful of lines anyone actually opens.
+    getReviewFile: builder.query<FileContents, { review_id: string; path: string }>({
+      query: ({ review_id, path }) => `/reviews/${review_id}/file?path=${encodeURIComponent(path)}`,
+      providesTags: ['Diff'],
+    }),
     addThread: builder.mutation<Review, AddThreadArgs>({
       query: ({ review_id, ...body }) => ({
         url: `/reviews/${review_id}/threads`,
@@ -111,6 +125,7 @@ export const {
   useDeleteReviewMutation,
   useGetReviewQuery,
   useGetReviewDiffQuery,
+  useGetReviewFileQuery,
   useAddThreadMutation,
   useAddCommentMutation,
   useSetThreadStatusMutation,

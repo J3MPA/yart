@@ -98,6 +98,7 @@ Early — the scaffold is in place, the product is not.
 - [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
 - [x] MCP server
 - [x] Review UI: diff rendering, inline comments, review rounds
+- [x] Review UI: file tree, collapsed context expandable in place
 - [x] Installable: `yart` and `yart-mcp` run from any repository
 - [ ] Clipboard export (fallback for non-MCP agents)
 
@@ -318,6 +319,24 @@ Comments whose line no longer exists cannot sit anywhere in the diff, so the
 file header lists them instead, above the hunks, with the text they were written
 against. They are the record of a conversation and dropping them would be worse
 than showing them out of place.
+
+A sidebar lists the changed files as a tree, folding directory chains that hold
+nothing but one child, with each file's added and removed totals and a count of
+the threads still open on it. Clicking one brings it into view, and the file
+being read is marked as you scroll, measured from the sections themselves so
+that opening a run of context mid-page cannot put the mark out of step. Paths
+are not safe as URL fragments, so the tree scrolls rather than links.
+
+**Unchanged lines are recovered from the head blob, not from a wider diff.**
+git describes only what changed, so everything between two hunks is absent from
+the diff entirely. Rather than asking git for more context than anyone will
+read, each run of hidden lines is drawn as a band where the `@@` header used to
+be — carrying the enclosing function git named for the hunk below — and opening
+one fetches the file's full text once and slices the lines out of it. Twenty at
+a time from either end, or all of them when few enough remain. A line revealed
+this way is an ordinary row and can be commented on like any other. Knowing
+whether a file continues past its last hunk takes the file's length, which is
+why the diff carries `head_line_count`.
 
 ## Reviewing uncommitted work
 

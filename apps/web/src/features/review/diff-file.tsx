@@ -1,15 +1,25 @@
-import type { DiffLine, DiffSide, FileDiff, Thread } from '@yart/core'
-import { CommentForm } from './comment-form'
+import { useMemo, useState } from 'react'
+import {
+  gapLines,
+  gapSlice,
+  hunkSectionHeading,
+  planDiffSections,
+  splitLines,
+  type DiffGap,
+  type DiffLine,
+  type FileDiff,
+  type Thread,
+} from '@yart/core'
 import { CommentThread } from './comment-thread'
-import { useAddThreadMutation } from './review-api'
-import { anchorKey, outdatedThreadsForPath } from './thread-anchors'
+import { DiffRow, type PendingComment, type RowTarget } from './diff-row'
+import { fileAnchorId } from './file-anchors'
+import { EXPAND_STEP, GapBand, type GapEdge } from './gap-band'
+import { useAddThreadMutation, useGetReviewFileQuery } from './review-api'
+import { describeQueryError } from './query-error'
+import { outdatedThreadsForPath } from './thread-anchors'
 import styles from './review.module.css'
 
-export interface PendingComment {
-  path: string
-  side: DiffSide
-  line: number
-}
+export type { PendingComment } from './diff-row'
 
 export interface DiffFileProps {
   review_id: string
@@ -20,32 +30,13 @@ export interface DiffFileProps {
   onPendingChange: (pending: PendingComment | null) => void
 }
 
-const MARKER: Record<DiffLine['kind'], string> = {
-  context: ' ',
-  added: '+',
-  removed: '-',
+/** How much of one collapsed run has been opened, from each end. */
+interface GapExpansion {
+  top: number
+  bottom: number
 }
 
-/**
- * A comment attaches to whichever side of the diff the row actually exists on.
- * A removed line only exists in the base, an added line only in the head, and a
- * context line is addressed on the head because that is the version being
- * reviewed.
- */
-/**
- * Whether the click was the end of a text selection rather than a plain click.
- *
- * The whole row is clickable, so selecting code would otherwise open a comment
- * form every time someone tried to copy a line.
- */
-const isSelecting = (): boolean => (window.getSelection()?.toString() ?? '') !== ''
-
-const sideFor = (line: DiffLine): { side: DiffSide; line: number } | null => {
-  if (line.kind === 'removed') {
-    return line.base_line === null ? null : { side: 'base', line: line.base_line }
-  }
-  return line.head_line === null ? null : { side: 'head', line: line.head_line }
-}
+const CLOSED: GapExpansion = { top: 0, bottom: 0 }
 
 export const DiffFile = ({
   review_id,
@@ -56,10 +47,59 @@ export const DiffFile = ({
   onPendingChange,
 }: DiffFileProps) => {
   const [addThread, add_state] = useAddThreadMutation()
+  const [expanded, setExpanded] = useState<ReadonlyMap<number, GapExpansion>>(new Map())
+
   const outdated = outdatedThreadsForPath(threads, file.path)
+  const sections = useMemo(
+    () => planDiffSections(file.hunks, file.head_line_count),
+    [file.hunks, file.head_line_count],
+  )
+
+  // The whole file is only worth fetching once something has been opened; until
+  // then the hunks are all there is to draw.
+  const contents_query = useGetReviewFileQuery(
+    { review_id, path: file.path },
+    { skip: expanded.size === 0 },
+  )
+  const head_lines = useMemo(() => {
+    const content = contents_query.data?.head_content
+    return content === undefined || content === null ? null : splitLines(content)
+  }, [contents_query.data])
+
+  const expand = (gap: DiffGap, edge: GapEdge) =>
+    setExpanded((previous) => {
+      const current = previous.get(gap.head_start) ?? CLOSED
+      const step = Math.min(EXPAND_STEP, gap.length - current.top - current.bottom)
+      if (step <= 0) return previous
+      const next = new Map(previous)
+      next.set(
+        gap.head_start,
+        edge === 'top'
+          ? { ...current, top: current.top + step }
+          : { ...current, bottom: current.bottom + step },
+      )
+      return next
+    })
+
+  const addThreadAt = (target: RowTarget, body: string) =>
+    void addThread({ review_id, path: file.path, line: target.line, side: target.side, body })
+
+  const row = (line: DiffLine, key: string) => (
+    <DiffRow
+      key={key}
+      review_id={review_id}
+      file_path={file.path}
+      line={line}
+      threads_by_anchor={threads_by_anchor}
+      pending={pending}
+      adding={add_state.isLoading}
+      onPendingChange={onPendingChange}
+      onAddThread={addThreadAt}
+    />
+  )
 
   return (
-    <section className={styles.file}>
+    <section className={styles.file} id={fileAnchorId(file.path)}>
       <header className={styles.file_header}>
         <span className={styles.file_status}>{file.status}</span>
         <span className={styles.file_path}>{file.path}</span>
@@ -83,108 +123,53 @@ export const DiffFile = ({
 
       {file.is_binary && <p className={styles.binary}>Binary file — not shown.</p>}
 
-      {file.hunks.map((hunk) => (
-        <div key={hunk.header}>
-          <div className={styles.hunk_header}>{hunk.header}</div>
-          {hunk.lines.map((line, index) => {
-            const target = sideFor(line)
-            const key = target === null ? null : anchorKey(file.path, target.side, target.line)
-            const at_line = key === null ? [] : (threads_by_anchor.get(key) ?? [])
-            const is_pending =
-              pending !== null &&
-              target !== null &&
-              pending.path === file.path &&
-              pending.side === target.side &&
-              pending.line === target.line
+      {sections.map((section, index) => {
+        if (section.kind === 'hunk') {
+          return (
+            <div key={`hunk-${section.index}`}>
+              {section.hunk.lines.map((line, line_index) =>
+                row(line, `hunk-${section.index}-${line_index}`),
+              )}
+            </div>
+          )
+        }
 
-            const toggleComment = () =>
-              onPendingChange(
-                is_pending || target === null
-                  ? null
-                  : { path: file.path, side: target.side, line: target.line },
-              )
+        const { gap } = section
+        const state = expanded.get(gap.head_start) ?? CLOSED
+        const hidden = gap.length - state.top - state.bottom
+        const awaiting = state.top + state.bottom > 0 && head_lines === null
+        const failed = contents_query.isError
+          ? describeQueryError(contents_query.error).message
+          : null
 
-            return (
-              <div key={`${hunk.header}-${index}`}>
-                {/* The row is clickable for the mouse; the button inside it is
-                    what keyboard and assistive technology use. */}
-                <div
-                  className={[
-                    styles.row,
-                    target === null ? '' : styles.row_clickable,
-                    line.kind === 'added' ? styles.row_added : '',
-                    line.kind === 'removed' ? styles.row_removed : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  onClick={
-                    target === null
-                      ? undefined
-                      : () => {
-                          if (isSelecting()) return
-                          toggleComment()
-                        }
-                  }
-                >
-                  <span className={styles.gutter}>{line.base_line ?? ''}</span>
-                  <span className={styles.gutter}>{line.head_line ?? ''}</span>
-                  <span
-                    className={[
-                      styles.marker,
-                      line.kind === 'added' ? styles.marker_added : '',
-                      line.kind === 'removed' ? styles.marker_removed : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                  >
-                    {MARKER[line.kind]}
-                    {target !== null && (
-                      <button
-                        type="button"
-                        className={styles.add_button}
-                        aria-label={`Comment on ${file.path} line ${target.line}`}
-                        onClick={(event) => {
-                          // The row handles this too; without stopping here it
-                          // would toggle twice and cancel itself out.
-                          event.stopPropagation()
-                          toggleComment()
-                        }}
-                      >
-                        +
-                      </button>
-                    )}
-                  </span>
-                  <span className={styles.code}>{line.text}</span>
-                </div>
+        const top = head_lines === null ? [] : gapLines(gapSlice(gap, 0, state.top), head_lines)
+        const bottom =
+          head_lines === null
+            ? []
+            : gapLines(gapSlice(gap, gap.length - state.bottom, state.bottom), head_lines)
 
-                {(at_line.length > 0 || is_pending) && (
-                  <div className={styles.threads}>
-                    {at_line.map((thread) => (
-                      <CommentThread key={thread.id} review_id={review_id} thread={thread} />
-                    ))}
-                    {is_pending && target !== null && (
-                      <CommentForm
-                        pending={add_state.isLoading}
-                        onCancel={() => onPendingChange(null)}
-                        onSubmit={(body) => {
-                          void addThread({
-                            review_id,
-                            path: file.path,
-                            line: target.line,
-                            side: target.side,
-                            body,
-                          })
-                          onPendingChange(null)
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      ))}
+        // The band carries the following hunk's heading, so it has to know what
+        // comes next; a run at the end of a file has nothing to name.
+        const next = sections[index + 1]
+        const heading =
+          next === undefined || next.kind !== 'hunk' ? '' : hunkSectionHeading(next.hunk.header)
+
+        return (
+          <div key={`gap-${gap.head_start}`}>
+            {top.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
+            {(hidden > 0 || awaiting || failed !== null) && (
+              <GapBand
+                gap={gapSlice(gap, state.top, hidden)}
+                heading={heading}
+                loading={awaiting && failed === null}
+                error={failed}
+                onExpand={(edge) => expand(gap, edge)}
+              />
+            )}
+            {bottom.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
+          </div>
+        )
+      })}
     </section>
   )
 }
