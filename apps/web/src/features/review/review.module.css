@@ -1,8 +1,5 @@
-.page {
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: var(--yart-space-6) var(--yart-space-4) var(--yart-space-8);
-}
+/* Layout lives in the shell, so both views sit on exactly the same gutter and
+   navigating between them does not shift the page. */
 
 .header {
   display: flex;
@@ -29,18 +26,29 @@
 }
 
 .badge {
-  padding: var(--yart-space-1) var(--yart-space-2);
+  padding: 0.1rem 0.55rem;
   font-size: var(--yart-text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border: 1px solid var(--yart-color-border-strong);
-  border-radius: var(--yart-radius-sm);
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  border-radius: 999px;
   color: var(--yart-color-text-muted);
+  background-color: color-mix(in srgb, var(--yart-color-text-muted) 14%, transparent);
 }
 
-.badge_submitted {
+.badge_approved {
+  color: var(--yart-color-add-emphasis);
+  background-color: color-mix(in srgb, var(--yart-color-add-emphasis) 16%, transparent);
+}
+
+.badge_changes {
+  color: var(--yart-color-remove-emphasis);
+  background-color: color-mix(in srgb, var(--yart-color-remove-emphasis) 16%, transparent);
+}
+
+.badge_uncommitted {
   color: var(--yart-color-accent);
-  border-color: var(--yart-color-accent);
+  background-color: color-mix(in srgb, var(--yart-color-accent) 16%, transparent);
 }
 
 .file {
@@ -273,11 +281,22 @@
   color: var(--yart-color-text-muted);
 }
 
+/* Not `overflow: hidden` — that would clip the overflow menu inside a row.
+   The corners are rounded on the rows themselves instead. */
 .list {
   margin-top: var(--yart-space-4);
   border: 1px solid var(--yart-color-border);
   border-radius: var(--yart-radius-lg);
-  overflow: hidden;
+}
+
+.list_item:first-child {
+  border-top-left-radius: calc(var(--yart-radius-lg) - 1px);
+  border-top-right-radius: calc(var(--yart-radius-lg) - 1px);
+}
+
+.list_item:last-child {
+  border-bottom-left-radius: calc(var(--yart-radius-lg) - 1px);
+  border-bottom-right-radius: calc(var(--yart-radius-lg) - 1px);
 }
 
 .list_item {
@@ -303,9 +322,39 @@
 }
 
 .list_tabs {
-  display: flex;
-  gap: var(--yart-space-2);
+  display: inline-flex;
+  gap: 2px;
   margin-top: var(--yart-space-4);
+  padding: 2px;
+  background-color: var(--yart-color-surface-sunken);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-md);
+}
+
+.tab {
+  padding: var(--yart-space-1) var(--yart-space-3);
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-text-muted);
+  background-color: transparent;
+  border: none;
+  border-radius: calc(var(--yart-radius-md) - 2px);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--yart-color-text);
+}
+
+.tab_selected,
+.tab_selected:hover {
+  color: var(--yart-color-text);
+  background-color: var(--yart-color-surface);
+  box-shadow: var(--yart-shadow-sm);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: -2px;
 }
 
 .list_actions {
@@ -356,16 +405,6 @@
   font-size: var(--yart-text-xs);
   color: var(--yart-color-text-muted);
   white-space: nowrap;
-}
-
-.badge_approved {
-  color: var(--yart-color-add-emphasis);
-  border-color: var(--yart-color-add-emphasis);
-}
-
-.badge_changes {
-  color: var(--yart-color-remove-emphasis);
-  border-color: var(--yart-color-remove-emphasis);
 }
 
 .submit_panel {

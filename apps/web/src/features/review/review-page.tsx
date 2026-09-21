@@ -21,12 +21,12 @@ export interface ReviewPageProps {
 
 /** A dead end still needs a way out, so failures keep the way back. */
 const Missing = ({ children }: { children: ReactNode }) => (
-  <div className={styles.page}>
+  <>
     <a className={styles.back} href="/">
       ← All reviews
     </a>
     <p className={styles.notice}>{children}</p>
-  </div>
+  </>
 )
 
 export const ReviewPage = ({ review_id }: ReviewPageProps) => {
@@ -71,7 +71,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   }
 
   return (
-    <div className={styles.page}>
+    <>
       {/* A real link rather than history.back(): a review is usually reached by
           a deep link from an agent, where there is nothing to go back to. */}
       <a className={styles.back} href="/">
@@ -84,7 +84,9 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           {review.head_branch === null ? '' : `${review.head_branch} · `}
           {describeRange(review)} · round {review.rounds.length} · {relativeTime(review.created_at)}
         </span>
-        {review.head_is_snapshot && <span className={styles.badge}>uncommitted</span>}
+        {review.head_is_snapshot && (
+          <span className={[styles.badge, styles.badge_uncommitted].join(' ')}>uncommitted</span>
+        )}
         <span className={styles.spacer} />
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}
@@ -153,6 +155,6 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           onPendingChange={setPending}
         />
       ))}
-    </div>
+    </>
   )
 }
