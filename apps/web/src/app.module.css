@@ -5,6 +5,9 @@
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: var(--yart-space-3);
   font-size: var(--yart-text-xl);
   letter-spacing: -0.02em;
 }

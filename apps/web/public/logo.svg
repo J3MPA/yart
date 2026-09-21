@@ -1,0 +1,14 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Colours are fixed rather than themed: this file is referenced from the
+    README and other documents, and GitHub strips <style> out of SVG in
+    markdown. These mid-tones read on both light and dark backgrounds.
+
+    The app itself uses components/logo.tsx, which follows the design tokens.
+  -->
+  <path d="M4 8.5 L11.5 16 L4 23.5" fill="none" stroke="#c08f36" stroke-width="2.7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="14.5" y="8.5" width="14" height="3" rx="1.5" fill="#4f9440"/>
+  <rect x="17" y="14.5" width="7" height="3" rx="1.5" fill="#c08f36"/>
+  <rect x="14.5" y="20.5" width="12" height="3" rx="1.5" fill="#c9553d"/>
+</svg>

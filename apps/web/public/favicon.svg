@@ -1,0 +1,17 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    A tab icon is rendered at 16px, where the full mark's three bars blur into
+    one another, so this keeps only the caret and the line it points at.
+
+    Colours are written in rather than taken from tokens: a favicon is loaded as
+    its own document and never sees the page's stylesheet, so it has to answer
+    prefers-color-scheme itself.
+  -->
+  <style>
+    :root { --mark: #b07d2b; }
+    @media (prefers-color-scheme: dark) { :root { --mark: #d9a648; } }
+  </style>
+  <path d="M5 9 L13 16 L5 23" fill="none" stroke="var(--mark)" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="17" y="13.5" width="10" height="5" rx="2.5" fill="var(--mark)"/>
+</svg>

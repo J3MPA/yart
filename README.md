@@ -1,3 +1,5 @@
+<img src="apps/web/public/logo.svg" width="72" alt="" align="left" />
+
 # yart
 
 > **Y**et **A**nother **R**eview **T**ool
