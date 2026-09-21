@@ -37,6 +37,7 @@ const withDefaults = (review: Review): Review => ({
   head_branch: review.head_branch ?? null,
   submissions: review.submissions ?? [],
   archived_at: review.archived_at ?? null,
+  head_is_snapshot: review.head_is_snapshot ?? false,
 })
 
 export class ReviewStore {

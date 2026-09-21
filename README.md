@@ -319,6 +319,22 @@ file header lists them instead, above the hunks, with the text they were written
 against. They are the record of a conversation and dropping them would be worse
 than showing them out of place.
 
+## Reviewing uncommitted work
+
+A review does not need a commit. By default `start_review` reviews the working
+tree as it stands, including files git is not yet tracking, which is the state
+an agent is in the moment it finishes and says it is ready.
+
+That works by writing the working tree into a git tree object through a
+throwaway index, so the caller's staging area is untouched, and pinning it under
+`refs/yart/reviews/<id>`. Every file then has a real blob hash for comments to
+anchor to, garbage collection cannot reap it, and the snapshot is immutable — so
+comments stay where they were put while the files underneath keep changing.
+
+Advancing such a review takes a new snapshot rather than a newer revision, so
+the whole loop runs without anything being committed: comment, edit, advance,
+and the comments follow their lines or go outdated.
+
 ## The MCP server
 
 `packages/mcp` is how an agent drives a review. It is a shim: it holds no state

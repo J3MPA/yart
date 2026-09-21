@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
 import { DiffFile, type PendingComment } from './diff-file'
-import { relativeTime, shortSha, VERDICT_LABEL } from './format'
+import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import { useGetReviewDiffQuery, useGetReviewQuery, useSubmitReviewMutation } from './review-api'
 import { describeQueryError } from './query-error'
 import { currentSubmission } from './submission'
@@ -82,9 +82,9 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         <h1 className={styles.title}>{review.title}</h1>
         <span className={styles.range}>
           {review.head_branch === null ? '' : `${review.head_branch} · `}
-          {shortSha(review.base_sha)}..{shortSha(review.head_sha)} · round {review.rounds.length} ·{' '}
-          {relativeTime(review.created_at)}
+          {describeRange(review)} · round {review.rounds.length} · {relativeTime(review.created_at)}
         </span>
+        {review.head_is_snapshot && <span className={styles.badge}>uncommitted</span>}
         <span className={styles.spacer} />
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}

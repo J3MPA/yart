@@ -73,8 +73,10 @@ describe('POST /api/reviews', () => {
     expect(review.files.map((file) => file.path)).toEqual(['a.txt'])
   })
 
-  it('rejects a missing base', async () => {
-    expect((await post('/api/reviews', {})).status).toBe(400)
+  it('defaults a missing base to HEAD, for reviewing uncommitted work', async () => {
+    const response = await post('/api/reviews', {})
+    expect(response.status).toBe(201)
+    expect(((await response.json()) as Review).base).toBe('HEAD')
   })
 
   it('reports an unknown revision as a bad request, not a server error', async () => {

@@ -130,7 +130,7 @@ export class DaemonClient {
     return this.request<Review>(`/api/reviews/${encodeURIComponent(review_id)}`)
   }
 
-  createReview(base: string, head?: string, title?: string): Promise<Review> {
+  createReview(base?: string, head?: string, title?: string): Promise<Review> {
     return this.post<Review>('/api/reviews', { base, head, title })
   }
 

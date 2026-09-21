@@ -96,12 +96,11 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
 
   app.post('/api/reviews', async (context) => {
     const body = await context.req.json<{ base?: string; head?: string; title?: string }>()
-    if (typeof body.base !== 'string' || body.base === '') {
-      throw new ReviewError('A base revision is required', 400)
-    }
+    // Defaults to uncommitted work against HEAD, which is what an agent that has
+    // just finished editing wants and cannot express as a revision range.
     const review = await service.create({
       repo_path,
-      base: body.base,
+      base: body.base === undefined || body.base === '' ? 'HEAD' : body.base,
       head: body.head,
       title: body.title,
     })
@@ -220,7 +219,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
 
   app.post('/api/reviews/:id/advance', async (context) => {
     const body = await context.req.json<{ head?: string }>().catch(() => ({ head: undefined }))
-    return context.json(await service.advanceHead(context.req.param('id'), body.head ?? 'HEAD'))
+    return context.json(await service.advanceHead(context.req.param('id'), body.head))
   })
 
   /**
