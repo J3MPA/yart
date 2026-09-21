@@ -96,17 +96,42 @@ Early — the scaffold is in place, the product is not.
 - [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
 - [x] MCP server
 - [x] Review UI: diff rendering, inline comments, review rounds
+- [x] Installable: `yart` and `yart-mcp` run from any repository
 - [ ] Clipboard export (fallback for non-MCP agents)
 
 ## Getting started
 
 Requires Node 20+ and pnpm.
 
+Requires Node 20+ and pnpm.
+
 ```sh
 pnpm install
 pnpm build      # the daemon serves the built UI, so build it first
-pnpm daemon     # http://localhost:7777
 ```
+
+### Installing the commands
+
+```sh
+pnpm --filter @yart/daemon link --global
+pnpm --filter @yart/mcp link --global
+```
+
+That puts `yart` and `yart-mcp` on your `PATH`, so any repository can be reviewed
+by running `yart` inside it — no paths, no flags:
+
+```sh
+cd ~/some-other-project
+yart            # http://localhost:7777
+```
+
+There is no build step for the commands themselves: their entry points are
+TypeScript with a `#!/usr/bin/env -S node --experimental-strip-types` shebang, so
+Node strips the types as it loads them.
+
+Undo with `pnpm uninstall --global @yart/daemon @yart/mcp`.
+
+### Running it
 
 Open `http://localhost:7777`, or let an agent open a review for you with the
 `start_review` tool. The daemon takes `--port` and `--repo`, and stores reviews
@@ -331,7 +356,7 @@ simply call it again.
 With Claude Code, from the repository you want to review:
 
 ```sh
-claude mcp add yart -- node --experimental-strip-types /absolute/path/to/yart/packages/mcp/src/cli.ts
+claude mcp add yart -- yart-mcp
 ```
 
 With Claude Desktop, add to its MCP configuration:
@@ -340,13 +365,8 @@ With Claude Desktop, add to its MCP configuration:
 {
   "mcpServers": {
     "yart": {
-      "command": "node",
-      "args": [
-        "--experimental-strip-types",
-        "/absolute/path/to/yart/packages/mcp/src/cli.ts",
-        "--repo",
-        "/absolute/path/to/the/repository"
-      ]
+      "command": "yart-mcp",
+      "args": ["--repo", "/absolute/path/to/the/repository"]
     }
   }
 }

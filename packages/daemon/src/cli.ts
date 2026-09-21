@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { findRepoRoot } from './git.ts'

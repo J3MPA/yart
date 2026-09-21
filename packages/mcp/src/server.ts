@@ -4,6 +4,7 @@ import { DaemonClient, type DaemonClientOptions } from './daemon-client.ts'
 import {
   openThreads,
   renderReview,
+  renderReviewLine,
   renderReviewWithThreads,
   renderThreads,
   renderVerdict,
@@ -172,14 +173,7 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
       guard(async () => {
         const reviews = await daemon.listReviews()
         if (reviews.length === 0) return text('No reviews yet.')
-        return text(
-          reviews
-            .map((review) => {
-              const open = openThreads(review).length
-              return `${review.id}  ${review.status.padEnd(9)} ${review.base}..${review.head}  ${open} open`
-            })
-            .join('\n'),
-        )
+        return text(reviews.map(renderReviewLine).join('\n'))
       }),
   )
 
