@@ -147,6 +147,13 @@ describe('get_review and list_reviews', () => {
     expect(await call('list_reviews')).toContain(review_id)
   })
 
+  it('leads each listed review with its title, not a revision range', async () => {
+    await call('start_review', { base, title: 'auth refactor' })
+    const listed = await call('list_reviews')
+    expect(listed).toContain('auth refactor')
+    expect(listed).not.toContain('..HEAD')
+  })
+
   it('says so when there are none', async () => {
     expect(await call('list_reviews')).toBe('No reviews yet.')
   })

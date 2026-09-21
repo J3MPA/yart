@@ -97,5 +97,22 @@ export const renderReview = (review: Review, url: string): string => {
   ].join('\n')
 }
 
+/**
+ * One line per review, led by its title.
+ *
+ * A revision range does not identify anything in a list: `..HEAD` is stale the
+ * moment the head moves, and a hash says nothing at all.
+ */
+export const renderReviewLine = (review: Review): string => {
+  const submission = currentSubmission(review)
+  const state = submission === null ? 'open' : VERDICT_LABEL[submission.verdict].toLowerCase()
+  const open = openThreads(review).length
+  return [
+    `${review.title}`,
+    `  ${review.id}`,
+    `  ${state} · ${review.files.length} file(s) · ${open} open of ${review.threads.length}`,
+  ].join('\n')
+}
+
 export const renderReviewWithThreads = (review: Review, url: string): string =>
   [renderReview(review, url), '', renderThreads(openThreads(review), 'Open comments')].join('\n')
