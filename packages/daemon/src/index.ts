@@ -7,6 +7,7 @@ export {
   listChangedFiles,
   parseHunkHeaders,
   readBlob,
+  findGitCommonDir,
   resolveRev,
   runGit,
 } from './git.ts'

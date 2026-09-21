@@ -1,16 +1,20 @@
 import { mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { findGitCommonDir } from './git.ts'
 import type { Review } from './types.ts'
 
 /**
- * Reviews live under `.git/` rather than in the working tree.
+ * Reviews live under the repository's git directory rather than in the working
+ * tree.
  *
  * They are per-repository state that no one wants to see in `git status`, and
- * `.git/` is already excluded from every diff yart will ever show.
+ * git's own directory is already excluded from every diff yart will show.
+ *
+ * The shared directory is asked of git rather than assembled from `.git`,
+ * because in a linked worktree that is a file rather than a directory.
  */
-export const storeDir = (repo_path: string): string => {
-  return join(repo_path, '.git', 'yart', 'reviews')
-}
+export const storeDir = async (repo_path: string): Promise<string> =>
+  join(await findGitCommonDir(repo_path), 'yart', 'reviews')
 
 /**
  * The placeholder title a review written before titles existed gets.
@@ -37,25 +41,33 @@ const withDefaults = (review: Review): Review => ({
 
 export class ReviewStore {
   private readonly repo_path: string
+  /** Resolved once: a repository does not move while the daemon is running. */
+  private resolved_dir: string | null
 
   constructor(repo_path: string) {
     this.repo_path = repo_path
+    this.resolved_dir = null
   }
 
-  private pathFor(id: string): string {
-    return join(storeDir(this.repo_path), `${id}.json`)
+  private async dir(): Promise<string> {
+    this.resolved_dir ??= await storeDir(this.repo_path)
+    return this.resolved_dir
+  }
+
+  private async pathFor(id: string): Promise<string> {
+    return join(await this.dir(), `${id}.json`)
   }
 
   async save(review: Review): Promise<void> {
-    await mkdir(storeDir(this.repo_path), { recursive: true })
+    await mkdir(await this.dir(), { recursive: true })
     // Written whole rather than patched: a review is small, and a partial write
     // would leave threads pointing at a revision the file no longer records.
-    await writeFile(this.pathFor(review.id), `${JSON.stringify(review, null, 2)}\n`, 'utf8')
+    await writeFile(await this.pathFor(review.id), `${JSON.stringify(review, null, 2)}\n`, 'utf8')
   }
 
   async load(id: string): Promise<Review | null> {
     try {
-      const raw = await readFile(this.pathFor(id), 'utf8')
+      const raw = await readFile(await this.pathFor(id), 'utf8')
       return withDefaults(JSON.parse(raw) as Review)
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null
@@ -66,7 +78,7 @@ export class ReviewStore {
   async list(): Promise<Review[]> {
     let entries: string[]
     try {
-      entries = await readdir(storeDir(this.repo_path))
+      entries = await readdir(await this.dir())
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw cause
@@ -84,6 +96,6 @@ export class ReviewStore {
   }
 
   async remove(id: string): Promise<void> {
-    await rm(this.pathFor(id), { force: true })
+    await rm(await this.pathFor(id), { force: true })
   }
 }

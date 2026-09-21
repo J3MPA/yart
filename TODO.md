@@ -5,25 +5,7 @@ Planned work, roughly in the order it should happen.
 Findings recorded here were verified rather than assumed, so they do not have to
 be rediscovered when the work starts.
 
-## 1. Support git worktrees
-
-**This is a bug, and it blocks concurrent reviews.** `ReviewStore` builds its
-path as `<repo>/.git/yart/reviews`, which assumes `.git` is a directory. In a
-linked worktree it is a file pointing elsewhere, so the daemon fails outright:
-
-```
-mkdir: ../wt-a/.git: Not a directory
-```
-
-Use `git rev-parse --git-common-dir` instead of joining `.git`. That also settles
-a design question for free: the common dir is shared by every worktree of a
-repository, so reviews become one list regardless of which worktree you are in —
-which is what the tab work below wants anyway.
-
-This matters because two agents editing the same working tree will clobber each
-other. Genuinely concurrent work means one worktree per session.
-
-## 2. Review work before it is committed
+## 1. Review work before it is committed
 
 Today a review can only cover commits, so an agent has to commit before its work
 can be looked at. That inverts the natural order: the moment you want to review
@@ -43,7 +25,7 @@ would work, but they would be unreferenced and eventually collected, so a thread
 could have the blob under it disappear. That needs a deliberate answer before it
 is built.
 
-## 3. File tree and collapsed context
+## 2. File tree and collapsed context
 
 Reviewing a 28-file change is currently one long blind scroll.
 
@@ -53,7 +35,7 @@ Reviewing a 28-file change is currently one long blind scroll.
 
 No model changes; this is all UI.
 
-## 4. Diff any two revisions, including trees
+## 3. Diff any two revisions, including trees
 
 Reviews are limited to commits, so ad-hoc comparisons are not possible.
 
@@ -67,7 +49,7 @@ tree-based review cannot `advance`. It is a static comparison rather than a loop
 Either reject `advance_review` for those reviews, or define advancing as
 re-pointing at a named tree.
 
-## 5. Concurrent reviews: naming, tabs, and approval
+## 4. Concurrent reviews: naming, tabs, and approval
 
 The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
@@ -95,7 +77,9 @@ What remains:
 - **Replying to a submission.** A summary left with a verdict is currently
   write-only: the agent can read it, but there is nowhere to answer it. Line
   comments have threads; submissions do not.
-- **Worktree support**, which is item 1 above and must come first.
+- **Tabs across worktrees** now work at the storage level: reviews are kept in
+  the repository's shared git directory, so every worktree sees one list and
+  each review records which worktree it belongs to.
 
 ## Smaller things
 

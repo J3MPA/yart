@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process'
+import { realpath } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ChangeStatus, LineMap } from '@yart/core'
 
@@ -68,6 +70,24 @@ export const resolveRev = async (repo_path: string, rev: string): Promise<string
     const detail = cause instanceof Error ? cause.message : String(cause)
     throw new GitError(`Cannot resolve revision "${rev}": ${detail}`, ['rev-parse', rev])
   }
+}
+
+/**
+ * Absolute path to the repository's shared git directory.
+ *
+ * In a linked worktree `.git` is a file pointing elsewhere, so joining a path
+ * onto it fails; and this resolves to the same directory from every worktree of
+ * a repository, which is what makes reviews one list rather than one per
+ * worktree.
+ *
+ * The result is resolved against `repo_path` because git reports it relative
+ * from the main worktree and absolute from a linked one, and canonicalised so
+ * that reaching the same repository by different paths — through a symlink such
+ * as macOS's /var, or from a worktree — yields the same directory string.
+ */
+export const findGitCommonDir = async (repo_path: string): Promise<string> => {
+  const out = await runGit(repo_path, ['rev-parse', '--git-common-dir'])
+  return realpath(resolve(repo_path, out.trim()))
 }
 
 /** Absolute path to the repository root containing `cwd`. */
