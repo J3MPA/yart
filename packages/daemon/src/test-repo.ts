@@ -12,8 +12,10 @@ import { dirname, join } from 'node:path'
  */
 export class TestRepo {
   readonly path: string
+  private readonly worktrees: string[]
 
   constructor() {
+    this.worktrees = []
     this.path = mkdtempSync(join(tmpdir(), 'yart-test-'))
     this.git('init', '--quiet', '--initial-branch=main')
     this.git('config', 'user.email', 'test@example.com')
@@ -49,7 +51,23 @@ export class TestRepo {
     return this.git('rev-parse', `${rev}:${relative_path}`).trim()
   }
 
+  /**
+   * Adds a linked worktree and returns its path.
+   *
+   * Worth exercising because a linked worktree's `.git` is a file rather than a
+   * directory, which anything assembling paths under it will trip over.
+   */
+  addWorktree(name: string): string {
+    const worktree_path = `${this.path}-wt-${name}`
+    this.git('worktree', 'add', '--quiet', '-b', name, worktree_path)
+    this.worktrees.push(worktree_path)
+    return worktree_path
+  }
+
   dispose(): void {
+    for (const worktree_path of this.worktrees) {
+      rmSync(worktree_path, { recursive: true, force: true })
+    }
     rmSync(this.path, { recursive: true, force: true })
   }
 }

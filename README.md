@@ -137,7 +137,9 @@ Undo with `pnpm uninstall --global @yart/daemon @yart/mcp`.
 
 Open `http://localhost:7777`, or let an agent open a review for you with the
 `start_review` tool. The daemon takes `--port` and `--repo`, and stores reviews
-under `.git/yart/reviews/` so nothing appears in `git status`.
+under the repository's git directory so nothing appears in `git status`. Linked
+worktrees share one store, so a review opened in any worktree is visible from
+all of them and records which one it belongs to.
 
 ### Developing against yart's own diff
 
