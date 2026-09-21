@@ -5,21 +5,7 @@ Planned work, roughly in the order it should happen.
 Findings recorded here were verified rather than assumed, so they do not have to
 be rediscovered when the work starts.
 
-## 1. Make it installable
-
-`yart` and `yart-mcp` only run from this checkout. Both packages declare `bin`
-entries pointing at `.ts` files with a plain `#!/usr/bin/env node` shebang, so a
-global install dies on the first type annotation — Node will not strip types
-without the flag.
-
-- Either `#!/usr/bin/env -S node --experimental-strip-types`, or a build step
-- A global link, so the commands work from any repository and default to the
-  current one
-
-Until this lands, using yart on another project means running the daemon from
-here with `--repo`, and registering the MCP server with absolute paths.
-
-## 2. Support git worktrees
+## 1. Support git worktrees
 
 **This is a bug, and it blocks concurrent reviews.** `ReviewStore` builds its
 path as `<repo>/.git/yart/reviews`, which assumes `.git` is a directory. In a
@@ -37,7 +23,7 @@ which is what the tab work below wants anyway.
 This matters because two agents editing the same working tree will clobber each
 other. Genuinely concurrent work means one worktree per session.
 
-## 3. Review work before it is committed
+## 2. Review work before it is committed
 
 Today a review can only cover commits, so an agent has to commit before its work
 can be looked at. That inverts the natural order: the moment you want to review
@@ -57,7 +43,7 @@ would work, but they would be unreferenced and eventually collected, so a thread
 could have the blob under it disappear. That needs a deliberate answer before it
 is built.
 
-## 4. File tree and collapsed context
+## 3. File tree and collapsed context
 
 Reviewing a 28-file change is currently one long blind scroll.
 
@@ -67,7 +53,7 @@ Reviewing a 28-file change is currently one long blind scroll.
 
 No model changes; this is all UI.
 
-## 5. Diff any two revisions, including trees
+## 4. Diff any two revisions, including trees
 
 Reviews are limited to commits, so ad-hoc comparisons are not possible.
 
@@ -81,7 +67,7 @@ tree-based review cannot `advance`. It is a static comparison rather than a loop
 Either reject `advance_review` for those reviews, or define advancing as
 re-pointing at a named tree.
 
-## 6. Concurrent reviews: naming, tabs, and approval
+## 5. Concurrent reviews: naming, tabs, and approval
 
 The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
@@ -109,7 +95,7 @@ What remains:
 - **Replying to a submission.** A summary left with a verdict is currently
   write-only: the agent can read it, but there is nowhere to answer it. Line
   comments have threads; submissions do not.
-- **Worktree support**, which is item 2 above and must come first.
+- **Worktree support**, which is item 1 above and must come first.
 
 ## Smaller things
 

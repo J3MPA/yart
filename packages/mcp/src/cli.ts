@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 import { parseArgs } from 'node:util'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { DEFAULT_PORT } from './daemon-client.ts'
