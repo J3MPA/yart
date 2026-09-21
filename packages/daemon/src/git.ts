@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
-import { realpath } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ChangeStatus, LineMap } from '@yart/core'
 
@@ -55,20 +56,102 @@ export const runGit = async (repo_path: string, args: readonly string[]): Promis
   }
 }
 
+/** The kind of object a revision names. */
+export const objectType = async (repo_path: string, sha: string): Promise<string> =>
+  (await runGit(repo_path, ['cat-file', '-t', sha])).trim()
+
 /**
- * Resolves a revision to its full commit sha.
+ * Resolves a revision to the sha of a commit or a tree.
+ *
+ * Commits are tried first so that branches and tags peel to the commit they
+ * point at rather than to a tag object. A bare tree is accepted too, because
+ * `git diff` compares trees perfectly well and a snapshot of uncommitted work
+ * is a tree with no commit to name it.
  *
  * git reports an unresolvable revision as "Needed a single revision", which
  * does not say which one; the name is put back into the message because the
  * caller may be an agent that has to correct it.
  */
 export const resolveRev = async (repo_path: string, rev: string): Promise<string> => {
+  const as_commit = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`]).catch(
+    () => null,
+  )
+  if (as_commit !== null) return as_commit.trim()
+
+  const as_object = await runGit(repo_path, ['rev-parse', '--verify', rev]).catch(() => null)
+  if (as_object === null) {
+    throw new GitError(`Cannot resolve revision "${rev}"`, ['rev-parse', rev])
+  }
+
+  const sha = as_object.trim()
+  const type = await objectType(repo_path, sha)
+  if (type !== 'tree') {
+    throw new GitError(`Revision "${rev}" is a ${type}; a review needs a commit or a tree`, [
+      'rev-parse',
+      rev,
+    ])
+  }
+  return sha
+}
+
+/** Whether anything differs from HEAD, including files git is not tracking. */
+export const isWorkingTreeDirty = async (repo_path: string): Promise<boolean> =>
+  (await runGit(repo_path, ['status', '--porcelain'])).trim() !== ''
+
+/**
+ * Writes the working tree — uncommitted edits and untracked files alike — into
+ * a tree object, and returns its hash.
+ *
+ * Built through a throwaway index so the caller's staging area is left exactly
+ * as it was; `git add` would otherwise stage everything on their behalf.
+ *
+ * The point of committing the content to git's object store rather than reading
+ * files is that every blob then has a real hash, which is what a comment
+ * anchors to. A snapshot is also immutable, so comments stay put while the
+ * files underneath keep changing.
+ */
+export const snapshotWorkingTree = async (repo_path: string): Promise<string> => {
+  const index_path = join(await mkdtemp(join(tmpdir(), 'yart-index-')), 'index')
   try {
-    const out = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`])
-    return out.trim()
-  } catch (cause) {
-    const detail = cause instanceof Error ? cause.message : String(cause)
-    throw new GitError(`Cannot resolve revision "${rev}": ${detail}`, ['rev-parse', rev])
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- git's variable name
+    const env = { ...process.env, GIT_INDEX_FILE: index_path }
+    await execFileAsync('git', ['read-tree', 'HEAD'], { cwd: repo_path, env, encoding: 'utf8' })
+    await execFileAsync('git', ['add', '-A'], { cwd: repo_path, env, encoding: 'utf8' })
+    const { stdout } = await execFileAsync('git', ['write-tree'], {
+      cwd: repo_path,
+      env,
+      encoding: 'utf8',
+    })
+    return stdout.trim()
+  } finally {
+    await rm(dirname(index_path), { recursive: true, force: true })
+  }
+}
+
+/** Namespace for refs that keep a review's snapshots from being collected. */
+const reviewRef = (review_id: string) => `refs/yart/reviews/${review_id}`
+
+/**
+ * Keeps a snapshot reachable.
+ *
+ * A tree written by `write-tree` is unreferenced, so garbage collection is free
+ * to reap it and the blobs under it — which would leave comments anchored to
+ * hashes that no longer resolve. A ref makes it reachable until the review is
+ * deleted.
+ */
+export const pinSnapshot = async (
+  repo_path: string,
+  review_id: string,
+  tree_sha: string,
+): Promise<void> => {
+  await runGit(repo_path, ['update-ref', reviewRef(review_id), tree_sha])
+}
+
+export const unpinSnapshot = async (repo_path: string, review_id: string): Promise<void> => {
+  try {
+    await runGit(repo_path, ['update-ref', '-d', reviewRef(review_id)])
+  } catch {
+    // Already gone, which is the state we wanted.
   }
 }
 

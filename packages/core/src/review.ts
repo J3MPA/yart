@@ -63,6 +63,13 @@ export interface Review {
   title: string
   /** Branch at the head revision, when the head is a branch tip. */
   head_branch: string | null
+  /**
+   * True when the head is a snapshot of uncommitted work rather than a commit.
+   *
+   * Such a review is advanced by taking a new snapshot rather than by naming a
+   * newer revision, because there is no commit to name.
+   */
+  head_is_snapshot: boolean
   /** The revisions as requested, kept for display; may be names like `main`. */
   base: string
   head: string

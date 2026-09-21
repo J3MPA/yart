@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Review } from '@yart/core'
 import { Button } from '@/components/button'
-import { relativeTime, shortSha, VERDICT_LABEL } from './format'
+import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import {
   useDeleteReviewMutation,
   useListReviewsQuery,
@@ -15,7 +15,7 @@ import styles from './review.module.css'
 const describe = (review: Review): string =>
   [
     review.head_branch,
-    `${shortSha(review.base_sha)}..${shortSha(review.head_sha)}`,
+    describeRange(review),
     `${review.files.length} file${review.files.length === 1 ? '' : 's'}`,
     relativeTime(review.created_at),
   ]
@@ -42,6 +42,8 @@ const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: Rev
         <div className={styles.list_title}>{review.title}</div>
         <div className={styles.list_meta}>{describe(review)}</div>
       </a>
+
+      {review.head_is_snapshot && <span className={styles.badge}>uncommitted</span>}
 
       {submission === null ? (
         <span className={styles.badge}>open</span>

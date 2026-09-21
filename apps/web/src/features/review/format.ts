@@ -31,6 +31,19 @@ export const relativeTime = (iso: string, now: number = Date.now()): string => {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
+/**
+ * How a review's range reads in a list.
+ *
+ * A snapshot has a tree hash for a head, which means nothing to a person, so it
+ * says what it actually is.
+ */
+export const describeRange = (review: {
+  base_sha: string
+  head_sha: string
+  head_is_snapshot: boolean
+}): string =>
+  `${shortSha(review.base_sha)}..${review.head_is_snapshot ? 'working tree' : shortSha(review.head_sha)}`
+
 export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   approved: 'approved',
   changes_requested: 'changes requested',

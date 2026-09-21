@@ -13,9 +13,13 @@ import {
   branchAt,
   buildLineMapFromGit,
   commitSubject,
+  isWorkingTreeDirty,
   listChangedFiles,
+  pinSnapshot,
   readBlob,
   resolveRev,
+  snapshotWorkingTree,
+  unpinSnapshot,
   type ChangedFile,
 } from './git.ts'
 import { placeholderTitle, ReviewStore } from './store.ts'
@@ -63,6 +67,35 @@ export interface CreateReviewParams {
 const deriveTitle = async (repo_path: string, head_sha: string, base_sha: string) =>
   (await commitSubject(repo_path, head_sha)) ?? `${base_sha.slice(0, 8)}..${head_sha.slice(0, 8)}`
 
+interface ResolvedHead {
+  sha: string
+  is_snapshot: boolean
+}
+
+/** Resolves the head of a review, snapshotting the working tree when asked to. */
+const resolveHead = async (
+  repo_path: string,
+  head: string,
+  review_id: string,
+): Promise<ResolvedHead> => {
+  if (head !== WORKING_TREE) {
+    return { sha: await resolveRev(repo_path, head), is_snapshot: false }
+  }
+
+  const tree_sha = await snapshotWorkingTree(repo_path)
+  await pinSnapshot(repo_path, review_id, tree_sha)
+  return { sha: tree_sha, is_snapshot: true }
+}
+
+/**
+ * Names the working tree as one end of a review.
+ *
+ * The moment an agent finishes work is before it has committed anything, so a
+ * review has to be able to point at what is on disk rather than only at
+ * history.
+ */
+export const WORKING_TREE = 'working'
+
 export interface ListReviewsParams {
   /** Return archived reviews instead of active ones. */
   archived?: boolean
@@ -90,24 +123,32 @@ export class ReviewService {
     this.store = new ReviewStore(repo_path)
   }
 
-  async create({ repo_path, base, head = 'HEAD', title }: CreateReviewParams): Promise<Review> {
-    const [base_sha, head_sha] = await Promise.all([
-      resolveRev(repo_path, base),
-      resolveRev(repo_path, head),
-    ])
+  async create({
+    repo_path,
+    base,
+    head = WORKING_TREE,
+    title,
+  }: CreateReviewParams): Promise<Review> {
+    const id = randomUUID()
+    const base_sha = await resolveRev(repo_path, base)
+    const resolved_head = await resolveHead(repo_path, head, id)
+    const head_sha = resolved_head.sha
 
     const [changes, head_branch, derived_title] = await Promise.all([
       listChangedFiles(repo_path, base_sha, head_sha),
-      branchAt(repo_path, head_sha),
-      deriveTitle(repo_path, head_sha, base_sha),
+      branchAt(repo_path, resolved_head.is_snapshot ? 'HEAD' : head_sha),
+      resolved_head.is_snapshot
+        ? Promise.resolve('Uncommitted changes')
+        : deriveTitle(repo_path, head_sha, base_sha),
     ])
     const created_at = nowIso()
 
     const review: Review = {
-      id: randomUUID(),
+      id,
       repo_path,
       title: title ?? derived_title,
       head_branch,
+      head_is_snapshot: resolved_head.is_snapshot,
       base,
       head,
       base_sha,
@@ -265,9 +306,16 @@ export class ReviewService {
    * identical content share a hash — so a single resolution could not describe
    * both. Line maps are cached here instead, which recovers the same saving.
    */
-  async advanceHead(id: string, head: string): Promise<Review> {
+  async advanceHead(id: string, head?: string): Promise<Review> {
     const review = await this.get(id)
-    const head_sha = await resolveRev(review.repo_path, head)
+
+    // A snapshot review re-snapshots unless a revision is named explicitly,
+    // because "the working tree now" is the only thing that has moved.
+    const target = head ?? (review.head_is_snapshot ? WORKING_TREE : 'HEAD')
+    const is_snapshot = target === WORKING_TREE
+    const head_sha = is_snapshot
+      ? await snapshotWorkingTree(review.repo_path)
+      : await resolveRev(review.repo_path, target)
 
     if (head_sha === review.head_sha) return review
 
@@ -325,11 +373,16 @@ export class ReviewService {
       threads.push(reanchorThread(thread, resolution))
     }
 
+    // Pinned after the line maps are built, so the previous snapshot stays
+    // reachable while the threads that point into it are re-anchored.
+    if (is_snapshot) await pinSnapshot(review.repo_path, review.id, head_sha)
+
     return this.persist({
       ...review,
-      head,
+      head: target,
       head_sha,
-      head_branch: await branchAt(review.repo_path, head_sha),
+      head_is_snapshot: is_snapshot,
+      head_branch: await branchAt(review.repo_path, is_snapshot ? 'HEAD' : head_sha),
       status: 'open',
       files: from_base.map(toReviewFile),
       threads,
@@ -348,7 +401,15 @@ export class ReviewService {
   }
 
   async remove(id: string): Promise<void> {
+    // The snapshot ref exists only to keep this review's blobs alive.
+    const review = await this.store.load(id)
+    if (review !== null) await unpinSnapshot(review.repo_path, id)
     await this.store.remove(id)
+  }
+
+  /** Whether there is uncommitted work that a snapshot would capture. */
+  async hasUncommittedWork(): Promise<boolean> {
+    return isWorkingTreeDirty(this.repo_path)
   }
 
   get repoPath(): string {

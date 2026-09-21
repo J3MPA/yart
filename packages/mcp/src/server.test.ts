@@ -115,17 +115,30 @@ describe('tool surface', () => {
 })
 
 describe('start_review', () => {
-  it('names the review after the head commit subject', async () => {
-    expect(await call('start_review', { base })).toContain('title:   change')
+  it('reviews uncommitted work by default, since that is when an agent asks', async () => {
+    repo.write('brand-new.txt', 'hello\n')
+    const rendered = await call('start_review', { base: 'HEAD' })
+    expect(rendered).toContain('title:   Uncommitted changes')
+    expect(rendered).toContain('added')
+    expect(rendered).toContain('brand-new.txt')
+  })
+
+  it('names a committed review after the head commit subject', async () => {
+    expect(await call('start_review', { base, head: 'HEAD' })).toContain('title:   change')
+  })
+
+  it('says so when there is nothing between the two points', async () => {
+    const rendered = await call('start_review', { base: 'HEAD' })
+    expect(rendered).toContain('nothing to review')
   })
 
   it('uses an explicit title when given one', async () => {
-    const rendered = await call('start_review', { base, title: 'auth refactor' })
+    const rendered = await call('start_review', { base, head: 'HEAD', title: 'auth refactor' })
     expect(rendered).toContain('title:   auth refactor')
   })
 
   it('opens a review and reports the changed files', async () => {
-    const rendered = await call('start_review', { base })
+    const rendered = await call('start_review', { base, head: 'HEAD' })
     expect(rendered).toContain('modified  a.txt')
     expect(rendered).toContain(`http://localhost:${port}/reviews/`)
   })

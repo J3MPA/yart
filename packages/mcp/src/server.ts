@@ -62,14 +62,27 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
     toolConfig({
       title: 'Start a review',
       description:
-        'Open a code review over a revision range so a human can comment on it. ' +
-        'Call this after making changes you want reviewed. Returns a review id and ' +
-        'a URL for the human to open. Follow it with await_review to receive their comments.',
+        'Open a code review so a human can comment on your changes. Call this as ' +
+        'soon as you have finished making changes — they do NOT need to be ' +
+        'committed. By default this reviews the current uncommitted state of the ' +
+        'working tree, including files you have just created. Returns a review id ' +
+        'and a URL for the human to open. Follow it with await_review.',
       input_schema: {
         base: z
           .string()
-          .describe('Revision to compare from, such as a branch name, a commit sha, or HEAD~3.'),
-        head: z.string().optional().describe('Revision to compare to. Defaults to HEAD.'),
+          .optional()
+          .describe(
+            'Revision to compare from, such as a branch name, a commit sha, or HEAD~3. ' +
+              'Defaults to HEAD, which is right when reviewing uncommitted work.',
+          ),
+        head: z
+          .string()
+          .optional()
+          .describe(
+            'What to compare to. Defaults to "working", meaning the current state of ' +
+              'the files on disk, committed or not. Pass a revision instead to review ' +
+              'work that is already committed.',
+          ),
         title: z
           .string()
           .optional()
@@ -83,6 +96,16 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
     async ({ base, head, title }) =>
       guard(async () => {
         const review = await daemon.createReview(base, head, title)
+        if (review.files.length === 0) {
+          return text(
+            [
+              renderReview(review, daemon.reviewUrl(review.id)),
+              '',
+              'Nothing differs between those two points, so there is nothing to review.',
+              'If you meant to review committed work, pass a base such as HEAD~1 or main.',
+            ].join('\n'),
+          )
+        }
         return text(
           [
             renderReview(review, daemon.reviewUrl(review.id)),
@@ -221,13 +244,19 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
     toolConfig({
       title: 'Move the review onto your new commits',
       description:
-        'Point the review at a newer head and re-anchor every comment onto it. ' +
-        'Call this after committing changes that respond to the review: comments ' +
-        'follow the lines they referred to, and any whose line you rewrote are ' +
-        'marked outdated. Reopens the review so the human can look again.',
+        'Re-anchor every comment onto your latest changes. Call this after ' +
+        'addressing the review, whether or not you committed: comments follow the ' +
+        'lines they referred to, and any whose line you rewrote are marked ' +
+        'outdated. Reopens the review so the human can look again.',
       input_schema: {
         review_id: z.string(),
-        head: z.string().optional().describe('The new head revision. Defaults to HEAD.'),
+        head: z
+          .string()
+          .optional()
+          .describe(
+            'What to compare to now. Defaults to the same kind of head the review ' +
+              'already had, so a review of uncommitted work re-reads the files on disk.',
+          ),
       },
     }),
     async ({ review_id, head }) =>
