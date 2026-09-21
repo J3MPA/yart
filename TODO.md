@@ -5,27 +5,7 @@ Planned work, roughly in the order it should happen.
 Findings recorded here were verified rather than assumed, so they do not have to
 be rediscovered when the work starts.
 
-## 1. Review work before it is committed
-
-Today a review can only cover commits, so an agent has to commit before its work
-can be looked at. That inverts the natural order: the moment you want to review
-is before the commit exists.
-
-The two halves are not equally hard.
-
-**Staged changes are nearly free.** `git diff --raw --cached HEAD` reports real
-blob hashes, and those blobs are in the object database already, so hunks, line
-maps and anchoring all work unchanged. This needs a way to name the index as one
-side of a review, and `--cached` on the diff call.
-
-**Unstaged changes need the content hashed first.** Git reports the new side as
-all zeroes, because nothing has hashed the working copy yet — and `blobOrNull`
-would read that as a deleted file. Writing the blobs with `git hash-object -w`
-would work, but they would be unreferenced and eventually collected, so a thread
-could have the blob under it disappear. That needs a deliberate answer before it
-is built.
-
-## 2. File tree and collapsed context
+## 1. File tree and collapsed context
 
 Reviewing a 28-file change is currently one long blind scroll.
 
@@ -35,21 +15,14 @@ Reviewing a 28-file change is currently one long blind scroll.
 
 No model changes; this is all UI.
 
-## 3. Diff any two revisions, including trees
+## 2. Diff any two arbitrary points
 
-Reviews are limited to commits, so ad-hoc comparisons are not possible.
+A review can now be opened over any commit or tree, including a bare tree hash,
+so ad-hoc comparisons are possible through the API. What is missing is a way to
+ask for one: the UI offers no way to pick two revisions, and the MCP tools take
+them but nothing suggests the possibility.
 
-`git diff --raw` already works tree-to-tree, and everything downstream — hunks,
-line maps, anchoring — operates on blobs and does not care. The only blocker is
-`resolveRev`, which forces `^{commit}` and so rejects a tree with _expected
-commit type, but the object dereferences to tree type_.
-
-One semantic decision has to be made: a tree has no "next commit", so a
-tree-based review cannot `advance`. It is a static comparison rather than a loop.
-Either reject `advance_review` for those reviews, or define advancing as
-re-pointing at a named tree.
-
-## 4. Concurrent reviews: naming, tabs, and approval
+## 3. Concurrent reviews: naming, tabs, and approval
 
 The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
@@ -80,6 +53,40 @@ What remains:
 - **Tabs across worktrees** now work at the storage level: reviews are kept in
   the repository's shared git directory, so every worktree sees one list and
   each review records which worktree it belongs to.
+
+## Discovery: how this gets distributed
+
+Not a task yet. Today the commands are linked from a clone, which works for
+whoever wrote them and nobody else. Two channels look plausible and they are not
+alternatives — the second would sit on top of the first.
+
+**An npm package.** The tool itself: the daemon, the UI, and the MCP server, for
+anyone and any agent. Questions to answer before committing to it:
+
+- A single published package rather than the four in this workspace, since
+  `workspace:*` dependencies cannot be published and a consumer should not see
+  the split.
+- A real build. `--experimental-strip-types` is reasonable for a clone and not
+  something to ask of a stranger, so entry points would be bundled to JavaScript.
+- `apps/web/dist` has to ship, or the daemon serves its "not built" page.
+- The name. `yart` is parked on npm at a couple of downloads a week, so this
+  would be scoped.
+
+**A Claude Code plugin.** The integration, for the audience most likely to want
+it. `claude plugin install` in place of the `claude mcp add` step, with the
+plugin declaring the MCP server itself. Plugins appear to carry slash commands
+and hooks as well, which would make two things from the original sketch
+shippable: a `/review` command, and a hook that opens a review when an agent
+finishes a turn against a dirty tree — so review becomes part of the turn rather
+than something to remember.
+
+What is actually unknown: the plugin manifest format, whether it can declare an
+MCP server and a hook, and how a marketplace is published. The CLI exists and
+takes marketplaces; nothing beyond that has been checked. Read the documentation
+before planning around it.
+
+Worth deciding what the tool is for first. Distribution is cheap to add and hard
+to take back, and nobody has used this but its author.
 
 ## Smaller things
 
