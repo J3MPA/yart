@@ -1,7 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
-import { DiffFile, type PendingComment } from './diff-file'
+import { DiffFile } from './diff-file'
+import type { PendingComment } from './diff-row'
+import { scrollToFile } from './file-anchors'
+import { FileSidebar } from './file-sidebar'
+import { orderFilesByTree } from './file-tree'
+import { useActiveFile } from './use-active-file'
 import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import { useGetReviewDiffQuery, useGetReviewQuery, useSubmitReviewMutation } from './review-api'
 import { describeQueryError } from './query-error'
@@ -42,6 +47,11 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
     () => groupThreadsByAnchor(review?.threads ?? []),
     [review?.threads],
   )
+  // Ordered here rather than in the sidebar, so that the tree and the diffs
+  // below it are one list read the same way round.
+  const files = useMemo(() => orderFilesByTree(diff_query.data ?? []), [diff_query.data])
+  const paths = useMemo(() => files.map((file) => file.path), [files])
+  const active_path = useActiveFile(paths)
 
   if (review_query.isLoading || diff_query.isLoading) {
     return <p className={styles.notice}>Loading review…</p>
@@ -139,22 +149,35 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           Could not load the diff: {describeQueryError(diff_query.error).message}
         </p>
       ) : (
-        (diff_query.data ?? []).length === 0 && (
-          <p className={styles.notice}>Nothing changed in this range.</p>
-        )
+        files.length === 0 && <p className={styles.notice}>Nothing changed in this range.</p>
       )}
 
-      {(diff_query.data ?? []).map((file) => (
-        <DiffFile
-          key={file.path}
-          review_id={review_id}
-          file={file}
-          threads={review.threads}
-          threads_by_anchor={threads_by_anchor}
-          pending={pending}
-          onPendingChange={setPending}
-        />
-      ))}
+      {files.length > 0 && (
+        <div className={styles.layout}>
+          <aside className={styles.sidebar}>
+            <FileSidebar
+              files={files}
+              threads={review.threads}
+              active_path={active_path}
+              onSelect={scrollToFile}
+            />
+          </aside>
+
+          <div className={styles.diffs}>
+            {files.map((file) => (
+              <DiffFile
+                key={file.path}
+                review_id={review_id}
+                file={file}
+                threads={review.threads}
+                threads_by_anchor={threads_by_anchor}
+                pending={pending}
+                onPendingChange={setPending}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </>
   )
 }

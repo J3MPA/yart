@@ -114,4 +114,19 @@ export interface DiffHunk {
 export interface FileDiff extends ReviewFile {
   hunks: DiffHunk[]
   is_binary: boolean
+  /**
+   * Lines in the head blob, or null when there is no readable head text.
+   *
+   * The hunks describe only what changed, so nothing in them says whether the
+   * file continues past the last one. This is what bounds that final run of
+   * unchanged lines, and the base needs no equivalent: unchanged lines exist on
+   * both sides, so one side's length fixes the other's.
+   */
+  head_line_count: number | null
+}
+
+/** Both sides of one file in full, for showing text the diff left out. */
+export interface FileContents extends ReviewFile {
+  base_content: string | null
+  head_content: string | null
 }

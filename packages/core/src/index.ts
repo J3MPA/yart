@@ -16,6 +16,7 @@ export type {
   DiffHunk,
   DiffLine,
   DiffLineKind,
+  FileContents,
   FileDiff,
   Review,
   ReviewFile,
@@ -24,6 +25,18 @@ export type {
   ReviewVerdict,
 } from './review.ts'
 
+export {
+  gapLines,
+  gapSlice,
+  hunkFirstLines,
+  hunkNextLines,
+  hunkSectionHeading,
+  parseHunkHeader,
+  planDiffSections,
+  type DiffGap,
+  type DiffSection,
+  type HunkRange,
+} from './hunks.ts'
 export { splitLines } from './lines.ts'
 export { buildLineMap, type LineMapOptions } from './line-map.ts'
 export { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'

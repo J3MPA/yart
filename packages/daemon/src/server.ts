@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
-import type { CommentAuthor, DiffSide, ReviewVerdict, Thread } from '@yart/core'
+import type { CommentAuthor, DiffSide, FileContents, ReviewVerdict, Thread } from '@yart/core'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
@@ -133,7 +133,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
       file.head_blob_sha === null ? null : readBlob(review.repo_path, file.head_blob_sha),
     ])
 
-    return context.json({ ...file, base_content, head_content })
+    return context.json<FileContents>({ ...file, base_content, head_content })
   })
 
   /** Every file's hunks, built by git so the rendering matches what anchors use. */
