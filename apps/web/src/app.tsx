@@ -1,3 +1,4 @@
+import { Logo } from '@/components/logo'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
 import styles from './app.module.css'
@@ -20,7 +21,10 @@ export const App = () => {
     <main className={styles.shell}>
       {review_id === null ? (
         <>
-          <h1 className={styles.title}>yart</h1>
+          <h1 className={styles.title}>
+            <Logo size={30} />
+            yart
+          </h1>
           <p className={styles.tagline}>Local, GitHub-style code review for AI-generated diffs.</p>
           <ReviewList />
         </>
