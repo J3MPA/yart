@@ -20,8 +20,12 @@ shown in, rather than a browser tab opened per review, plus a dock badge and a
 notification when the agent answers. The reason for `curl` is covered under
 install below.
 
-**First, a finding that has to be fixed before any of this: a daemon serves one
-repository.** Its repository is fixed by `--repo` at start, and nothing in a
+**Done: one daemon for every repository.** Requests name their repository, the
+daemon keeps a service per repository and remembers them in `~/.yart`, and the
+MCP server refuses an older daemon that would review the wrong one. The finding
+that led to it, kept for the record:
+
+**A daemon served one repository.** Its repository is fixed by `--repo` at start, and nothing in a
 request names another. The MCP server reuses whatever daemon answers on 7777,
 without checking which repository it serves. So with yart registered for every
 project, a review asked for in repository B while a daemon started in
@@ -29,7 +33,7 @@ repository A is still running is a review of A's working tree — with no error.
 That is a live bug today, found by reading the code rather than by hitting it,
 and an installed app with one daemon would hit it constantly.
 
-The fix, which comes first whatever happens to the rest of this plan:
+What was done about it:
 
 - Requests that create a review name the repository they are for, and the MCP
   server sends the one it was started in.
@@ -135,7 +139,7 @@ a tap of our own could still carry the app later, on top of the same release.
 
 **Order of work.**
 
-1. One daemon for every repository. Fixes a live bug, and everything else needs it.
+1. ~~One daemon for every repository.~~ Done.
 2. The prototype, and its findings written down here.
 3. Developer mode: its own port, and `pnpm dev:desktop`.
 4. The app.
@@ -292,6 +296,13 @@ that should stay quick to start. Loading a grammar only for the languages a
 review actually contains would be the way to keep it honest.
 
 ## Smaller things
+
+- The daemon checks nothing about who is asking. Requiring JSON on writes stops
+  a web page from making it act, but a page that rebinds its own hostname to
+  `127.0.0.1` can make same-origin requests and read the answers, including
+  file contents. Checking that the `Host` header is `localhost` or `127.0.0.1`
+  would close that. Worth doing before yart is installed by anyone else, since
+  the daemon now reaches every repository it has served.
 
 - Deleting a review is confirmed by a second click inside the overflow menu.
   That is cheap and reversible up to the second click, but it is thin for an

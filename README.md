@@ -270,6 +270,28 @@ to. It is deliberately separate from the MCP server: MCP servers live and die
 with their client, while a review has to outlast a session and be shared by more
 than one agent at once.
 
+**One daemon serves every repository.** A request that opens a review names the
+repository it is for, and the MCP server sends the one it was started in. It
+used to be otherwise — a daemon was fixed to the repository it started in, and
+every client reused whichever daemon was listening, so an agent in one project
+could be handed a review of another's working tree without any error. The
+daemon keeps one service per repository, keyed by the shared git directory so
+that a repository's worktrees share one list, and remembers the repositories it
+has served in `~/.yart` (or `YART_HOME`) so that a review in any of them can be
+found by id after a restart. A request that names no repository gets the one
+the daemon was started in, which keeps an agent on an older yart working.
+
+After an update, the daemon still running is the old one. The MCP server checks
+`/health`, which now carries a version, and refuses an older daemon that serves
+a different repository, with a message saying to stop it, rather than review
+the wrong one.
+
+**Writes must be JSON.** A web page on any site can send a "simple" cross-origin
+POST to `localhost` without the browser asking first, and although it cannot
+read the answer, the daemon would still act on it — in any repository a page
+could name. Requiring `application/json` on every POST and PATCH makes such a
+request one a browser must ask permission for, and the daemon never grants it.
+
 It owns three things.
 
 **A git adapter.** Revision ranges, changed files with the blob on each side,
@@ -287,7 +309,7 @@ invisible to `git status`, and in a directory yart will never be asked to show.
 
 | Route                                         | Purpose                             |
 | --------------------------------------------- | ----------------------------------- |
-| `POST /api/reviews`                           | Open a review over a range          |
+| `POST /api/reviews`                           | Open a review in a named repository |
 | `GET /api/reviews` · `GET /api/reviews/:id`   | List, or fetch one                  |
 | `GET /api/reviews/:id/file?path=`             | Both sides of a file, for rendering |
 | `POST /api/reviews/:id/threads`               | Comment on a line                   |

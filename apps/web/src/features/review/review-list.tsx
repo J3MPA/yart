@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import type { Review } from '@yart/core'
 import { Menu, MenuItem } from '@/components/menu'
-import { describeRange, describeStatus, relativeTime, type StatusTone } from './format'
+import {
+  describeRange,
+  describeStatus,
+  relativeTime,
+  repositoryName,
+  type StatusTone,
+} from './format'
 import {
   useDeleteReviewMutation,
   useListReviewsQuery,
@@ -18,9 +24,15 @@ const STATUS_CLASS: Record<StatusTone, string> = {
   ready: styles.badge_ready as string,
 }
 
-/** The line under the title: where it is, what it covers, and when it appeared. */
-const describe = (review: Review): string =>
+/**
+ * The line under the title: where it is, what it covers, and when it appeared.
+ *
+ * The repository leads only when the list spans more than one, since in a list
+ * of one project's reviews it would repeat the same word on every row.
+ */
+const describe = (review: Review, show_repository: boolean): string =>
   [
+    show_repository ? repositoryName(review.repo_path) : null,
     review.head_branch,
     describeRange(review),
     `${review.files.length} file${review.files.length === 1 ? '' : 's'}`,
@@ -31,6 +43,7 @@ const describe = (review: Review): string =>
 
 interface ReviewRowProps {
   review: Review
+  show_repository: boolean
   unseen: boolean
   archived: boolean
   confirming_delete: boolean
@@ -39,6 +52,7 @@ interface ReviewRowProps {
 
 const ReviewRow = ({
   review,
+  show_repository,
   unseen,
   archived,
   confirming_delete,
@@ -59,7 +73,7 @@ const ReviewRow = ({
           )}
           {review.title}
         </div>
-        <div className={styles.list_meta}>{describe(review)}</div>
+        <div className={styles.list_meta}>{describe(review, show_repository)}</div>
       </a>
 
       {/* A snapshot needs no badge of its own: the range in the meta line
@@ -125,6 +139,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
   const { data, isLoading: is_loading } = useListReviewsQuery(archived)
 
   const reviews = data ?? []
+  const show_repository = new Set(reviews.map((review) => review.repo_path)).size > 1
 
   return (
     <>
@@ -168,6 +183,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
             <ReviewRow
               key={review.id}
               review={review}
+              show_repository={show_repository}
               unseen={unseen.has(review.id)}
               archived={archived}
               confirming_delete={confirming === review.id}

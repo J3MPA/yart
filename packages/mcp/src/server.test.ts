@@ -186,6 +186,39 @@ describe('get_review and list_reviews', () => {
   })
 })
 
+describe('an agent in another repository', () => {
+  it('reviews its own repository through a daemon started in a different one', async () => {
+    // The daemon in beforeEach was started for `repo`. An agent working in a
+    // second repository reuses it, as every agent reuses whatever is on the
+    // port — and used to get a review of the first repository's working tree.
+    const other = new TestRepo()
+    try {
+      other.write('elsewhere.txt', 'one\n')
+      other.commit('base')
+      other.write('elsewhere.txt', 'one\ntwo\n')
+
+      const agent = createMcpServer({
+        port,
+        repo_path: other.path,
+        autostart: false,
+        openBrowser: () => undefined,
+      })
+      const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
+      const other_client = new Client({ name: 'other', version: '0.0.0' })
+      await Promise.all([agent.connect(server_transport), other_client.connect(client_transport)])
+
+      const result = await other_client.callTool({ name: 'start_review', arguments: {} })
+      const rendered = (result.content as { text: string }[])[0]?.text ?? ''
+      expect(rendered).toContain('elsewhere.txt')
+      expect(rendered).not.toContain('a.txt')
+
+      await other_client.close()
+    } finally {
+      other.dispose()
+    }
+  })
+})
+
 describe('opening the review', () => {
   it('shows a new review to the person who has to read it', async () => {
     const rendered = await call('start_review', { base })

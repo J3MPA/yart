@@ -45,6 +45,16 @@ export const describeRange = (review: {
 }): string =>
   `${shortSha(review.base_sha)}..${review.head_is_snapshot ? 'working tree' : shortSha(review.head_sha)}`
 
+/**
+ * A repository as a person names it: the last part of its path.
+ *
+ * Split by hand because this runs in the browser, where `node:path` does not
+ * exist — Vite replaces it with an empty stub. Empty parts are dropped so a
+ * trailing slash does not leave the name blank.
+ */
+export const repositoryName = (repo_path: string): string =>
+  repo_path.split(/[\\/]/).filter(Boolean).pop() ?? repo_path
+
 export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   approved: 'approved',
   changes_requested: 'changes requested',

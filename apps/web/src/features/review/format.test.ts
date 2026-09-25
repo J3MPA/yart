@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Comment, CommentAuthor, Review, ReviewSubmission, Thread } from '@yart/core'
-import { describeStatus, relativeTime, shortSha } from './format'
+import { describeStatus, relativeTime, repositoryName, shortSha } from './format'
 
 const NOW = Date.parse('2026-09-20T12:00:00.000Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -120,5 +120,15 @@ describe('describeStatus', () => {
       review({ head_sha: 'head2', submissions: [verdict('changes_requested', 'head1')] }),
     )
     expect(status).toMatchObject({ label: 'your turn', detail: null })
+  })
+})
+
+describe('repositoryName', () => {
+  it('takes the last part of the path', () => {
+    expect(repositoryName('/Users/someone/projects/yart')).toBe('yart')
+  })
+
+  it('ignores a trailing slash', () => {
+    expect(repositoryName('/Users/someone/projects/yart/')).toBe('yart')
   })
 })
