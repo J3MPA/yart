@@ -520,6 +520,11 @@ export class ReviewService {
     await this.store.remove(id)
   }
 
+  /** Whether a review is kept in this repository's store. */
+  async holds(id: string): Promise<boolean> {
+    return (await this.store.load(id)) !== null
+  }
+
   /** Whether there is uncommitted work that a snapshot would capture. */
   async hasUncommittedWork(): Promise<boolean> {
     return isWorkingTreeDirty(this.repo_path)

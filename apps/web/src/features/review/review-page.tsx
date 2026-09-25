@@ -15,7 +15,7 @@ import { isReviewed, localFor, reviewBlob } from './local-review-state'
 import { reviewSeen } from './seen-slice'
 import { SubmitPanel } from './submit-panel'
 import { useActiveFile } from './use-active-file'
-import { describeRange, relativeTime, VERDICT_LABEL } from './format'
+import { describeRange, relativeTime, repositoryName, VERDICT_LABEL } from './format'
 import {
   useAddSubmissionCommentMutation,
   useGetReviewDiffQuery,
@@ -132,6 +132,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
       <header className={styles.header}>
         <h1 className={styles.title}>{review.title}</h1>
         <span className={styles.range}>
+          {repositoryName(review.repo_path)} ·{' '}
           {review.head_branch === null ? '' : `${review.head_branch} · `}
           {describeRange(review)} · round {review.rounds.length} · {relativeTime(review.created_at)}
         </span>

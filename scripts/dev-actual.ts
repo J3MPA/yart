@@ -25,6 +25,7 @@ const STARTUP_TIMEOUT_MS = 20_000
 
 interface Review {
   id: string
+  repo_path: string
   base_sha: string
   head_sha: string
   threads: unknown[]
@@ -96,14 +97,19 @@ const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 /** Reuses a review over the same base, advancing it when HEAD has moved. */
 const openOrAdvanceReview = async (base_sha: string, head_sha: string): Promise<Review> => {
+  // The daemon serves every repository, so both the lookup and the new review
+  // have to say this one: a reused daemon may have been started anywhere. Asked
+  // of git rather than taken from REPO_ROOT, which ends in a slash and would
+  // never equal the path the daemon records.
+  const repo_path = await git('rev-parse', '--show-toplevel')
   const existing = (await api<Review[]>('/api/reviews')).find(
-    (review) => review.base_sha === base_sha,
+    (review) => review.repo_path === repo_path && review.base_sha === base_sha,
   )
 
   if (existing === undefined) {
     return api<Review>('/api/reviews', {
       method: 'POST',
-      body: JSON.stringify({ base: base_sha, head: 'HEAD' }),
+      body: JSON.stringify({ base: base_sha, head: 'HEAD', repo_path }),
     })
   }
 

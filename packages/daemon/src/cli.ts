@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { findRepoRoot } from './git.ts'
+import { defaultStateDir } from './repositories.ts'
 import { createServer } from './server.ts'
 
 const DEFAULT_PORT = 7777
@@ -24,7 +25,10 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         'Usage: yart [options]',
         '',
         `  -p, --port <port>  Port to listen on (default: ${DEFAULT_PORT})`,
-        '  -r, --repo <path>  Repository to review (default: the current one)',
+        '  -r, --repo <path>  Repository for requests that name none (default: the current one)',
+        '',
+        'Serves reviews for any repository a request names. Set YART_HOME to keep',
+        'its list of repositories somewhere other than ~/.yart.',
         '  -h, --help         Show this message',
         '',
       ].join('\n'),
@@ -38,10 +42,11 @@ export const main = async (argv: readonly string[]): Promise<void> => {
   }
 
   const repo_path = await findRepoRoot(values.repo ?? process.cwd())
-  const app = createServer({ repo_path })
+  const state_dir = defaultStateDir()
+  const app = createServer({ repo_path, state_dir })
 
   serve({ fetch: app.fetch, port }, (info) => {
-    process.stdout.write(`yart reviewing ${repo_path}\n`)
+    process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
     process.stdout.write(`listening on http://localhost:${info.port}\n`)
   })
 }

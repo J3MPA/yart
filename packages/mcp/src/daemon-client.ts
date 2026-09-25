@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import { realpathSync } from 'node:fs'
+import { sep } from 'node:path'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Review } from '@yart/daemon'
@@ -17,6 +19,13 @@ export class DaemonError extends Error {
     this.name = 'DaemonError'
     this.status = status
   }
+}
+
+/** What `/health` answers. `version` is absent from a daemon older than it. */
+interface DaemonHealth {
+  ok: boolean
+  repo_path?: string
+  version?: string
 }
 
 export interface DaemonClientOptions {
@@ -46,13 +55,40 @@ export class DaemonClient {
     this.started = false
   }
 
-  private async isHealthy(): Promise<boolean> {
+  private async health(): Promise<DaemonHealth | null> {
     try {
       const response = await fetch(`${this.base_url}/health`)
-      return response.ok
+      return response.ok ? ((await response.json()) as DaemonHealth) : null
     } catch {
-      return false
+      return null
     }
+  }
+
+  private async isHealthy(): Promise<boolean> {
+    return (await this.health()) !== null
+  }
+
+  /**
+   * Refuses a daemon that would review the wrong repository.
+   *
+   * A daemon from before `version` existed serves only the repository it was
+   * started in, and ignores the one a request names — so reusing it from
+   * anywhere else would review its working tree instead, without a word. That
+   * daemon is still running for a while after an update, which is exactly when
+   * this matters. One started in this same repository is fine to keep using.
+   */
+  private checkServes(health: DaemonHealth): void {
+    if (health.version !== undefined || health.repo_path === undefined) return
+    const mine = realpathSync(this.repo_path)
+    const inside = mine === health.repo_path || mine.startsWith(health.repo_path + sep)
+    if (inside) return
+    throw new DaemonError(
+      `The yart daemon on port ${this.port} is from an older yart and only serves ` +
+        `${health.repo_path}, so it would review that instead of ${mine}. Stop the process ` +
+        `listening on port ${this.port}; the next request starts a daemon that serves every ` +
+        'repository.',
+      null,
+    )
   }
 
   /**
@@ -63,7 +99,10 @@ export class DaemonClient {
    * that. An already-running daemon is reused, whoever started it.
    */
   async ensureRunning(): Promise<void> {
-    if (this.started || (await this.isHealthy())) {
+    if (this.started) return
+    const found = await this.health()
+    if (found !== null) {
+      this.checkServes(found)
       this.started = true
       return
     }
@@ -131,7 +170,9 @@ export class DaemonClient {
   }
 
   createReview(base?: string, head?: string, title?: string): Promise<Review> {
-    return this.post<Review>('/api/reviews', { base, head, title })
+    // Named on every request: one daemon serves every repository, and this is
+    // the only thing that tells it which one the agent is working in.
+    return this.post<Review>('/api/reviews', { base, head, title, repo_path: this.repo_path })
   }
 
   advanceReview(review_id: string, head?: string): Promise<Review> {

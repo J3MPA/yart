@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -5,13 +6,24 @@ import { Hono } from 'hono'
 import type { CommentAuthor, DiffSide, FileContents, ReviewVerdict, Thread } from '@yart/core'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
-import { ReviewError, ReviewService, type SubmitParams } from './review.ts'
+import { Repositories } from './repositories.ts'
+import { ReviewError, type SubmitParams } from './review.ts'
 
 export interface ServerOptions {
+  /** The repository a request is for when it does not say. */
   repo_path: string
+  /** Where the repositories seen are remembered; null keeps them in memory. */
+  state_dir?: string | null
   /** Built web UI to serve. Defaults to this workspace's `apps/web/dist`. */
   ui_dir?: string
 }
+
+/** Read once at start: a running daemon does not change version. */
+const VERSION = (
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+    version: string
+  }
+).version
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
 
@@ -130,8 +142,12 @@ const messageFor = (cause: unknown): string => {
   return cause instanceof Error ? cause.message : 'Unexpected error'
 }
 
-export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptions): Hono => {
-  const service = new ReviewService(repo_path)
+export const createServer = ({
+  repo_path,
+  ui_dir = DEFAULT_UI_DIR,
+  state_dir = null,
+}: ServerOptions): Hono => {
+  const repositories = new Repositories({ default_repo: repo_path, state_dir })
   const app = new Hono()
 
   app.onError((cause, context) => {
@@ -140,13 +156,47 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
     return context.json<ErrorBody>({ error: messageFor(cause) }, status as 400)
   })
 
-  app.get('/health', (context) => context.json({ ok: true, repo_path }))
+  /**
+   * Refuses a write that a web page could have sent.
+   *
+   * Browsers let a page on any site send a "simple" cross-origin POST — one
+   * whose content type is plain text or a form — without asking first, and
+   * the page cannot read the answer but the daemon still acts on it. Since the
+   * daemon acts on any repository a request names, that would let any site
+   * write reviews into any repository whose path it could guess. Requiring JSON
+   * makes the request one a browser must ask permission for, and the daemon
+   * never grants it: it sends no CORS headers at all.
+   */
+  app.use('/api/*', async (context, next) => {
+    const method = context.req.method
+    if (method === 'POST' || method === 'PATCH') {
+      const type = context.req.header('content-type') ?? ''
+      if (!type.toLowerCase().startsWith('application/json')) {
+        return context.json<ErrorBody>(
+          { error: 'Requests that change anything must be sent as application/json' },
+          415,
+        )
+      }
+    }
+    await next()
+  })
 
-  app.get('/api/reviews', async (context) =>
-    context.json(await service.list({ archived: context.req.query('archived') === 'true' })),
-  )
+  // The version lets a client notice a daemon older than itself, which after an
+  // update is the one still running; a daemon from before this field existed
+  // also predates serving more than one repository.
+  app.get('/health', (context) => context.json({ ok: true, repo_path, version: VERSION }))
+
+  app.get('/api/reviews', async (context) => {
+    const archived = context.req.query('archived') === 'true'
+    const lists = await Promise.all(
+      (await repositories.all()).map((service) => service.list({ archived })),
+    )
+    // Newest first across every repository, as each list already is within one.
+    return context.json(lists.flat().sort((a, b) => b.created_at.localeCompare(a.created_at)))
+  })
 
   app.patch('/api/reviews/:id', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ archived?: boolean }>()
     if (typeof body.archived !== 'boolean') {
       throw new ReviewError('archived must be true or false', 400)
@@ -155,11 +205,20 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   })
 
   app.post('/api/reviews', async (context) => {
-    const body = await context.req.json<{ base?: string; head?: string; title?: string }>()
+    const body = await context.req.json<{
+      base?: string
+      head?: string
+      title?: string
+      repo_path?: string
+    }>()
+    if (body.repo_path !== undefined && typeof body.repo_path !== 'string') {
+      throw new ReviewError('repo_path must be a path', 400)
+    }
+    const { service, repo_root } = await repositories.resolve(body.repo_path)
     // Defaults to uncommitted work against HEAD, which is what an agent that has
     // just finished editing wants and cannot express as a revision range.
     const review = await service.create({
-      repo_path,
+      repo_path: repo_root,
       base: body.base === undefined || body.base === '' ? 'HEAD' : body.base,
       head: body.head,
       title: body.title,
@@ -167,11 +226,13 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
     return context.json(review, 201)
   })
 
-  app.get('/api/reviews/:id', async (context) =>
-    context.json(await service.get(context.req.param('id'))),
-  )
+  app.get('/api/reviews/:id', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
+    return context.json(await service.get(context.req.param('id')))
+  })
 
   app.delete('/api/reviews/:id', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     await service.remove(context.req.param('id'))
     return context.body(null, 204)
   })
@@ -181,6 +242,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
    * rather than a path segment so that nested paths need no encoding.
    */
   app.get('/api/reviews/:id/file', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const review = await service.get(context.req.param('id'))
     const path = context.req.query('path')
     if (path === undefined) throw new ReviewError('A path is required', 400)
@@ -198,11 +260,13 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
 
   /** Every file's hunks, built by git so the rendering matches what anchors use. */
   app.get('/api/reviews/:id/diff', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const review = await service.get(context.req.param('id'))
     return context.json(await buildReviewDiff(review.repo_path, review.files))
   })
 
   app.post('/api/reviews/:id/threads', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{
       path?: string
       line?: number
@@ -229,6 +293,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   })
 
   app.post('/api/reviews/:id/threads/:thread_id/comments', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ body?: string; author?: CommentAuthor }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
@@ -246,6 +311,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   })
 
   app.patch('/api/reviews/:id/threads/:thread_id', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ status?: Thread['status'] }>()
     if (body.status !== 'open' && body.status !== 'resolved') {
       throw new ReviewError('Status must be "open" or "resolved"', 400)
@@ -262,6 +328,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
 
   /** A reply under a verdict, which unlike a line comment has no thread. */
   app.post('/api/reviews/:id/submissions/:submission_id/comments', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ body?: string; author?: CommentAuthor }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
@@ -279,6 +346,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   })
 
   app.post('/api/reviews/:id/submit', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     // Annotated rather than asserted: a missing body is a valid submission, so
     // the empty object has to widen to the parameter type without a cast.
     const body: SubmitBody = await context.req.json<SubmitBody>().catch(() => ({}))
@@ -302,6 +370,7 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
   })
 
   app.post('/api/reviews/:id/advance', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ head?: string }>().catch(() => ({ head: undefined }))
     return context.json(await service.advanceHead(context.req.param('id'), body.head))
   })
