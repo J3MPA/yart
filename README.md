@@ -99,6 +99,7 @@ Early — the scaffold is in place, the product is not.
 - [x] MCP server
 - [x] Review UI: diff rendering, inline comments, review rounds
 - [x] Review UI: file tree, collapsed context expandable in place
+- [x] Replying to a verdict, and a signal for how far the agent has got
 - [x] Installable: `yart` and `yart-mcp` run from any repository
 - [ ] Clipboard export (fallback for non-MCP agents)
 
@@ -338,6 +339,42 @@ this way is an ordinary row and can be commented on like any other. Knowing
 whether a file continues past its last hunk takes the file's length, which is
 why the diff carries `head_line_count`.
 
+## Answering a verdict
+
+A verdict is the one thing in a review that used to have nothing to say back to
+it. Line comments have threads; a summary left with `approved` or
+`changes_requested` was write-only, so an agent that had already done the thing
+being asked for, or disagreed with it, had to answer in whatever chat window it
+happened to be in — which is the conversation leaving the tool.
+
+A submission now carries its own comments. It is not anchored to a line, so this
+is a plain list rather than a `Thread`, and it is addressed by submission id
+rather than always landing on the latest: a review that has been round several
+times has several verdicts, and a reply belongs to the one it answers.
+
+## Knowing when to look again
+
+Once a review is handed back, the question is not whether the agent is working
+but whether it has finished. yart reports three states, derived rather than
+stored:
+
+| State         | What it means                                                    |
+| ------------- | ---------------------------------------------------------------- |
+| `idle`        | Nothing has happened since the verdict                           |
+| `in_progress` | Answers or changes have appeared, but comments are still waiting |
+| `ready`       | Nothing is waiting on the agent; worth opening again             |
+
+A thread counts as answered when the agent spoke last, or when it was resolved.
+Turning on who spoke last matters: a human replying to the agent's answer puts
+the thread back in the agent's court, and a count that did not notice would
+report the same work as finished twice.
+
+`ready` deliberately does not require the code to have changed. An agent that
+answers every comment by explaining why it disagrees has finished its turn just
+as much as one that rewrote the file, and both need a person to look. Changes
+with nothing answered are `in_progress`, not `ready` — moving the code is not an
+invitation to re-read it while the questions are still open.
+
 ## Reviewing uncommitted work
 
 A review does not need a commit. By default `start_review` reviews the working
@@ -363,15 +400,16 @@ The first tool call starts a daemon if none is listening, so an agent does not
 have to ask anyone to run one first. The daemon is spawned detached, because an
 MCP server dies with its client and a review has to outlive that.
 
-| Tool              | What the agent does with it                                 |
-| ----------------- | ----------------------------------------------------------- |
-| `start_review`    | Open a review after making changes; returns an id and a URL |
-| `await_review`    | Block until the human submits, then read their comments     |
-| `get_review`      | Read current state without blocking                         |
-| `list_reviews`    | List reviews in this repository                             |
-| `reply_to_thread` | Explain a change, or push back on a comment                 |
-| `resolve_thread`  | Mark a comment addressed                                    |
-| `advance_review`  | Re-anchor every comment onto new commits                    |
+| Tool               | What the agent does with it                                 |
+| ------------------ | ----------------------------------------------------------- |
+| `start_review`     | Open a review after making changes; returns an id and a URL |
+| `await_review`     | Block until the human submits, then read their comments     |
+| `get_review`       | Read current state without blocking                         |
+| `list_reviews`     | List reviews in this repository                             |
+| `reply_to_thread`  | Explain a change, or push back on a comment                 |
+| `reply_to_verdict` | Answer the summary left with the verdict                    |
+| `resolve_thread`   | Mark a comment addressed                                    |
+| `advance_review`   | Re-anchor every comment onto new commits                    |
 
 Comments come back rendered as text rather than JSON, because the consumer is a
 model deciding what to edit and a comment is easier to act on next to the code

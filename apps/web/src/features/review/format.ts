@@ -1,4 +1,4 @@
-import type { ReviewVerdict } from '@yart/core'
+import type { ReviewProgress, ReviewVerdict } from '@yart/core'
 
 /** Enough of a hash to be recognisable, which is all a list needs. */
 export const shortSha = (sha: string): string => sha.slice(0, 8)
@@ -48,4 +48,21 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   approved: 'approved',
   changes_requested: 'changes requested',
   commented: 'commented',
+}
+
+/**
+ * What the agent has done since the review was handed back, in a few words.
+ *
+ * Null while nothing has happened. A badge that is always there is not a
+ * signal, and the point of this one is to be worth glancing at.
+ */
+export const describeProgress = (progress: ReviewProgress | null): string | null => {
+  if (progress === null || progress.state === 'idle') return null
+  if (progress.state === 'ready') return 'ready for re-review'
+
+  const total = progress.answered_threads + progress.awaiting_threads
+  // Changes with nothing answered yet is the one case a ratio describes badly:
+  // "0 of 3 answered" reads as stalled when work has in fact started.
+  if (progress.answered_threads === 0) return 'changes started'
+  return `${progress.answered_threads} of ${total} answered`
 }

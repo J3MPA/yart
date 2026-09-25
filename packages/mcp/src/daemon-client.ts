@@ -145,6 +145,13 @@ export class DaemonClient {
     )
   }
 
+  replyToVerdict(review_id: string, submission_id: string, body: string): Promise<Review> {
+    return this.post<Review>(
+      `/api/reviews/${encodeURIComponent(review_id)}/submissions/${encodeURIComponent(submission_id)}/comments`,
+      { body, author: 'agent' },
+    )
+  }
+
   setThreadStatus(
     review_id: string,
     thread_id: string,

@@ -1,13 +1,13 @@
 import { useState } from 'react'
+import { currentSubmission, reviewProgress } from '@yart/core'
 import type { Review } from '@yart/core'
 import { Menu, MenuItem } from '@/components/menu'
-import { describeRange, relativeTime, VERDICT_LABEL } from './format'
+import { describeProgress, describeRange, relativeTime, VERDICT_LABEL } from './format'
 import {
   useDeleteReviewMutation,
   useListReviewsQuery,
   useSetReviewArchivedMutation,
 } from './review-api'
-import { currentSubmission } from './submission'
 import { countOpen } from './thread-anchors'
 import styles from './review.module.css'
 
@@ -34,6 +34,7 @@ const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: Rev
   const [deleteReview] = useDeleteReviewMutation()
 
   const submission = currentSubmission(review)
+  const progress = describeProgress(reviewProgress(review))
   const open = countOpen(review.threads)
 
   return (
@@ -58,6 +59,17 @@ const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: Rev
             .join(' ')}
         >
           {VERDICT_LABEL[submission.verdict]}
+        </span>
+      )}
+
+      {progress !== null && (
+        <span
+          className={[
+            styles.badge,
+            progress === 'ready for re-review' ? styles.badge_ready : styles.badge_working,
+          ].join(' ')}
+        >
+          {progress}
         </span>
       )}
 

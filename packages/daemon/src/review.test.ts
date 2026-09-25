@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ReviewError, ReviewService } from './review.ts'
 import { ReviewStore } from './store.ts'
@@ -185,6 +187,53 @@ describe('comments and status', () => {
       'approved',
     ])
   })
+
+  it('starts a submission with nothing said back to it', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    expect((await service.submit(review.id)).submissions[0]?.comments).toEqual([])
+  })
+})
+
+describe('addSubmissionComment', () => {
+  it('posts a reply under the verdict it answers', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const submitted = await service.submit(review.id, { verdict: 'changes_requested' })
+    const submission_id = submitted.submissions[0]?.id as string
+
+    const replied = await service.addSubmissionComment(
+      review.id,
+      submission_id,
+      'Already done in the previous turn.',
+      'agent',
+    )
+
+    expect(replied.submissions[0]?.comments).toMatchObject([
+      { author: 'agent', body: 'Already done in the previous turn.' },
+    ])
+  })
+
+  it('leaves an earlier verdict alone when replying to a later one', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await service.submit(review.id, { verdict: 'changes_requested' })
+    const twice = await service.submit(review.id, { verdict: 'approved' })
+
+    const replied = await service.addSubmissionComment(
+      review.id,
+      twice.submissions[1]?.id as string,
+      'Thanks.',
+      'agent',
+    )
+
+    expect(replied.submissions[0]?.comments).toEqual([])
+    expect(replied.submissions[1]?.comments).toHaveLength(1)
+  })
+
+  it('rejects an unknown submission', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await expect(service.addSubmissionComment(review.id, 'nope', 'x')).rejects.toMatchObject({
+      status: 404,
+    })
+  })
 })
 
 describe('advanceHead', () => {
@@ -347,6 +396,24 @@ describe('persistence', () => {
     const reloaded = await new ReviewStore(repo.path).load(review.id)
     expect(reloaded?.threads[0]?.context.line).toBe('CHANGED')
     expect(reloaded?.threads[0]?.anchor?.blob_sha).toBe(repo.blobSha('HEAD', 'a.txt'))
+  })
+
+  it('gives a submission written before replies existed an empty conversation', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await service.submit(review.id, { verdict: 'approved' })
+
+    // Rewrite the file as an older yart would have left it, with no `comments`
+    // on the submission at all, and check nothing downstream has to cope with
+    // the field being absent.
+    const file = join(repo.path, '.git', 'yart', 'reviews', `${review.id}.json`)
+    const stored = JSON.parse(readFileSync(file, 'utf8')) as {
+      submissions: Record<string, unknown>[]
+    }
+    for (const submission of stored.submissions) delete submission.comments
+    writeFileSync(file, JSON.stringify(stored), 'utf8')
+
+    const reloaded = await service.get(review.id)
+    expect(reloaded.submissions[0]?.comments).toEqual([])
   })
 
   it('stores reviews under .git so they stay out of the working tree', async () => {

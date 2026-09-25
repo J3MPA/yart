@@ -37,9 +37,10 @@ What remains:
   and something visible from outside the page — the document title, or the
   favicon — so it can be noticed while attention is elsewhere.
 
-  What counts as answered needs deciding: a reply on a thread, a thread resolved,
-  the review advanced onto new work, or any of them. Whichever it is, the signal
-  should clear once the review has been looked at.
+  What counts as answered is now decided and implemented as `reviewProgress`;
+  the list shows it as a badge. What is missing is the part visible from outside
+  the page — the document title, or the favicon — and the signal clearing once
+  the review has been looked at.
 
   Seen-ness is per person and per device rather than a property of the review, so
   it belongs in the browser rather than beside the review on disk — which also
@@ -50,12 +51,63 @@ What remains:
   while you are looking elsewhere the daemon has to push, over server-sent
   events, or the list has to be polled.
 - **Tabs themselves**, once there is something worth switching between.
-- **Replying to a submission.** A summary left with a verdict is currently
-  write-only: the agent can read it, but there is nowhere to answer it. Line
-  comments have threads; submissions do not.
+- **Replying to a submission** now works: a submission carries its own comments,
+  answered from the UI or with the `reply_to_verdict` tool.
+- **What counts as answered** is settled: a thread is answered when the agent
+  spoke last or resolved it, and a review reports `idle`, `in_progress` or
+  `ready`. What remains is surfacing it outside the page — the dot below.
 - **Tabs across worktrees** now work at the storage level: reviews are kept in
   the repository's shared git directory, so every worktree sees one list and
   each review records which worktree it belongs to.
+
+## 3. Queue a review before sending it
+
+Every comment posts the moment it is written. GitHub offers a choice at that
+point — send this one comment now, or start a review and hold everything until
+it is submitted together — and yart only has the first half of it.
+
+Worth having because a review is drafted, not dictated. A comment written on
+file 3 is often withdrawn by the time file 20 explains it, and today that
+retraction is not possible: it has already been posted, and an agent reading
+`get_review` sees it.
+
+- A comment is either sent now or added to a pending review, chosen when writing it
+- Pending comments are visible only to their author until the review is submitted
+- Submitting sends them all with the verdict, which is already one action
+- A pending comment can be edited or dropped before it goes
+
+Two things to settle. Pending comments are per person, and nothing in the model
+is per person yet — a review has threads and that is all — so either they live
+in the browser until submitted, or the review grows a notion of whose draft a
+comment is. The browser is simpler and loses the drafts on a device change,
+which for a local tool is probably the right trade.
+
+The second is what `await_review` does with them. It waits for a submission
+already, so a pending comment it cannot see is correct behaviour rather than a
+problem — but `get_review` would still show them if they were stored on the
+review, which is the argument for keeping them out of it.
+
+## 4. Collapse directories in the file tree
+
+The tree draws every directory open, so a review that touches a deep tree gives
+back much of the scrolling the tree was meant to remove.
+
+- A directory folds away on a click, and unfolds again
+- A folded directory keeps its counts — added, removed, threads still open —
+  summed over what it hides, or folding trades scrolling for blindness
+- Folded state survives the review being advanced, since a re-review lands on
+  the same tree
+
+Two things to settle. Folded state is per person and per device, like the
+seen-ness in item 2, so it belongs in the browser rather than beside the review
+on disk — which also means deciding what to key it on, because a path that
+stops being part of the review should not leave state behind forever.
+
+The second is whether folding a directory also hides its diffs. It should not:
+the tree is an index, not a filter, and the two orders are currently the same
+list read the same way round (`orderFilesByTree`), which is a property worth
+keeping. A reader who wants a file gone wants it collapsed in place, and that is
+a different feature from folding its row in the index.
 
 ## Finding: agents use the tools, but do not reach for them
 

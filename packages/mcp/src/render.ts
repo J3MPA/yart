@@ -1,4 +1,5 @@
-import type { ReviewSubmission, ReviewVerdict, Thread } from '@yart/core'
+import { currentSubmission } from '@yart/core'
+import type { ReviewVerdict, Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 /**
@@ -54,20 +55,23 @@ const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   commented: 'COMMENTED',
 }
 
-/** The verdict passed on the current head, if this round has been handed back. */
-export const currentSubmission = (review: Review): ReviewSubmission | null => {
-  for (let index = review.submissions.length - 1; index >= 0; index -= 1) {
-    const submission = review.submissions[index] as ReviewSubmission
-    if (submission.head_sha === review.head_sha) return submission
-  }
-  return null
-}
+export { currentSubmission } from '@yart/core'
 
+/**
+ * The verdict, its summary, and anything already said back to it.
+ *
+ * The id is shown because the summary can be replied to, and `reply_to_verdict`
+ * needs something to aim at when the review has been round more than once.
+ */
 export const renderVerdict = (review: Review): string => {
   const submission = currentSubmission(review)
   if (submission === null) return 'Not submitted yet.'
+
   const summary = submission.body === null ? '' : `\n\n  ${submission.body}`
-  return `Verdict: ${VERDICT_LABEL[submission.verdict]}${summary}`
+  const replies = submission.comments.map((comment) => `  ${comment.author}: ${comment.body}`)
+  const conversation = replies.length === 0 ? '' : `\n\n${replies.join('\n')}`
+
+  return `Verdict: ${VERDICT_LABEL[submission.verdict]}  [${submission.id}]${summary}${conversation}`
 }
 
 export const openThreads = (review: Review): Thread[] =>
@@ -114,5 +118,14 @@ export const renderReviewLine = (review: Review): string => {
   ].join('\n')
 }
 
-export const renderReviewWithThreads = (review: Review, url: string): string =>
-  [renderReview(review, url), '', renderThreads(openThreads(review), 'Open comments')].join('\n')
+export const renderReviewWithThreads = (review: Review, url: string): string => {
+  // The verdict and anything said back to it belong here too: an agent checking
+  // progress needs to see the conversation it is part of, not just the counts.
+  const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review)]
+  return [
+    renderReview(review, url),
+    ...verdict,
+    '',
+    renderThreads(openThreads(review), 'Open comments'),
+  ].join('\n')
+}
