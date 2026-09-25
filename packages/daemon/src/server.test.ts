@@ -175,6 +175,41 @@ describe('threads', () => {
   })
 })
 
+describe('submitting drafted comments', () => {
+  it('sends drafted comments with the verdict', async () => {
+    const review = await openReview()
+    const response = await post(`/api/reviews/${review.id}/submit`, {
+      verdict: 'changes_requested',
+      threads: [{ path: 'a.txt', line: 2, body: 'held until now' }],
+      expected_head_sha: review.head_sha,
+    })
+    expect(response.status).toBe(200)
+    const submitted = (await response.json()) as Review
+    expect(submitted.threads[0]?.comments[0]?.body).toBe('held until now')
+  })
+
+  it('rejects drafts that are not a list', async () => {
+    const review = await openReview()
+    const response = await post(`/api/reviews/${review.id}/submit`, { threads: 'nope' })
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects a draft that is not an object, rather than failing inside', async () => {
+    const review = await openReview()
+    const response = await post(`/api/reviews/${review.id}/submit`, { threads: [null] })
+    expect(response.status).toBe(400)
+  })
+
+  it('answers a stale head with a conflict', async () => {
+    const review = await openReview()
+    const response = await post(`/api/reviews/${review.id}/submit`, {
+      verdict: 'approved',
+      expected_head_sha: 'an-older-head',
+    })
+    expect(response.status).toBe(409)
+  })
+})
+
 describe('the review loop', () => {
   it('submits, advances, and re-anchors in one round trip', async () => {
     const { review, thread_id } = await openReviewWithThread()

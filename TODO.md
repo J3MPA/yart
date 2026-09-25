@@ -52,54 +52,25 @@ What remains:
   the repository's shared git directory, so every worktree sees one list and
   each review records which worktree it belongs to.
 
-## 3. Queue a review before sending it
+## 3. Pending reviews: what is left
 
-Every comment posts the moment it is written. GitHub offers a choice at that
-point — send this one comment now, or start a review and hold everything until
-it is submitted together — and yart only has the first half of it.
+Comments can now be held for a pending review and sent with the verdict in one
+write, and a directory in the tree folds away with its counts. Recorded here is
+only what those left open.
 
-Worth having because a review is drafted, not dictated. A comment written on
-file 3 is often withdrawn by the time file 20 explains it, and today that
-retraction is not possible: it has already been posted, and an agent reading
-`get_review` sees it.
-
-- A comment is either sent now or added to a pending review, chosen when writing it
-- Pending comments are visible only to their author until the review is submitted
-- Submitting sends them all with the verdict, which is already one action
-- A pending comment can be edited or dropped before it goes
-
-Two things to settle. Pending comments are per person, and nothing in the model
-is per person yet — a review has threads and that is all — so either they live
-in the browser until submitted, or the review grows a notion of whose draft a
-comment is. The browser is simpler and loses the drafts on a device change,
-which for a local tool is probably the right trade.
-
-The second is what `await_review` does with them. It waits for a submission
-already, so a pending comment it cannot see is correct behaviour rather than a
-problem — but `get_review` would still show them if they were stored on the
-review, which is the argument for keeping them out of it.
-
-## 4. Collapse directories in the file tree
-
-The tree draws every directory open, so a review that touches a deep tree gives
-back much of the scrolling the tree was meant to remove.
-
-- A directory folds away on a click, and unfolds again
-- A folded directory keeps its counts — added, removed, threads still open —
-  summed over what it hides, or folding trades scrolling for blindness
-- Folded state survives the review being advanced, since a re-review lands on
-  the same tree
-
-Two things to settle. Folded state is per person and per device, like the
-seen-ness in item 2, so it belongs in the browser rather than beside the review
-on disk — which also means deciding what to key it on, because a path that
-stops being part of the review should not leave state behind forever.
-
-The second is whether folding a directory also hides its diffs. It should not:
-the tree is an index, not a filter, and the two orders are currently the same
-list read the same way round (`orderFilesByTree`), which is a property worth
-keeping. A reader who wants a file gone wants it collapsed in place, and that is
-a different feature from folding its row in the index.
+- **Drafts live in one browser.** They are per person and per device, as
+  decided for seen-ness, so a draft written on one machine is not on another,
+  and clearing site data loses them. Fine for a local tool; worth revisiting if
+  yart is ever used by more than one person against one daemon.
+- **A stale draft can only be dropped.** A held line comment goes stale when its
+  own file changes, and the only way on is to drop it. Carrying it across with
+  the same line map threads use when a review advances would keep most of them,
+  and is the obvious next step if dropping them starts to cost real comments.
+- **The open review page still does not poll.** A reply from the agent appears
+  when the window regains focus, not while you are reading. This is the
+  remaining half of live updates in item 2, and it shows up here too: the tab
+  title can count a review as unseen while that same review is open, because
+  the list has polled and the page has not.
 
 ## Finding: agents use the tools, but do not reach for them
 

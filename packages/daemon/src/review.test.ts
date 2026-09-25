@@ -194,6 +194,112 @@ describe('comments and status', () => {
   })
 })
 
+describe('submitting a pending review', () => {
+  it('posts the drafted comments with the verdict', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const submitted = await service.submit(review.id, {
+      verdict: 'changes_requested',
+      threads: [
+        { path: 'a.txt', line: 2, body: 'rename this' },
+        { path: 'a.txt', line: 1, side: 'base', body: 'why was this kept?' },
+      ],
+    })
+
+    expect(submitted.threads.map((thread) => thread.comments[0]?.body)).toEqual([
+      'rename this',
+      'why was this kept?',
+    ])
+    expect(submitted.threads[0]?.context.line).toBe('CHANGED')
+    expect(submitted.submissions).toHaveLength(1)
+  })
+
+  it('appends drafted replies to the threads they answer', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const with_thread = await service.addThread(review.id, { path: 'a.txt', line: 2, body: 'why?' })
+    const thread_id = with_thread.threads[0]?.id as string
+    await service.addComment(review.id, thread_id, 'because', 'agent')
+
+    const submitted = await service.submit(review.id, {
+      replies: [{ thread_id, body: 'fair enough' }],
+    })
+
+    expect(submitted.threads[0]?.comments.map((comment) => comment.author)).toEqual([
+      'human',
+      'agent',
+      'human',
+    ])
+  })
+
+  it('writes nothing when one drafted comment is bad', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await expect(
+      service.submit(review.id, {
+        threads: [
+          { path: 'a.txt', line: 2, body: 'fine' },
+          { path: 'a.txt', line: 99, body: 'past the end' },
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+
+    const after = await service.get(review.id)
+    expect(after.threads).toEqual([])
+    expect(after.submissions).toEqual([])
+  })
+
+  it('refuses a reply to a thread that does not exist, and writes nothing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await expect(
+      service.submit(review.id, {
+        threads: [{ path: 'a.txt', line: 2, body: 'fine' }],
+        replies: [{ thread_id: 'nope', body: 'x' }],
+      }),
+    ).rejects.toMatchObject({ status: 404 })
+    expect((await service.get(review.id)).threads).toEqual([])
+  })
+
+  it('accepts a draft whose file is as it was when the draft was written', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const submitted = await service.submit(review.id, {
+      threads: [
+        { path: 'a.txt', line: 2, body: 'still right', blob_sha: repo.blobSha('HEAD', 'a.txt') },
+      ],
+    })
+    expect(submitted.threads).toHaveLength(1)
+  })
+
+  it('refuses a draft whose file has changed since, and writes nothing', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await expect(
+      service.submit(review.id, {
+        verdict: 'approved',
+        threads: [{ path: 'a.txt', line: 2, body: 'counted elsewhere', blob_sha: 'an-older-blob' }],
+      }),
+    ).rejects.toMatchObject({ status: 409 })
+    expect((await service.get(review.id)).submissions).toEqual([])
+  })
+
+  it('refuses a submission made against a head that is no longer current', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    await expect(
+      service.submit(review.id, {
+        verdict: 'approved',
+        threads: [{ path: 'a.txt', line: 2, body: 'numbered against an older head' }],
+        expected_head_sha: 'not-the-current-head',
+      }),
+    ).rejects.toMatchObject({ status: 409 })
+    expect((await service.get(review.id)).submissions).toEqual([])
+  })
+
+  it('accepts a submission made against the current head', async () => {
+    const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
+    const submitted = await service.submit(review.id, {
+      verdict: 'approved',
+      expected_head_sha: review.head_sha,
+    })
+    expect(submitted.submissions[0]?.verdict).toBe('approved')
+  })
+})
+
 describe('addSubmissionComment', () => {
   it('posts a reply under the verdict it answers', async () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))

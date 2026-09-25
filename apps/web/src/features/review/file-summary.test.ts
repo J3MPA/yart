@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FileDiff, Thread } from '@yart/core'
-import { summarizeFile, threadIsOn } from './file-summary'
+import { sumSummaries, summarizeFile, threadIsOn } from './file-summary'
 
 const file = (hunks: FileDiff['hunks']): FileDiff => ({
   status: 'modified',
@@ -73,5 +73,20 @@ describe('summarizeFile', () => {
   it('counts an outdated thread against the file it started on', () => {
     const summary = summarizeFile(file([]), [thread({ anchor: null, anchor_state: 'outdated' })])
     expect(summary).toMatchObject({ open_threads: 1, total_threads: 1 })
+  })
+})
+
+describe('sumSummaries', () => {
+  it('adds every count together', () => {
+    expect(
+      sumSummaries([
+        { added: 3, removed: 1, open_threads: 1, total_threads: 2 },
+        { added: 2, removed: 0, open_threads: 0, total_threads: 1 },
+      ]),
+    ).toEqual({ added: 5, removed: 1, open_threads: 1, total_threads: 3 })
+  })
+
+  it('is all zeros for nothing', () => {
+    expect(sumSummaries([])).toEqual({ added: 0, removed: 0, open_threads: 0, total_threads: 0 })
   })
 })

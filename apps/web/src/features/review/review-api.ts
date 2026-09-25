@@ -29,6 +29,10 @@ export interface SubmitReviewArgs {
   review_id: string
   verdict: ReviewVerdict
   body?: string
+  threads?: { path: string; side: DiffSide; line: number; body: string; blob_sha: string }[]
+  replies?: { thread_id: string; body: string }[]
+  /** The head on screen when submitting; the daemon refuses if it has moved. */
+  expected_head_sha?: string
 }
 
 export interface AddSubmissionCommentArgs {
@@ -123,10 +127,10 @@ export const reviewApi = createApi({
       invalidatesTags: ['Review', 'ReviewList'],
     }),
     submitReview: builder.mutation<Review, SubmitReviewArgs>({
-      query: ({ review_id, verdict, body }) => ({
+      query: ({ review_id, ...body }) => ({
         url: `/reviews/${review_id}/submit`,
         method: 'POST',
-        body: { verdict, body },
+        body,
       }),
       invalidatesTags: ['Review', 'ReviewList'],
     }),

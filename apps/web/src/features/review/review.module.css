@@ -66,16 +66,63 @@
   background-color: var(--yart-color-surface);
   border: 1px solid var(--yart-color-border);
   border-radius: var(--yart-radius-lg);
-  overflow: hidden;
+  /* clip rather than hidden: hidden makes the file a scroll container, and a
+     sticky header inside one sticks to the file instead of to the window. */
+  overflow: clip;
 }
 
+/* Sticky so the Reviewed box is in reach at the end of a long file, which is
+   where the decision to tick it is made. */
 .file_header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--yart-space-2);
   padding: var(--yart-space-2) var(--yart-space-3);
   background-color: var(--yart-color-surface-sunken);
   border-bottom: 1px solid var(--yart-color-border);
+}
+
+.file_toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  font-size: var(--yart-text-md);
+  color: var(--yart-color-text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.file_toggle:hover {
+  color: var(--yart-color-text);
+}
+
+.file_toggle:focus-visible,
+.file_reviewed input:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: 2px;
+  border-radius: var(--yart-radius-sm);
+}
+
+.file_reviewed {
+  display: flex;
+  align-items: center;
+  gap: var(--yart-space-1);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file_reviewed input {
+  accent-color: var(--yart-color-add-emphasis);
+  cursor: pointer;
 }
 
 .file_path {
@@ -575,13 +622,48 @@
 }
 
 .tree_directory {
+  display: flex;
+  align-items: baseline;
+  gap: var(--yart-space-2);
+  width: 100%;
   padding: var(--yart-space-1) var(--yart-space-3);
   font-family: var(--yart-font-mono);
   font-size: var(--yart-text-xs);
+  text-align: left;
   color: var(--yart-color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background-color: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tree_directory:hover {
+  color: var(--yart-color-text);
+  background-color: var(--yart-color-surface-sunken);
+}
+
+.tree_directory:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: -2px;
+}
+
+/* Centred on the row rather than on the text baseline, which sits too low for
+   a drawn shape. */
+.tree_chevron {
+  display: flex;
+  flex: none;
+  align-self: center;
+  font-size: var(--yart-text-sm);
+}
+
+/* Muted rather than hidden: a reviewed file is done with, but still has to be
+   findable when its conversation picks up again. */
+.tree_file_reviewed {
+  color: var(--yart-color-text-muted);
+}
+
+.tree_file_reviewed .tree_status {
+  color: var(--yart-color-add-emphasis);
 }
 
 .tree_file {
@@ -649,12 +731,11 @@
 }
 
 .tree_threads {
+  display: flex;
   flex: none;
-  padding: 0 0.4rem;
-  font-size: var(--yart-text-xs);
-  border-radius: 999px;
-  color: var(--yart-color-accent-contrast);
-  background-color: var(--yart-color-accent);
+  align-self: center;
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-accent);
 }
 
 /* Stands where the `@@` header used to: same grid as a diff row, so the
@@ -722,4 +803,83 @@
 .gap_lines {
   white-space: nowrap;
   opacity: 0.6;
+}
+
+/* A held comment reads as unsent: dashed where a sent one is solid. */
+.draft {
+  padding: var(--yart-space-3);
+  background-color: var(--yart-color-surface);
+  border: 1px dashed var(--yart-color-border-strong);
+  border-radius: var(--yart-radius-md);
+}
+
+.thread + .draft,
+.draft + .draft,
+.draft + .form,
+.thread .draft {
+  margin-top: var(--yart-space-2);
+}
+
+.draft_label {
+  padding: 0 0.45rem;
+  font-size: var(--yart-text-xs);
+  font-weight: 500;
+  border-radius: 999px;
+  color: var(--yart-color-accent);
+  background-color: color-mix(in srgb, var(--yart-color-accent) 14%, transparent);
+}
+
+.pending_list {
+  margin-bottom: var(--yart-space-3);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-md);
+}
+
+.pending_heading {
+  padding: var(--yart-space-2) var(--yart-space-3);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  border-bottom: 1px solid var(--yart-color-border);
+}
+
+.pending_item {
+  display: flex;
+  align-items: center;
+  gap: var(--yart-space-3);
+  padding: var(--yart-space-1) var(--yart-space-3);
+  font-size: var(--yart-text-sm);
+}
+
+.pending_item + .pending_item {
+  border-top: 1px solid var(--yart-color-border);
+}
+
+.pending_where {
+  flex: none;
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+}
+
+.pending_body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending_stale .pending_where {
+  color: var(--yart-color-remove-emphasis);
+}
+
+.pending_warning,
+.submit_error {
+  padding: var(--yart-space-2) var(--yart-space-3);
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-remove-emphasis);
+}
+
+.submit_error {
+  padding: var(--yart-space-2) 0 0;
 }

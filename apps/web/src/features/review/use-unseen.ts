@@ -3,6 +3,7 @@ import { agentActivity } from '@yart/core'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useListReviewsQuery } from './review-api'
 import { isUnseen } from './seen-reviews'
+import { deletedReviewsForgotten } from './local-review-slice'
 import { missingForgotten } from './seen-slice'
 
 /**
@@ -26,16 +27,22 @@ export const useUnseenReviews = (): Unseen => {
   const dispatch = useAppDispatch()
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit Query's option name
   const { data } = useListReviewsQuery(false, { pollingInterval: POLL_MS })
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit Query's option name
+  const archived = useListReviewsQuery(true, { pollingInterval: POLL_MS })
   const seen = useAppSelector((state) => state.seen)
 
   const reviews = useMemo(() => data ?? [], [data])
 
-  // Marks for reviews that have since been deleted would otherwise be kept for
-  // as long as the browser profile lives.
+  // State kept for deleted reviews would otherwise outlive them for as long as
+  // the browser profile lives. Only pruned once both lists have loaded, and
+  // against both: a review missing from the active list may just be archived,
+  // and pruning it then would throw away its drafts.
   useEffect(() => {
-    if (reviews.length === 0) return
-    dispatch(missingForgotten(reviews.map((review) => review.id)))
-  }, [reviews, dispatch])
+    if (data === undefined || archived.data === undefined) return
+    const ids = [...data, ...archived.data].map((review) => review.id)
+    dispatch(missingForgotten(ids))
+    dispatch(deletedReviewsForgotten(ids))
+  }, [data, archived.data, dispatch])
 
   return useMemo(() => {
     const ids = new Set(

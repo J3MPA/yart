@@ -101,9 +101,41 @@ export interface ListReviewsParams {
   archived?: boolean
 }
 
+/** A line comment written into a pending review, not yet a thread. */
+export interface DraftThread {
+  path: string
+  line: number
+  side?: DiffSide
+  body: string
+  /**
+   * The blob the line was counted in, when the drafter knows it.
+   *
+   * Checked against the file as it is now, because a draft can be held across
+   * rounds: the review's head having moved says nothing about this one file,
+   * but this file's blob having moved means the line may point elsewhere.
+   */
+  blob_sha?: string
+}
+
+/** A reply written into a pending review, to a thread that already exists. */
+export interface DraftReply {
+  thread_id: string
+  body: string
+}
+
 export interface SubmitParams {
   verdict?: ReviewVerdict
   body?: string | null
+  threads?: readonly DraftThread[]
+  replies?: readonly DraftReply[]
+  /**
+   * The head the submitter was looking at.
+   *
+   * When given and no longer current, the submission is refused: drafted lines
+   * were numbered against that head, and a verdict passed on it says nothing
+   * about code the submitter has not seen.
+   */
+  expected_head_sha?: string
 }
 
 export interface AddThreadParams {
@@ -210,6 +242,12 @@ export class ReviewService {
 
   async addThread(id: string, params: AddThreadParams): Promise<Review> {
     const review = await this.get(id)
+    const thread = await this.buildThread(review, params)
+    return this.persist({ ...review, threads: [...review.threads, thread] })
+  }
+
+  /** Resolves a comment's line against the review and captures its context. */
+  private async buildThread(review: Review, params: AddThreadParams): Promise<Thread> {
     const { path, line, side = 'head', body, author = 'human' } = params
 
     const file = review.files.find((candidate) => candidate.path === path)
@@ -230,9 +268,8 @@ export class ReviewService {
       created_at: nowIso(),
     }
 
-    let thread: Thread
     try {
-      thread = createThread({
+      return createThread({
         id: randomUUID(),
         anchor: { path, blob_sha, line, side },
         content,
@@ -244,8 +281,6 @@ export class ReviewService {
       if (cause instanceof RangeError) throw new ReviewError(cause.message, 400)
       throw cause
     }
-
-    return this.persist({ ...review, threads: [...review.threads, thread] })
   }
 
   private async withThread(
@@ -304,9 +339,60 @@ export class ReviewService {
     return this.persist({ ...review, submissions })
   }
 
+  /**
+   * Hands the review back, with any comments that were held for it.
+   *
+   * Everything lands in one write or none of it does. A pending review is sent
+   * as a unit, and half of one — some comments posted, the verdict not — would
+   * leave the agent reading a review its author had not finished.
+   */
   async submit(id: string, params: SubmitParams = {}): Promise<Review> {
     const review = await this.get(id)
-    const { verdict = 'commented', body = null } = params
+    const {
+      verdict = 'commented',
+      body = null,
+      threads: drafts = [],
+      replies = [],
+      expected_head_sha,
+    } = params
+
+    if (expected_head_sha !== undefined && expected_head_sha !== review.head_sha) {
+      throw new ReviewError(
+        'The review has moved on to a newer round since you loaded it. ' +
+          'Reload to see what changed before submitting.',
+        409,
+      )
+    }
+
+    const threads = [...review.threads]
+    for (const draft of drafts) {
+      if (draft.blob_sha !== undefined) {
+        const file = review.files.find((candidate) => candidate.path === draft.path)
+        const current =
+          (draft.side ?? 'head') === 'head' ? file?.head_blob_sha : file?.base_blob_sha
+        if (current !== draft.blob_sha) {
+          throw new ReviewError(
+            `The comment on ${draft.path}:${draft.line} was written on a version of the file ` +
+              'that has since changed, so its line may no longer be the one it was about.',
+            409,
+          )
+        }
+      }
+      threads.push(await this.buildThread(review, { ...draft, author: 'human' }))
+    }
+
+    for (const reply of replies) {
+      const index = threads.findIndex((thread) => thread.id === reply.thread_id)
+      if (index === -1) throw new ReviewError(`No thread with id ${reply.thread_id}`, 404)
+      const thread = threads[index] as Thread
+      const comment: Comment = {
+        id: randomUUID(),
+        author: 'human',
+        body: reply.body,
+        created_at: nowIso(),
+      }
+      threads[index] = { ...thread, comments: [...thread.comments, comment] }
+    }
 
     const submission: ReviewSubmission = {
       id: randomUUID(),
@@ -319,6 +405,7 @@ export class ReviewService {
 
     return this.persist({
       ...review,
+      threads,
       status: 'submitted',
       submissions: [...review.submissions, submission],
     })
