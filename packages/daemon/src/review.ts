@@ -279,6 +279,31 @@ export class ReviewService {
     return this.withThread(id, thread_id, (thread) => ({ ...thread, status }))
   }
 
+  /**
+   * Posts a reply under a verdict.
+   *
+   * Addressed by submission id rather than always landing on the latest,
+   * because a review that has been round several times has several verdicts and
+   * a reply belongs to the one it answers.
+   */
+  async addSubmissionComment(
+    id: string,
+    submission_id: string,
+    body: string,
+    author: CommentAuthor = 'human',
+  ): Promise<Review> {
+    const review = await this.get(id)
+    const index = review.submissions.findIndex((submission) => submission.id === submission_id)
+    if (index === -1) throw new ReviewError(`No submission with id ${submission_id}`, 404)
+
+    const comment: Comment = { id: randomUUID(), author, body, created_at: nowIso() }
+    const submissions = [...review.submissions]
+    const submission = submissions[index] as ReviewSubmission
+    submissions[index] = { ...submission, comments: [...submission.comments, comment] }
+
+    return this.persist({ ...review, submissions })
+  }
+
   async submit(id: string, params: SubmitParams = {}): Promise<Review> {
     const review = await this.get(id)
     const { verdict = 'commented', body = null } = params
@@ -287,6 +312,7 @@ export class ReviewService {
       id: randomUUID(),
       verdict,
       body: body === null || body.trim() === '' ? null : body.trim(),
+      comments: [],
       head_sha: review.head_sha,
       created_at: nowIso(),
     }

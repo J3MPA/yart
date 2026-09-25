@@ -35,7 +35,12 @@ const withDefaults = (review: Review): Review => ({
   ...review,
   title: review.title ?? placeholderTitle(review),
   head_branch: review.head_branch ?? null,
-  submissions: review.submissions ?? [],
+  // Reviews written before a submission could be replied to have no list to
+  // append to, and nothing else would put one there.
+  submissions: (review.submissions ?? []).map((submission) => ({
+    ...submission,
+    comments: submission.comments ?? [],
+  })),
   archived_at: review.archived_at ?? null,
   head_is_snapshot: review.head_is_snapshot ?? false,
 })

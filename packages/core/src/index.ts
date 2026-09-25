@@ -37,6 +37,14 @@ export {
   type DiffSection,
   type HunkRange,
 } from './hunks.ts'
+export {
+  currentSubmission,
+  latestSubmission,
+  reviewProgress,
+  threadIsAnswered,
+  type ProgressState,
+  type ReviewProgress,
+} from './progress.ts'
 export { splitLines } from './lines.ts'
 export { buildLineMap, type LineMapOptions } from './line-map.ts'
 export { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'

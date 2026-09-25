@@ -101,6 +101,7 @@ describe('tool surface', () => {
       'get_review',
       'list_reviews',
       'reply_to_thread',
+      'reply_to_verdict',
       'resolve_thread',
       'start_review',
     ])
@@ -173,6 +174,39 @@ describe('get_review and list_reviews', () => {
 
   it('reports an unknown review as a tool error', async () => {
     expect(await callExpectingError('get_review', { review_id: 'nope' })).toMatch(/no review/i)
+  })
+})
+
+describe('reply_to_verdict', () => {
+  it('answers the summary without being told which verdict it is', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanSubmits(review_id, 'changes_requested', 'Naming needs another pass.')
+
+    const rendered = await call('reply_to_verdict', {
+      review_id,
+      body: 'Renamed in the previous turn; nothing left to do.',
+    })
+    expect(rendered).toContain('Replied to the verdict')
+
+    const back = await call('get_review', { review_id })
+    expect(back).toContain('agent: Renamed in the previous turn; nothing left to do.')
+  })
+
+  it('says so when there is no verdict to answer yet', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    const rendered = await call('reply_to_verdict', { review_id, body: 'hello' })
+    expect(rendered).toContain('not been submitted yet')
+  })
+
+  it('reports an unknown verdict as a tool error rather than throwing', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanSubmits(review_id)
+    const message = await callExpectingError('reply_to_verdict', {
+      review_id,
+      submission_id: 'nope',
+      body: 'hello',
+    })
+    expect(message).toContain('nope')
   })
 })
 

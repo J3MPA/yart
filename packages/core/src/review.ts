@@ -1,4 +1,4 @@
-import type { Thread } from './types.ts'
+import type { Comment, Thread } from './types.ts'
 
 /**
  * The shapes the daemon sends over the wire.
@@ -38,6 +38,15 @@ export interface ReviewSubmission {
   verdict: ReviewVerdict
   /** Summary written when submitting, separate from any line comments. */
   body: string | null
+  /**
+   * Replies to the summary, oldest first.
+   *
+   * A verdict is the one thing in a review with nothing to say back to it, and
+   * a summary that cannot be answered pushes the conversation out of the tool
+   * and into whatever chat window the agent happens to be in. Not anchored to a
+   * line, so this is a plain list rather than a `Thread`.
+   */
+  comments: Comment[]
   /** The head this verdict was passed on; a later head reopens the review. */
   head_sha: string
   created_at: string

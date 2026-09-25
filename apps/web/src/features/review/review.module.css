@@ -46,6 +46,18 @@
   background-color: color-mix(in srgb, var(--yart-color-remove-emphasis) 16%, transparent);
 }
 
+/* The one badge meant to pull the eye across a list: the review is finished
+   with the agent and waiting on a person again. */
+.badge_ready {
+  color: var(--yart-color-add-emphasis);
+  background-color: color-mix(in srgb, var(--yart-color-add-emphasis) 18%, transparent);
+}
+
+.badge_working {
+  color: var(--yart-color-accent);
+  background-color: color-mix(in srgb, var(--yart-color-accent) 14%, transparent);
+}
+
 .badge_uncommitted {
   color: var(--yart-color-accent);
   background-color: color-mix(in srgb, var(--yart-color-accent) 16%, transparent);
@@ -456,6 +468,21 @@
   margin-top: var(--yart-space-2);
   white-space: pre-wrap;
   font-size: var(--yart-text-sm);
+}
+
+.verdict_reply {
+  margin-top: var(--yart-space-3);
+  padding-top: var(--yart-space-3);
+  border-top: 1px solid var(--yart-color-border);
+}
+
+.verdict_form {
+  margin-top: var(--yart-space-3);
+}
+
+.verdict_actions {
+  display: flex;
+  margin-top: var(--yart-space-2);
 }
 
 .back {

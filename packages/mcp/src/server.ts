@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import { latestSubmission } from '@yart/core'
 import { DaemonClient, type DaemonClientOptions } from './daemon-client.ts'
 import {
   openThreads,
@@ -155,7 +156,14 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
         const verdict = renderVerdict(submitted)
 
         if (open.length === 0) {
-          return text(`${verdict}\n\nNo open comments.`)
+          return text(
+            [
+              verdict,
+              '',
+              'No open comments.',
+              'Use reply_to_verdict to answer the summary, so it lands in the review.',
+            ].join('\n'),
+          )
         }
         return text(
           [
@@ -164,6 +172,7 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
             renderThreads(open, 'Open comments'),
             '',
             'Address these, commit, then call advance_review to re-anchor them onto your changes.',
+            'Reply on a comment with reply_to_thread, or on the verdict itself with reply_to_verdict.',
           ].join('\n'),
         )
       }),
@@ -217,6 +226,44 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
       guard(async () => {
         await daemon.replyToThread(review_id, thread_id, body)
         return text(`Replied to ${thread_id}.`)
+      }),
+  )
+
+  server.registerTool(
+    'reply_to_verdict',
+    toolConfig({
+      title: 'Reply to the review verdict',
+      description:
+        'Answer the summary the human left when they submitted the review, as ' +
+        'opposed to a comment on a line. Use this to say what you did about the ' +
+        'verdict as a whole, to report work that was already finished, or to ' +
+        'disagree with it \u2014 so the answer lands in the review rather than ' +
+        'only in the chat.',
+      input_schema: {
+        review_id: z.string(),
+        body: z.string().describe('The reply text.'),
+        submission_id: z
+          .string()
+          .optional()
+          .describe(
+            'The id in brackets beside the verdict. Defaults to the most recent ' +
+              'verdict, which is the one you were just given.',
+          ),
+      },
+    }),
+    async ({ review_id, body, submission_id }) =>
+      guard(async () => {
+        let target = submission_id
+        if (target === undefined) {
+          const review = await daemon.getReview(review_id)
+          const submission = latestSubmission(review)
+          if (submission === null) {
+            return text('This review has not been submitted yet, so there is no verdict to answer.')
+          }
+          target = submission.id
+        }
+        await daemon.replyToVerdict(review_id, target, body)
+        return text(`Replied to the verdict on ${review_id}.`)
       }),
   )
 

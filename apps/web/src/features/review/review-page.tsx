@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { currentSubmission } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
+import { CommentForm } from './comment-form'
 import { DiffFile } from './diff-file'
 import type { PendingComment } from './diff-row'
 import { scrollToFile } from './file-anchors'
@@ -8,9 +10,13 @@ import { FileSidebar } from './file-sidebar'
 import { orderFilesByTree } from './file-tree'
 import { useActiveFile } from './use-active-file'
 import { describeRange, relativeTime, VERDICT_LABEL } from './format'
-import { useGetReviewDiffQuery, useGetReviewQuery, useSubmitReviewMutation } from './review-api'
+import {
+  useAddSubmissionCommentMutation,
+  useGetReviewDiffQuery,
+  useGetReviewQuery,
+  useSubmitReviewMutation,
+} from './review-api'
 import { describeQueryError } from './query-error'
-import { currentSubmission } from './submission'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import styles from './review.module.css'
 
@@ -40,6 +46,8 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const [submitReview, submit_state] = useSubmitReviewMutation()
   const [pending, setPending] = useState<PendingComment | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [answering, setAnswering] = useState(false)
+  const [addSubmissionComment, answer_state] = useAddSubmissionCommentMutation()
   const [summary, setSummary] = useState('')
 
   const review = review_query.data
@@ -120,6 +128,38 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
             {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
           </div>
           {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
+
+          {submission.comments.map((comment) => (
+            <div key={comment.id} className={styles.verdict_reply}>
+              <div className={styles.comment_author}>{comment.author}</div>
+              <div className={styles.comment_body}>{comment.body}</div>
+            </div>
+          ))}
+
+          {answering ? (
+            <div className={styles.verdict_form}>
+              <CommentForm
+                placeholder="Reply to this verdict"
+                submit_label="Reply"
+                pending={answer_state.isLoading}
+                onCancel={() => setAnswering(false)}
+                onSubmit={(body) => {
+                  void addSubmissionComment({
+                    review_id,
+                    submission_id: submission.id,
+                    body,
+                  })
+                  setAnswering(false)
+                }}
+              />
+            </div>
+          ) : (
+            <div className={styles.verdict_actions}>
+              <Button tone="quiet" onClick={() => setAnswering(true)}>
+                Reply
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

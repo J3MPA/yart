@@ -200,6 +200,24 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
     )
   })
 
+  /** A reply under a verdict, which unlike a line comment has no thread. */
+  app.post('/api/reviews/:id/submissions/:submission_id/comments', async (context) => {
+    const body = await context.req.json<{ body?: string; author?: CommentAuthor }>()
+    if (typeof body.body !== 'string' || body.body.trim() === '') {
+      throw new ReviewError('A comment body is required', 400)
+    }
+
+    return context.json(
+      await service.addSubmissionComment(
+        context.req.param('id'),
+        context.req.param('submission_id'),
+        body.body,
+        body.author,
+      ),
+      201,
+    )
+  })
+
   app.post('/api/reviews/:id/submit', async (context) => {
     // Annotated rather than asserted: a missing body is a valid submission, so
     // the empty object has to widen to the parameter type without a cast.

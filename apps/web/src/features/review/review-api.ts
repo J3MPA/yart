@@ -31,6 +31,12 @@ export interface SubmitReviewArgs {
   body?: string
 }
 
+export interface AddSubmissionCommentArgs {
+  review_id: string
+  submission_id: string
+  body: string
+}
+
 export interface SetThreadStatusArgs {
   review_id: string
   thread_id: string
@@ -108,6 +114,14 @@ export const reviewApi = createApi({
       }),
       invalidatesTags: ['Review'],
     }),
+    addSubmissionComment: builder.mutation<Review, AddSubmissionCommentArgs>({
+      query: ({ review_id, submission_id, body }) => ({
+        url: `/reviews/${review_id}/submissions/${submission_id}/comments`,
+        method: 'POST',
+        body: { body },
+      }),
+      invalidatesTags: ['Review', 'ReviewList'],
+    }),
     submitReview: builder.mutation<Review, SubmitReviewArgs>({
       query: ({ review_id, verdict, body }) => ({
         url: `/reviews/${review_id}/submit`,
@@ -128,6 +142,7 @@ export const {
   useGetReviewFileQuery,
   useAddThreadMutation,
   useAddCommentMutation,
+  useAddSubmissionCommentMutation,
   useSetThreadStatusMutation,
   useSubmitReviewMutation,
 } = reviewApi
