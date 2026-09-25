@@ -28,6 +28,8 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '      --no-autostart Fail instead of starting a daemon',
         '  -h, --help         Show this message',
         '',
+        'A new review opens in your browser. Set YART_NO_BROWSER=1 to stop that.',
+        '',
       ].join('\n'),
     )
     return

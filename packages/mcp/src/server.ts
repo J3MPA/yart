@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { latestSubmission } from '@yart/core'
 import { DaemonClient, type DaemonClientOptions } from './daemon-client.ts'
+import { browserOpeningEnabled, openInBrowser } from './open-browser.ts'
 import {
   openThreads,
   renderReview,
@@ -54,9 +55,23 @@ const guard = async (run: () => Promise<ToolResult>): Promise<ToolResult> => {
   }
 }
 
-export const createMcpServer = (options: DaemonClientOptions = {}): McpServer => {
+export interface McpServerOptions extends DaemonClientOptions {
+  /**
+   * Shows a new review to the person who has to read it.
+   *
+   * Injectable so the tests can watch it being called without a window opening
+   * on whoever is running them. Whether it is called at all is the
+   * environment's business, not this option's.
+   */
+  openBrowser?: (url: string) => void
+}
+
+export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
   const server = new McpServer({ name: 'yart', version: '0.0.0' })
+
+  const openBrowser = options.openBrowser ?? openInBrowser
+  const opening_enabled = browserOpeningEnabled()
 
   server.registerTool(
     'start_review',
@@ -97,21 +112,30 @@ export const createMcpServer = (options: DaemonClientOptions = {}): McpServer =>
     async ({ base, head, title }) =>
       guard(async () => {
         const review = await daemon.createReview(base, head, title)
+        const url = daemon.reviewUrl(review.id)
+
         if (review.files.length === 0) {
           return text(
             [
-              renderReview(review, daemon.reviewUrl(review.id)),
+              renderReview(review, url),
               '',
               'Nothing differs between those two points, so there is nothing to review.',
               'If you meant to review committed work, pass a base such as HEAD~1 or main.',
             ].join('\n'),
           )
         }
+
+        // An empty review is not worth a window, which is why this sits after
+        // the check above rather than beside the call that created it.
+        if (opening_enabled) openBrowser(url)
+
         return text(
           [
-            renderReview(review, daemon.reviewUrl(review.id)),
+            renderReview(review, url),
             '',
-            'Ask the human to open that URL and review. Then call await_review with this id.',
+            opening_enabled
+              ? 'Opened in their browser. Tell them it is up, then call await_review with this id.'
+              : 'Ask the human to open that URL and review. Then call await_review with this id.',
           ].join('\n'),
         )
       }),

@@ -1,4 +1,6 @@
 import { Logo } from '@/components/logo'
+import { useUnseenReviews } from '@/features/review/use-unseen'
+import { useUnseenSignal } from '@/features/review/use-unseen-signal'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
 import styles from './app.module.css'
@@ -16,6 +18,10 @@ const reviewIdFromPath = (pathname: string): string | null => {
 
 export const App = () => {
   const review_id = reviewIdFromPath(window.location.pathname)
+  // Held here rather than in the list, because the tab has to carry the count
+  // while a single review is open too.
+  const unseen = useUnseenReviews()
+  useUnseenSignal(unseen.count)
 
   return (
     <main className={styles.shell}>
@@ -26,7 +32,7 @@ export const App = () => {
             yart
           </h1>
           <p className={styles.tagline}>Local, GitHub-style code review for AI-generated diffs.</p>
-          <ReviewList />
+          <ReviewList unseen={unseen.ids} />
         </>
       ) : (
         <ReviewPage review_id={review_id} />

@@ -1,4 +1,5 @@
-import type { ReviewProgress, ReviewVerdict } from '@yart/core'
+import { latestSubmission, reviewProgress } from '@yart/core'
+import type { Review, ReviewVerdict } from '@yart/core'
 
 /** Enough of a hash to be recognisable, which is all a list needs. */
 export const shortSha = (sha: string): string => sha.slice(0, 8)
@@ -50,19 +51,48 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   commented: 'commented',
 }
 
+export type StatusTone = 'plain' | 'approved' | 'changes' | 'working' | 'ready'
+
+export interface ReviewStatus {
+  label: string
+  tone: StatusTone
+  /** The detail behind the label, for a tooltip; null when the label is all there is. */
+  detail: string | null
+}
+
 /**
- * What the agent has done since the review was handed back, in a few words.
+ * Where a review stands, as one label.
  *
- * Null while nothing has happened. A badge that is always there is not a
- * signal, and the point of this one is to be worth glancing at.
+ * The verdict and the agent's progress used to be two badges, but they are one
+ * fact read at different moments: a verdict is given, then the agent responds
+ * to it. Once the agent has moved, what you decided matters less than whose
+ * turn it is — and the verdict is at the top of the page you are about to open.
+ *
+ * Built from the latest verdict rather than the current head's, because an
+ * agent advancing the review is exactly when this should change, and the
+ * current head has no verdict yet at that point.
  */
-export const describeProgress = (progress: ReviewProgress | null): string | null => {
-  if (progress === null || progress.state === 'idle') return null
-  if (progress.state === 'ready') return 'ready for re-review'
+export const describeStatus = (review: Review): ReviewStatus => {
+  const progress = reviewProgress(review)
+  const submission = latestSubmission(review)
+
+  if (progress === null || submission === null) {
+    return { label: 'open', tone: 'plain', detail: null }
+  }
 
   const total = progress.answered_threads + progress.awaiting_threads
-  // Changes with nothing answered yet is the one case a ratio describes badly:
-  // "0 of 3 answered" reads as stalled when work has in fact started.
-  if (progress.answered_threads === 0) return 'changes started'
-  return `${progress.answered_threads} of ${total} answered`
+  const answered = total === 0 ? null : `${progress.answered_threads} of ${total} comments answered`
+
+  if (progress.state === 'ready') return { label: 'your turn', tone: 'ready', detail: answered }
+  if (progress.state === 'in_progress') {
+    return { label: 'agent working', tone: 'working', detail: answered }
+  }
+
+  const tone: StatusTone =
+    submission.verdict === 'approved'
+      ? 'approved'
+      : submission.verdict === 'changes_requested'
+        ? 'changes'
+        : 'plain'
+  return { label: VERDICT_LABEL[submission.verdict], tone, detail: null }
 }

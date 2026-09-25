@@ -45,6 +45,7 @@ export {
   type ProgressState,
   type ReviewProgress,
 } from './progress.ts'
+export { agentActivity } from './activity.ts'
 export { splitLines } from './lines.ts'
 export { buildLineMap, type LineMapOptions } from './line-map.ts'
 export { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'

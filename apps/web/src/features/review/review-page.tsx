@@ -1,13 +1,15 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { currentSubmission } from '@yart/core'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { agentActivity, currentSubmission } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
+import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { DiffFile } from './diff-file'
 import type { PendingComment } from './diff-row'
 import { scrollToFile } from './file-anchors'
 import { FileSidebar } from './file-sidebar'
 import { orderFilesByTree } from './file-tree'
+import { reviewSeen } from './seen-slice'
 import { useActiveFile } from './use-active-file'
 import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import {
@@ -50,7 +52,16 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const [addSubmissionComment, answer_state] = useAddSubmissionCommentMutation()
   const [summary, setSummary] = useState('')
 
+  const dispatch = useAppDispatch()
   const review = review_query.data
+
+  // Looking at the review is what marks it seen, and it stays seen while it is
+  // open: anything that arrives now arrives in front of someone reading it.
+  useEffect(() => {
+    if (review === undefined) return
+    dispatch(reviewSeen({ review_id: review.id, activity: agentActivity(review) }))
+  }, [review, dispatch])
+
   const threads_by_anchor = useMemo(
     () => groupThreadsByAnchor(review?.threads ?? []),
     [review?.threads],
@@ -102,9 +113,6 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           {review.head_branch === null ? '' : `${review.head_branch} · `}
           {describeRange(review)} · round {review.rounds.length} · {relativeTime(review.created_at)}
         </span>
-        {review.head_is_snapshot && (
-          <span className={[styles.badge, styles.badge_uncommitted].join(' ')}>uncommitted</span>
-        )}
         <span className={styles.spacer} />
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}

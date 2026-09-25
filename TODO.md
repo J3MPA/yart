@@ -31,25 +31,17 @@ Two pieces of this are done:
 
 What remains:
 
-- **A notification that the agent has answered.** This is the piece that makes
-  working in several chats worthwhile, and it is the one to build first: without
-  it there is nothing to switch to a tab _for_. A dot on the review in the list,
-  and something visible from outside the page — the document title, or the
-  favicon — so it can be noticed while attention is elsewhere.
-
-  What counts as answered is now decided and implemented as `reviewProgress`;
-  the list shows it as a badge. What is missing is the part visible from outside
-  the page — the document title, or the favicon — and the signal clearing once
-  the review has been looked at.
-
-  Seen-ness is per person and per device rather than a property of the review, so
-  it belongs in the browser rather than beside the review on disk — which also
-  keeps an agent from being able to mark its own work as read.
-
-- **Live updates.** The dot only appears on a refresh today, because the UI
-  refetches when the window regains focus and not otherwise. For it to appear
-  while you are looking elsewhere the daemon has to push, over server-sent
-  events, or the list has to be polled.
+- **A notification that the agent has answered** now works: a dot in the list, a
+  count in the tab title and a dot on the favicon, cleared by opening the
+  review. Seen-ness is kept in the browser, keyed on `agentActivity` rather than
+  on a timestamp so that writing a comment does not mark a review unread to the
+  person who wrote it.
+- **Live updates** are done for the list, which is polled every ten seconds so
+  the signal arrives without the window being focused. The open review page is
+  not: it still refetches on focus only, so a comment answered while you are
+  reading the diff appears when you come back to the window rather than at once.
+  Server-sent events would cover both and would let the poll go; worth doing
+  when the page being stale in front of you starts to bite.
 - **Tabs themselves**, once there is something worth switching between.
 - **Replying to a submission** now works: a submission carries its own comments,
   answered from the UI or with the `reply_to_verdict` tool.
