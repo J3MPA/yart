@@ -5,14 +5,158 @@ Planned work, roughly in the order it should happen.
 Findings recorded here were verified rather than assumed, so they do not have to
 be rediscovered when the work starts.
 
-## 1. Diff any two arbitrary points
+## 1. An installable desktop app
+
+yart has two kinds of people using it, and today it only serves the first:
+
+- **Developing yart.** Clone it, `pnpm install`, and `pnpm dev:actual` runs the
+  daemon and Vite against yart's own branch with hot reload. This stays as it is.
+- **Using yart.** One command installs it, one updates it, one removes it, and
+  nothing about the workspace, pnpm or Node is visible. This is what is missing.
+
+The user path is a desktop app, installed with `curl` from GitHub Releases. The
+reason for an app is control over the window: one window that a new review is
+shown in, rather than a browser tab opened per review, plus a dock badge and a
+notification when the agent answers. The reason for `curl` is covered under
+install below.
+
+**First, a finding that has to be fixed before any of this: a daemon serves one
+repository.** Its repository is fixed by `--repo` at start, and nothing in a
+request names another. The MCP server reuses whatever daemon answers on 7777,
+without checking which repository it serves. So with yart registered for every
+project, a review asked for in repository B while a daemon started in
+repository A is still running is a review of A's working tree — with no error.
+That is a live bug today, found by reading the code rather than by hitting it,
+and an installed app with one daemon would hit it constantly.
+
+The fix, which comes first whatever happens to the rest of this plan:
+
+- Requests that create a review name the repository they are for, and the MCP
+  server sends the one it was started in.
+- The daemon keeps one `ReviewService` per repository, created on first use and
+  keyed by the shared git directory so that worktrees still share one list.
+- It keeps a small registry of repositories it has seen, so the review list can
+  span all of them and a review id can be found without knowing its repository.
+- `/health` reports the daemon's version, so a client can tell when the daemon
+  it found is older than itself — which after an update it will be.
+
+**The prototype.** A throwaway build that answers the questions everything else
+depends on. None of them is verified; each is written as what has to be true.
+
+1. An ad-hoc signed Electron app, zipped, uploaded to a GitHub release and
+   downloaded with `curl`, opens on Apple Silicon with no Gatekeeper prompt.
+2. The same zip downloaded in a browser _is_ blocked — confirming the one thing
+   the install instructions have to warn about.
+3. The dock badge works on an app with only an ad-hoc signature.
+4. Notifications work on the same app. This is the one most likely to fail, and
+   it matters: it is half the reason for an app.
+5. `open yart://reviews/<id>` brings the running window forward and navigates
+   it, and launches the app first when it is not running.
+6. The daemon and MCP server, bundled to JavaScript, run on Electron's own Node
+   (`ELECTRON_RUN_AS_NODE`) and can still spawn `git`.
+7. What it costs: the zip's size, and how long a build takes.
+
+None of this needs a public release. What decides the first two is which program
+downloads the zip — `curl` or a browser — not where it is hosted, so serving it
+from a local web server and fetching it both ways is a faithful test. The
+outcomes go in this file as findings, like the ones below. If 1 fails, the
+fallback is `yart init` building the app on the user's machine, which is never
+quarantined. If 3 and 4 both fail, most of the case for an app goes with them,
+and the browser with a single-tab fix is the better answer.
+
+**Developer mode.** The developer and the user can be the same person on the same
+machine, so the two must not reach each other's daemon.
+
+- `pnpm dev:actual` uses its own port and only ever reuses a daemon from the same
+  checkout. Today it reuses anything on 7777, which with an installed yart
+  would be serving the installed version's code.
+- `pnpm dev:desktop` runs the Electron shell against the Vite dev server, so the
+  shell can be worked on with the UI still hot-reloading.
+- Which `yart-mcp` an agent talks to is decided by the MCP registration. A
+  project-scoped registration in the yart repository pointing at the clone would
+  let the installed one stay registered for everything else — if a project
+  scope does win over a user scope of the same name. Unverified.
+
+**The app.** A new `apps/desktop`.
+
+- One window, loading the UI the daemon serves. A second launch focuses it rather
+  than opening another.
+- `yart://reviews/<id>` links. `start_review` opens one when the app is installed
+  and falls back to the browser when it is not.
+- The app starts the daemon if none is running, with the same reuse rules the MCP
+  server uses, so either can come up first.
+- The dock badge carries the unseen count the UI already computes, and a review
+  turning `your turn` raises a notification.
+- The app carries the command line tools inside it. `yart` and `yart-mcp` are
+  small scripts that run the bundled JavaScript on Electron's Node, so a user
+  needs neither Node nor npm.
+- Seen state and drafts live in the app's own storage, separate from any
+  browser's. Moving between the two starts them afresh; worth saying in the docs.
+
+**Build and release.**
+
+- The daemon and MCP entry points are bundled to JavaScript with esbuild. That
+  retires `--experimental-strip-types` for everyone but developers.
+- One zip per architecture, Apple Silicon and Intel, each ad-hoc signed, each
+  with a SHA-256 checksum beside it. A zip rather than a disk image: a disk image
+  is made for dragging an app into place by hand, and is awkward to script.
+- A GitHub Actions workflow on a `v*` tag builds on macOS runners and publishes
+  the release, with `install.sh` and `uninstall.sh` as assets of it so each
+  script is the one that matches its release.
+
+**Install, update, uninstall.** Nothing needs `sudo`; everything lives in the
+user's own directories.
+
+- `curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh`
+  detects the architecture, downloads the zip and its checksum, verifies it,
+  and puts the app in `~/Applications` and the two commands in `~/.local/bin`.
+  It says so if that directory is not on `PATH`, and prints the `claude mcp add`
+  command with an absolute path, because Claude starts MCP servers with its own
+  environment and may not share the shell's `PATH`.
+- Installing over an existing install replaces it, so the install script is
+  also the update. `yart up` runs it for the latest release, then restarts the
+  daemon and the app so neither keeps running the old code.
+- `uninstall.sh`, and `yart uninstall` which runs it, stops the app and the
+  daemon, removes the app, and removes the two commands only if they still point
+  into it. It prints the `claude mcp remove` command. It keeps the app's own
+  data — seen state and drafts — unless given `--purge`, since a draft is
+  something a person wrote. It never touches reviews: those live in each
+  repository's `.git/yart`, belong to that repository, and the script says where.
+  Running it twice is harmless.
+
+Why `curl` and not a download link or Homebrew: macOS only checks an app with
+Gatekeeper when the file has been marked as quarantined, and browsers mark what
+they download while `curl` does not. So an app installed with `curl` needs only
+the free, local ad-hoc signature to open, where one downloaded in a browser
+would need a paid Developer ID and notarization. That is a long-standing
+behaviour many installers rely on, but it is a convention rather than a promise
+from Apple. Homebrew's main repository now refuses casks that fail Gatekeeper;
+a tap of our own could still carry the app later, on top of the same release.
+
+**Order of work.**
+
+1. One daemon for every repository. Fixes a live bug, and everything else needs it.
+2. The prototype, and its findings written down here.
+3. Developer mode: its own port, and `pnpm dev:desktop`.
+4. The app.
+5. Bundling, packaging, and the release workflow.
+6. The install, update and uninstall scripts.
+7. The README split into using yart and developing it.
+
+Left out on purpose: Linux and Windows, though Electron would carry both —
+`install.sh` refuses anything but macOS for now. And the Claude Code plugin,
+which would sit on top of this rather than replace it: a plugin could register
+the MCP server pointing at the installed `yart-mcp`, and carry the slash command
+and the review-on-stop hook from the finding below.
+
+## 2. Diff any two arbitrary points
 
 A review can now be opened over any commit or tree, including a bare tree hash,
 so ad-hoc comparisons are possible through the API. What is missing is a way to
 ask for one: the UI offers no way to pick two revisions, and the MCP tools take
 them but nothing suggests the possibility.
 
-## 2. Concurrent reviews: naming, tabs, and approval
+## 3. Concurrent reviews: naming, tabs, and approval
 
 The goal: work in several chats at once, see that an agent has answered comments
 in one of them, switch to it, resolve, and approve the diff — a local pull
@@ -52,7 +196,7 @@ What remains:
   the repository's shared git directory, so every worktree sees one list and
   each review records which worktree it belongs to.
 
-## 3. Pending reviews: what is left
+## 4. Pending reviews: what is left
 
 Comments can now be held for a pending review and sent with the verdict in one
 write, and a directory in the tree folds away with its counts. Recorded here is
@@ -68,7 +212,7 @@ only what those left open.
   and is the obvious next step if dropping them starts to cost real comments.
 - **The open review page still does not poll.** A reply from the agent appears
   when the window regains focus, not while you are reading. This is the
-  remaining half of live updates in item 2, and it shows up here too: the tab
+  remaining half of live updates in item 3, and it shows up here too: the tab
   title can count a review as unseen while that same review is open, because
   the list has polled and the page has not.
 
@@ -146,40 +290,6 @@ stop looking like the rest of the interface.
 Weight is worth watching: grammars and themes are large, and this is a local tool
 that should stay quick to start. Loading a grammar only for the languages a
 review actually contains would be the way to keep it honest.
-
-## Discovery: how this gets distributed
-
-Not a task yet. Today the commands are linked from a clone, which works for
-whoever wrote them and nobody else. Two channels look plausible and they are not
-alternatives — the second would sit on top of the first.
-
-**An npm package.** The tool itself: the daemon, the UI, and the MCP server, for
-anyone and any agent. Questions to answer before committing to it:
-
-- A single published package rather than the four in this workspace, since
-  `workspace:*` dependencies cannot be published and a consumer should not see
-  the split.
-- A real build. `--experimental-strip-types` is reasonable for a clone and not
-  something to ask of a stranger, so entry points would be bundled to JavaScript.
-- `apps/web/dist` has to ship, or the daemon serves its "not built" page.
-- The name. `yart` is parked on npm at a couple of downloads a week, so this
-  would be scoped.
-
-**A Claude Code plugin.** The integration, for the audience most likely to want
-it. `claude plugin install` in place of the `claude mcp add` step, with the
-plugin declaring the MCP server itself. Plugins appear to carry slash commands
-and hooks as well, which would make two things from the original sketch
-shippable: a `/review` command, and a hook that opens a review when an agent
-finishes a turn against a dirty tree — so review becomes part of the turn rather
-than something to remember.
-
-What is actually unknown: the plugin manifest format, whether it can declare an
-MCP server and a hook, and how a marketplace is published. The CLI exists and
-takes marketplaces; nothing beyond that has been checked. Read the documentation
-before planning around it.
-
-Worth deciding what the tool is for first. Distribution is cheap to add and hard
-to take back, and nobody has used this but its author.
 
 ## Smaller things
 
