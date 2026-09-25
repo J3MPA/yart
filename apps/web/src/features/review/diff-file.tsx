@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   gapLines,
   gapSlice,
@@ -10,8 +10,10 @@ import {
   type FileDiff,
   type Thread,
 } from '@yart/core'
+import { Chevron } from '@/components/chevron'
 import { CommentThread } from './comment-thread'
-import { DiffRow, type PendingComment, type RowTarget } from './diff-row'
+import { DiffRow, type ComposeTarget, type RowTarget } from './diff-row'
+import type { Drafting } from './drafts'
 import { fileAnchorId } from './file-anchors'
 import { EXPAND_STEP, GapBand, type GapEdge } from './gap-band'
 import { useAddThreadMutation, useGetReviewFileQuery } from './review-api'
@@ -19,15 +21,21 @@ import { describeQueryError } from './query-error'
 import { outdatedThreadsForPath } from './thread-anchors'
 import styles from './review.module.css'
 
-export type { PendingComment } from './diff-row'
+export type { ComposeTarget } from './diff-row'
 
 export interface DiffFileProps {
   review_id: string
   file: FileDiff
   threads: readonly Thread[]
   threads_by_anchor: ReadonlyMap<string, Thread[]>
-  pending: PendingComment | null
-  onPendingChange: (pending: PendingComment | null) => void
+  drafting: Drafting
+  composing: ComposeTarget | null
+  /** Whether this file is marked reviewed at its current content. */
+  reviewed: boolean
+  /** False when the file has no blob to be reviewed against, and so cannot be. */
+  can_review: boolean
+  onComposingChange: (composing: ComposeTarget | null) => void
+  onReviewedChange: (reviewed: boolean) => void
 }
 
 /** How much of one collapsed run has been opened, from each end. */
@@ -43,10 +51,20 @@ export const DiffFile = ({
   file,
   threads,
   threads_by_anchor,
-  pending,
-  onPendingChange,
+  drafting,
+  composing,
+  reviewed,
+  can_review,
+  onComposingChange,
+  onReviewedChange,
 }: DiffFileProps) => {
   const [addThread, add_state] = useAddThreadMutation()
+  const section_ref = useRef<HTMLElement>(null)
+  // Null until someone opens or closes the file by hand, so that a file follows
+  // its reviewed mark — closed once reviewed, open again if the agent changes it
+  // — without a reader's own choice being overridden while they look at it.
+  const [collapse_choice, setCollapseChoice] = useState<boolean | null>(null)
+  const collapsed = collapse_choice ?? reviewed
   const [expanded, setExpanded] = useState<ReadonlyMap<number, GapExpansion>>(new Map())
 
   const outdated = outdatedThreadsForPath(threads, file.path)
@@ -90,86 +108,122 @@ export const DiffFile = ({
       review_id={review_id}
       file_path={file.path}
       line={line}
+      file_blobs={file}
       threads_by_anchor={threads_by_anchor}
-      pending={pending}
+      drafting={drafting}
+      composing={composing}
       adding={add_state.isLoading}
-      onPendingChange={onPendingChange}
+      onComposingChange={onComposingChange}
       onAddThread={addThreadAt}
     />
   )
 
+  const markReviewed = (next: boolean) => {
+    if (!can_review) return
+    setCollapseChoice(null)
+    onReviewedChange(next)
+    // Ticking the box at the bottom of a long file collapses it from under the
+    // reader, and without this the page would be left somewhere past it.
+    if (next) {
+      requestAnimationFrame(() => section_ref.current?.scrollIntoView({ block: 'nearest' }))
+    }
+  }
+
   return (
-    <section className={styles.file} id={fileAnchorId(file.path)}>
+    <section className={styles.file} id={fileAnchorId(file.path)} ref={section_ref}>
       <header className={styles.file_header}>
+        <button
+          type="button"
+          className={styles.file_toggle}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${file.path}`}
+          onClick={() => setCollapseChoice(!collapsed)}
+        >
+          <Chevron expanded={!collapsed} />
+        </button>
         <span className={styles.file_status}>{file.status}</span>
         <span className={styles.file_path}>{file.path}</span>
         {file.old_path !== null && <span className={styles.file_status}>was {file.old_path}</span>}
+        <span className={styles.spacer} />
+        <label className={styles.file_reviewed}>
+          <input
+            type="checkbox"
+            checked={reviewed}
+            disabled={!can_review}
+            onChange={(event) => markReviewed(event.target.checked)}
+          />
+          Reviewed
+        </label>
       </header>
 
-      {outdated.length > 0 && (
-        <div className={styles.outdated}>
-          <div className={styles.outdated_label}>
-            {outdated.length} comment{outdated.length === 1 ? '' : 's'} on lines that no longer
-            exist
-          </div>
-          {outdated.map((thread) => (
-            <div key={thread.id}>
-              <div className={styles.outdated_context}>{thread.context.line}</div>
-              <CommentThread review_id={review_id} thread={thread} />
+      {!collapsed && (
+        <>
+          {outdated.length > 0 && (
+            <div className={styles.outdated}>
+              <div className={styles.outdated_label}>
+                {outdated.length} comment{outdated.length === 1 ? '' : 's'} on lines that no longer
+                exist
+              </div>
+              {outdated.map((thread) => (
+                <div key={thread.id}>
+                  <div className={styles.outdated_context}>{thread.context.line}</div>
+                  <CommentThread review_id={review_id} thread={thread} drafting={drafting} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          {file.is_binary && <p className={styles.binary}>Binary file — not shown.</p>}
+
+          {sections.map((section, index) => {
+            if (section.kind === 'hunk') {
+              return (
+                <div key={`hunk-${section.index}`}>
+                  {section.hunk.lines.map((line, line_index) =>
+                    row(line, `hunk-${section.index}-${line_index}`),
+                  )}
+                </div>
+              )
+            }
+
+            const { gap } = section
+            const state = expanded.get(gap.head_start) ?? CLOSED
+            const hidden = gap.length - state.top - state.bottom
+            const awaiting = state.top + state.bottom > 0 && head_lines === null
+            const failed = contents_query.isError
+              ? describeQueryError(contents_query.error).message
+              : null
+
+            const top = head_lines === null ? [] : gapLines(gapSlice(gap, 0, state.top), head_lines)
+            const bottom =
+              head_lines === null
+                ? []
+                : gapLines(gapSlice(gap, gap.length - state.bottom, state.bottom), head_lines)
+
+            // The band carries the following hunk's heading, so it has to know what
+            // comes next; a run at the end of a file has nothing to name.
+            const next = sections[index + 1]
+            const heading =
+              next === undefined || next.kind !== 'hunk' ? '' : hunkSectionHeading(next.hunk.header)
+
+            return (
+              <div key={`gap-${gap.head_start}`}>
+                {top.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
+                {(hidden > 0 || awaiting || failed !== null) && (
+                  <GapBand
+                    gap={gapSlice(gap, state.top, hidden)}
+                    heading={heading}
+                    loading={awaiting && failed === null}
+                    error={failed}
+                    onExpand={(edge) => expand(gap, edge)}
+                  />
+                )}
+                {bottom.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
+              </div>
+            )
+          })}
+        </>
       )}
-
-      {file.is_binary && <p className={styles.binary}>Binary file — not shown.</p>}
-
-      {sections.map((section, index) => {
-        if (section.kind === 'hunk') {
-          return (
-            <div key={`hunk-${section.index}`}>
-              {section.hunk.lines.map((line, line_index) =>
-                row(line, `hunk-${section.index}-${line_index}`),
-              )}
-            </div>
-          )
-        }
-
-        const { gap } = section
-        const state = expanded.get(gap.head_start) ?? CLOSED
-        const hidden = gap.length - state.top - state.bottom
-        const awaiting = state.top + state.bottom > 0 && head_lines === null
-        const failed = contents_query.isError
-          ? describeQueryError(contents_query.error).message
-          : null
-
-        const top = head_lines === null ? [] : gapLines(gapSlice(gap, 0, state.top), head_lines)
-        const bottom =
-          head_lines === null
-            ? []
-            : gapLines(gapSlice(gap, gap.length - state.bottom, state.bottom), head_lines)
-
-        // The band carries the following hunk's heading, so it has to know what
-        // comes next; a run at the end of a file has nothing to name.
-        const next = sections[index + 1]
-        const heading =
-          next === undefined || next.kind !== 'hunk' ? '' : hunkSectionHeading(next.hunk.header)
-
-        return (
-          <div key={`gap-${gap.head_start}`}>
-            {top.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
-            {(hidden > 0 || awaiting || failed !== null) && (
-              <GapBand
-                gap={gapSlice(gap, state.top, hidden)}
-                heading={heading}
-                loading={awaiting && failed === null}
-                error={failed}
-                onExpand={(edge) => expand(gap, edge)}
-              />
-            )}
-            {bottom.map((line) => row(line, `gap-${line.head_line ?? 0}`))}
-          </div>
-        )
-      })}
     </section>
   )
 }

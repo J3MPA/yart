@@ -2,21 +2,24 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { agentActivity, currentSubmission } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
-import { useAppDispatch } from '@/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { DiffFile } from './diff-file'
-import type { PendingComment } from './diff-row'
+import type { ComposeTarget } from './diff-row'
+import { groupDrafts, type Drafting } from './drafts'
 import { scrollToFile } from './file-anchors'
 import { FileSidebar } from './file-sidebar'
 import { orderFilesByTree } from './file-tree'
+import { directoryToggled, fileReviewedSet } from './local-review-slice'
+import { isReviewed, localFor, reviewBlob } from './local-review-state'
 import { reviewSeen } from './seen-slice'
+import { SubmitPanel } from './submit-panel'
 import { useActiveFile } from './use-active-file'
 import { describeRange, relativeTime, VERDICT_LABEL } from './format'
 import {
   useAddSubmissionCommentMutation,
   useGetReviewDiffQuery,
   useGetReviewQuery,
-  useSubmitReviewMutation,
 } from './review-api'
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
@@ -45,8 +48,7 @@ const Missing = ({ children }: { children: ReactNode }) => (
 export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const review_query = useGetReviewQuery(review_id)
   const diff_query = useGetReviewDiffQuery(review_id)
-  const [submitReview, submit_state] = useSubmitReviewMutation()
-  const [pending, setPending] = useState<PendingComment | null>(null)
+  const [composing, setComposing] = useState<ComposeTarget | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [answering, setAnswering] = useState(false)
   const [addSubmissionComment, answer_state] = useAddSubmissionCommentMutation()
@@ -72,6 +74,30 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const paths = useMemo(() => files.map((file) => file.path), [files])
   const active_path = useActiveFile(paths)
 
+  const local = useAppSelector((state) => localFor(state.local_reviews, review_id))
+  const files_by_path = useMemo(() => new Map(files.map((file) => [file.path, file])), [files])
+  const drafting: Drafting = useMemo(
+    () => ({
+      review_id,
+      in_progress: local.drafts.length > 0,
+      ...groupDrafts(local.drafts, files_by_path),
+    }),
+    [review_id, local.drafts, files_by_path],
+  )
+  const folded = useMemo(() => new Set(local.folded), [local.folded])
+  const reviewed = useMemo(
+    () =>
+      new Set(
+        files
+          .filter((file) => {
+            const blob = reviewBlob(file)
+            return blob !== null && isReviewed(local, file.path, blob)
+          })
+          .map((file) => file.path),
+      ),
+    [files, local],
+  )
+
   if (review_query.isLoading || diff_query.isLoading) {
     return <p className={styles.notice}>Loading review…</p>
   }
@@ -93,11 +119,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const submission = currentSubmission(review)
   const submitted = submission !== null
 
-  const submit = (verdict: ReviewVerdict) => {
-    void submitReview({ review_id, verdict, body: summary })
-    setSummary('')
-    setSubmitting(false)
-  }
+  const held = local.drafts.length
 
   return (
     <>
@@ -117,12 +139,9 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}
         </span>
-        <Button
-          tone="primary"
-          disabled={submit_state.isLoading}
-          onClick={() => setSubmitting(!submitting)}
-        >
+        <Button tone="primary" onClick={() => setSubmitting(!submitting)}>
           {submitting ? 'Cancel' : submitted ? 'Submit again' : 'Submit review'}
+          {!submitting && held > 0 && ` (${held})`}
         </Button>
       </header>
 
@@ -172,24 +191,14 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
       )}
 
       {submitting && (
-        <div className={styles.submit_panel}>
-          <div className={styles.submit_heading}>Finish your review</div>
-          <textarea
-            className={styles.textarea}
-            value={summary}
-            placeholder="Summary (optional)"
-            aria-label="Review summary"
-            autoFocus
-            onChange={(event) => setSummary(event.target.value)}
-          />
-          <div className={styles.submit_actions}>
-            <Button onClick={() => submit('commented')}>Comment</Button>
-            <Button tone="primary" onClick={() => submit('approved')}>
-              Approve
-            </Button>
-            <Button onClick={() => submit('changes_requested')}>Request changes</Button>
-          </div>
-        </div>
+        <SubmitPanel
+          review={review}
+          files={files_by_path}
+          drafts={local.drafts}
+          summary={summary}
+          onSummaryChange={setSummary}
+          onDone={() => setSubmitting(false)}
+        />
       )}
 
       {diff_query.isError ? (
@@ -207,22 +216,40 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
               files={files}
               threads={review.threads}
               active_path={active_path}
+              folded={folded}
+              reviewed={reviewed}
               onSelect={scrollToFile}
+              onToggleDirectory={(path) => dispatch(directoryToggled({ review_id, path }))}
             />
           </aside>
 
           <div className={styles.diffs}>
-            {files.map((file) => (
-              <DiffFile
-                key={file.path}
-                review_id={review_id}
-                file={file}
-                threads={review.threads}
-                threads_by_anchor={threads_by_anchor}
-                pending={pending}
-                onPendingChange={setPending}
-              />
-            ))}
+            {files.map((file) => {
+              const blob = reviewBlob(file)
+              return (
+                <DiffFile
+                  key={file.path}
+                  review_id={review_id}
+                  file={file}
+                  threads={review.threads}
+                  threads_by_anchor={threads_by_anchor}
+                  drafting={drafting}
+                  composing={composing}
+                  reviewed={reviewed.has(file.path)}
+                  can_review={blob !== null}
+                  onComposingChange={setComposing}
+                  onReviewedChange={(next) =>
+                    dispatch(
+                      fileReviewedSet({
+                        review_id,
+                        path: file.path,
+                        blob_sha: next ? blob : null,
+                      }),
+                    )
+                  }
+                />
+              )
+            })}
           </div>
         </div>
       )}

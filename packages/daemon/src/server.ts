@@ -5,7 +5,7 @@ import { Hono } from 'hono'
 import type { CommentAuthor, DiffSide, FileContents, ReviewVerdict, Thread } from '@yart/core'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
-import { ReviewError, ReviewService } from './review.ts'
+import { ReviewError, ReviewService, type SubmitParams } from './review.ts'
 
 export interface ServerOptions {
   repo_path: string
@@ -18,6 +18,66 @@ const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.me
 interface SubmitBody {
   verdict?: ReviewVerdict
   body?: string
+  threads?: unknown
+  replies?: unknown
+  expected_head_sha?: unknown
+}
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim() !== ''
+
+/**
+ * Checks the drafted comments of a pending review before any of them is used.
+ *
+ * All of them are checked up front, because the service writes them in one go:
+ * a malformed tenth comment should reject the submission, not arrive after
+ * nine others were accepted.
+ */
+const parseDrafts = (body: SubmitBody): Pick<SubmitParams, 'threads' | 'replies'> => {
+  const threads = body.threads ?? []
+  const replies = body.replies ?? []
+  if (!Array.isArray(threads) || !Array.isArray(replies)) {
+    throw new ReviewError('threads and replies must be lists', 400)
+  }
+
+  const asRecord = (value: unknown): Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null) {
+      throw new ReviewError('Every drafted comment must be an object', 400)
+    }
+    return value as Record<string, unknown>
+  }
+
+  return {
+    threads: threads.map((entry: unknown) => {
+      const draft = asRecord(entry)
+      if (typeof draft.path !== 'string' || typeof draft.line !== 'number') {
+        throw new ReviewError('Every drafted comment needs a path and a line', 400)
+      }
+      if (!isNonEmptyString(draft.body)) {
+        throw new ReviewError('Every drafted comment needs a body', 400)
+      }
+      if (draft.side !== undefined && draft.side !== 'base' && draft.side !== 'head') {
+        throw new ReviewError('A drafted comment\'s side must be "base" or "head"', 400)
+      }
+      if (draft.blob_sha !== undefined && typeof draft.blob_sha !== 'string') {
+        throw new ReviewError("A drafted comment's blob_sha must be a string", 400)
+      }
+      return {
+        path: draft.path,
+        line: draft.line,
+        side: draft.side,
+        body: draft.body,
+        blob_sha: draft.blob_sha,
+      }
+    }),
+    replies: replies.map((entry: unknown) => {
+      const draft = asRecord(entry)
+      if (typeof draft.thread_id !== 'string' || !isNonEmptyString(draft.body)) {
+        throw new ReviewError('Every drafted reply needs a thread and a body', 400)
+      }
+      return { thread_id: draft.thread_id, body: draft.body }
+    }),
+  }
 }
 
 const VERDICTS: ReadonlySet<string> = new Set<ReviewVerdict>([
@@ -227,10 +287,16 @@ export const createServer = ({ repo_path, ui_dir = DEFAULT_UI_DIR }: ServerOptio
       throw new ReviewError('Verdict must be "commented", "approved" or "changes_requested"', 400)
     }
 
+    if (body.expected_head_sha !== undefined && typeof body.expected_head_sha !== 'string') {
+      throw new ReviewError('expected_head_sha must be a string', 400)
+    }
+
     return context.json(
       await service.submit(context.req.param('id'), {
         verdict: body.verdict,
         body: body.body,
+        ...parseDrafts(body),
+        expected_head_sha: body.expected_head_sha,
       }),
     )
   })

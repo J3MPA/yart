@@ -101,6 +101,7 @@ Early — the scaffold is in place, the product is not.
 - [x] Review UI: file tree, collapsed context expandable in place
 - [x] Replying to a verdict, and a signal for how far the agent has got
 - [x] A tab-title and favicon signal when the agent has answered
+- [x] Pending reviews, a Reviewed mark per file, and folding in the file tree
 - [x] Installable: `yart` and `yart-mcp` run from any repository
 - [ ] Clipboard export (fallback for non-MCP agents)
 
@@ -339,6 +340,47 @@ a time from either end, or all of them when few enough remain. A line revealed
 this way is an ordinary row and can be commented on like any other. Knowing
 whether a file continues past its last hunk takes the file's length, which is
 why the diff carries `head_line_count`.
+
+## Drafting a review
+
+A review is drafted, not dictated: a comment written on file 3 is often
+withdrawn by the time file 20 explains it. So each comment form offers two
+actions, as on GitHub. **Start a review** (or **Add to review** once one has
+started) holds the comment; **Comment now** sends it on its own. Holding is the
+primary action and the one Cmd+Enter takes, because it is the common case.
+
+Held comments are drawn in place as Pending, and can be edited or dropped. They
+live in the browser, per person and per device, and never reach the daemon
+until the review is submitted — so an agent calling `get_review` cannot see a
+comment its author has not sent. Submitting sends them all with the verdict in
+one request, and the daemon writes them in one go or not at all: half a review,
+some comments posted and the verdict not, would leave the agent reading
+something its author had not finished.
+
+**A held line comment is tied to its file, not to the review.** Its line number
+was counted in one version of one file, so it records that file's blob and stays
+good through any number of rounds that leave the file alone. If the file does
+change, the comment is shown as stale in the submit panel, kept out of the diff,
+and has to be dropped before submitting — drawing it at its old line number
+would put it beside code it was never about. Replies are never stale, because
+threads are re-anchored when a review moves. The daemon checks the same thing,
+and also refuses a submission made against a head that is no longer current,
+since a verdict passed on it says nothing about code the reviewer has not seen.
+
+## Marking files reviewed
+
+Each file has a **Reviewed** checkbox. Ticking it collapses the file and marks it
+in the tree, whose header counts how many are done. File headers stick to the
+top of the window, so the box is in reach at the end of a long file, where the
+decision is made. A file can also be collapsed by hand without being reviewed.
+
+**A reviewed mark is kept against the file's blob,** so if the agent changes the
+file afterwards it stops counting as reviewed on its own and opens up again. A
+tick that outlived the code it was given for would say something untrue.
+
+Directories in the tree fold away too, and a folded directory keeps the added,
+removed and open-thread counts of everything it hides. Folding a directory does
+not hide its diffs: the tree is an index, not a filter.
 
 ## Answering a verdict
 

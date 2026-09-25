@@ -1,21 +1,28 @@
 import { useState } from 'react'
 import type { Thread } from '@yart/core'
 import { Button } from '@/components/button'
+import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
+import { DraftComment } from './draft-comment'
+import { newReplyDraft, type Drafting } from './drafts'
+import { draftAdded } from './local-review-slice'
 import { useAddCommentMutation, useSetThreadStatusMutation } from './review-api'
 import styles from './review.module.css'
 
 export interface CommentThreadProps {
   review_id: string
   thread: Thread
+  drafting: Drafting
 }
 
-export const CommentThread = ({ review_id, thread }: CommentThreadProps) => {
+export const CommentThread = ({ review_id, thread, drafting }: CommentThreadProps) => {
+  const dispatch = useAppDispatch()
   const [replying, setReplying] = useState(false)
   const [addComment, add_state] = useAddCommentMutation()
   const [setThreadStatus] = useSetThreadStatusMutation()
 
   const resolved = thread.status === 'resolved'
+  const held = drafting.by_thread.get(thread.id) ?? []
 
   return (
     <article
@@ -46,12 +53,21 @@ export const CommentThread = ({ review_id, thread }: CommentThreadProps) => {
         </div>
       ))}
 
+      {held.map((draft) => (
+        <DraftComment key={draft.id} review_id={review_id} draft={draft} />
+      ))}
+
       {replying ? (
         <CommentForm
           placeholder="Reply"
-          submit_label="Reply"
+          submit_label="Reply now"
+          queue_label={drafting.in_progress ? 'Add to review' : 'Start a review'}
           pending={add_state.isLoading}
           onCancel={() => setReplying(false)}
+          onQueue={(body) => {
+            dispatch(draftAdded({ review_id, draft: newReplyDraft(thread.id, body) }))
+            setReplying(false)
+          }}
           onSubmit={(body) => {
             void addComment({ review_id, thread_id: thread.id, body })
             setReplying(false)

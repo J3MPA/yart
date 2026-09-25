@@ -1,3 +1,5 @@
+import { readStored, writeStored } from './browser-storage'
+
 /**
  * How much of each review this person has already looked at.
  *
@@ -7,33 +9,15 @@
  *
  * The value stored against a review is `agentActivity` as it stood when the
  * review was last on screen, so "unseen" means the agent has done something
- * since. Storage can be absent or throw in a private window, so every access is
- * guarded and a failure degrades to showing no dot rather than to a blank page.
+ * since.
  */
 const KEY = 'yart.seen-activity.v1'
 
 export type SeenActivity = Readonly<Record<string, number>>
 
-export const readSeen = (): SeenActivity => {
-  try {
-    const raw = window.localStorage.getItem(KEY)
-    if (raw === null) return {}
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null) return {}
-    return parsed as SeenActivity
-  } catch {
-    return {}
-  }
-}
+export const readSeen = (): SeenActivity => readStored<SeenActivity>(KEY, {})
 
-export const writeSeen = (seen: SeenActivity): void => {
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(seen))
-  } catch {
-    // A person who has turned storage off gets no dot, which is better than
-    // a page that will not render.
-  }
-}
+export const writeSeen = (seen: SeenActivity): void => writeStored(KEY, seen)
 
 /**
  * Records a review as seen up to its current activity.

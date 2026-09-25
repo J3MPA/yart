@@ -45,3 +45,21 @@ export const summarizeFiles = (
   threads: readonly Thread[],
 ): Map<string, FileSummary> =>
   new Map(files.map((file) => [file.path, summarizeFile(file, threads)]))
+
+/**
+ * Several files' summaries added together, for a directory folded in the tree.
+ *
+ * A folded directory that dropped its counts would trade scrolling for
+ * blindness: the row is still there, but nothing on it says whether what it
+ * hides is two added lines or a thread waiting on an answer.
+ */
+export const sumSummaries = (summaries: Iterable<FileSummary>): FileSummary => {
+  const total: FileSummary = { added: 0, removed: 0, open_threads: 0, total_threads: 0 }
+  for (const summary of summaries) {
+    total.added += summary.added
+    total.removed += summary.removed
+    total.open_threads += summary.open_threads
+    total.total_threads += summary.total_threads
+  }
+  return total
+}

@@ -1,10 +1,15 @@
 import type { DiffLine, DiffSide, Thread } from '@yart/core'
+import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { CommentThread } from './comment-thread'
+import { DraftComment } from './draft-comment'
+import { newThreadDraft, type Drafting, type FileBlobs } from './drafts'
+import { draftAdded } from './local-review-slice'
 import { anchorKey } from './thread-anchors'
 import styles from './review.module.css'
 
-export interface PendingComment {
+/** Where the comment form is open: at most one row on the page at a time. */
+export interface ComposeTarget {
   path: string
   side: DiffSide
   line: number
@@ -20,10 +25,13 @@ export interface DiffRowProps {
   review_id: string
   file_path: string
   line: DiffLine
+  /** The file's blobs, which a drafted comment records its line against. */
+  file_blobs: FileBlobs
   threads_by_anchor: ReadonlyMap<string, Thread[]>
-  pending: PendingComment | null
+  drafting: Drafting
+  composing: ComposeTarget | null
   adding: boolean
-  onPendingChange: (pending: PendingComment | null) => void
+  onComposingChange: (composing: ComposeTarget | null) => void
   onAddThread: (target: RowTarget, body: string) => void
 }
 
@@ -59,25 +67,29 @@ export const DiffRow = ({
   review_id,
   file_path,
   line,
+  file_blobs,
   threads_by_anchor,
-  pending,
+  drafting,
+  composing,
   adding,
-  onPendingChange,
+  onComposingChange,
   onAddThread,
 }: DiffRowProps) => {
+  const dispatch = useAppDispatch()
   const target = targetFor(line)
   const key = target === null ? null : anchorKey(file_path, target.side, target.line)
   const at_line = key === null ? [] : (threads_by_anchor.get(key) ?? [])
-  const is_pending =
-    pending !== null &&
+  const held = key === null ? [] : (drafting.by_anchor.get(key) ?? [])
+  const is_composing =
+    composing !== null &&
     target !== null &&
-    pending.path === file_path &&
-    pending.side === target.side &&
-    pending.line === target.line
+    composing.path === file_path &&
+    composing.side === target.side &&
+    composing.line === target.line
 
   const toggleComment = () =>
-    onPendingChange(
-      is_pending || target === null
+    onComposingChange(
+      is_composing || target === null
         ? null
         : { path: file_path, side: target.side, line: target.line },
     )
@@ -135,18 +147,45 @@ export const DiffRow = ({
         <span className={styles.code}>{line.text}</span>
       </div>
 
-      {(at_line.length > 0 || is_pending) && (
+      {(at_line.length > 0 || held.length > 0 || is_composing) && (
         <div className={styles.threads}>
           {at_line.map((thread) => (
-            <CommentThread key={thread.id} review_id={review_id} thread={thread} />
+            <CommentThread
+              key={thread.id}
+              review_id={review_id}
+              thread={thread}
+              drafting={drafting}
+            />
           ))}
-          {is_pending && target !== null && (
+          {held.map((draft) => (
+            <DraftComment key={draft.id} review_id={review_id} draft={draft} />
+          ))}
+          {is_composing && target !== null && (
             <CommentForm
               pending={adding}
-              onCancel={() => onPendingChange(null)}
+              submit_label="Comment now"
+              queue_label={drafting.in_progress ? 'Add to review' : 'Start a review'}
+              onCancel={() => onComposingChange(null)}
+              onQueue={(body) => {
+                const blob_sha =
+                  target.side === 'head' ? file_blobs.head_blob_sha : file_blobs.base_blob_sha
+                // A row only offers a side that exists, so this is a guard
+                // against the impossible rather than a case to handle.
+                if (blob_sha === null) return
+                dispatch(
+                  draftAdded({
+                    review_id,
+                    draft: newThreadDraft(
+                      { path: file_path, side: target.side, line: target.line, blob_sha },
+                      body,
+                    ),
+                  }),
+                )
+                onComposingChange(null)
+              }}
               onSubmit={(body) => {
                 onAddThread(target, body)
-                onPendingChange(null)
+                onComposingChange(null)
               }}
             />
           )}
