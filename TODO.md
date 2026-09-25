@@ -139,6 +139,30 @@ every dirty turn would need care not to be noisy. If it is built, it should
 advance an existing review rather than open a second, do nothing when no files
 changed, and would mean `yart` growing a subcommand for hooks to call.
 
+## Finding: a new tool cannot be used by the session that built it
+
+MCP servers hand over their tool list when the client connects, and that happens
+once, at session start. A tool added partway through a session does not appear
+in it, however many times the server restarts underneath.
+
+Hit while building `reply_to_verdict`: the agent that wrote the tool, and was
+best placed to try it against a real verdict, could not call it. The work-around
+is to call the HTTP route the tool wraps, which verifies the behaviour but not
+the binding — so the binding is only ever exercised by the next session.
+
+Two consequences worth keeping in mind.
+
+Every MCP tool this project grows is unusable for the remainder of the sitting
+that adds it. That is not a reason to avoid adding them, but it does mean a tool
+should not be the only way to reach something new: keeping the HTTP route the
+plain interface and the tool a thin wrapper is what made this recoverable, and
+is worth preserving as a rule rather than an accident.
+
+It also puts a floor under how much an agent can test its own MCP work. The tool
+suite in `packages/mcp` runs against a real daemon and does cover the tool
+itself, which is the thing standing in for a live session — so those tests earn
+their keep here in a way that is easy to underrate when writing them.
+
 ## Syntax highlighting
 
 Wanted, and not simply a matter of dropping a library in.
