@@ -1,0 +1,19 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    The plain mark with a dot, for when a review has moved since it was last
+    looked at. The dot is separated from the bar by a clear gap rather than by a
+    ring drawn in the page background: a favicon sits on browser chrome, whose
+    colour is not ours to guess, and a ring in the wrong colour reads as a halo.
+
+    Colours are written in for the same reason as in favicon.svg: a favicon is
+    loaded as its own document and never sees the page's stylesheet.
+  -->
+  <style>
+    :root { --mark: #b07d2b; --dot: #3f7d32; }
+    @media (prefers-color-scheme: dark) { :root { --mark: #d9a648; --dot: #7cc267; } }
+  </style>
+  <path d="M5 11 L12 17 L5 23" fill="none" stroke="var(--mark)" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="16" y="14.5" width="10" height="5" rx="2.5" fill="var(--mark)"/>
+  <circle cx="26" cy="6" r="5.5" fill="var(--dot)"/>
+</svg>

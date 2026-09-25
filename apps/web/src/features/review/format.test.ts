@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ReviewProgress } from '@yart/core'
-import { describeProgress, relativeTime, shortSha } from './format'
+import type { Comment, CommentAuthor, Review, ReviewSubmission, Thread } from '@yart/core'
+import { describeStatus, relativeTime, shortSha } from './format'
 
 const NOW = Date.parse('2026-09-20T12:00:00.000Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -41,37 +41,84 @@ describe('relativeTime', () => {
   })
 })
 
-const progress = (partial: Partial<ReviewProgress>): ReviewProgress => ({
-  state: 'in_progress',
-  answered_threads: 0,
-  awaiting_threads: 0,
-  code_changed: false,
-  summary_answered: false,
-  ...partial,
+const comment = (author: CommentAuthor): Comment => ({
+  id: `${author}-${Math.random()}`,
+  author,
+  body: 'text',
+  created_at: '2026-09-25T12:00:00.000Z',
 })
 
-describe('describeProgress', () => {
-  it('says nothing before the review has been handed back', () => {
-    expect(describeProgress(null)).toBeNull()
+const thread = (authors: readonly CommentAuthor[]): Thread =>
+  ({ id: 't', status: 'open', comments: authors.map(comment) }) as Thread
+
+const verdict = (value: ReviewSubmission['verdict'], head_sha = 'head1'): ReviewSubmission => ({
+  id: 's',
+  verdict: value,
+  body: null,
+  comments: [],
+  head_sha,
+  created_at: '2026-09-25T12:00:00.000Z',
+})
+
+const review = (partial: Partial<Review>): Review =>
+  ({ head_sha: 'head1', submissions: [], threads: [], ...partial }) as Review
+
+describe('describeStatus', () => {
+  it('is open before anything has been submitted', () => {
+    expect(describeStatus(review({ threads: [thread(['human'])] }))).toMatchObject({
+      label: 'open',
+      tone: 'plain',
+    })
   })
 
-  it('says nothing while the agent has not started', () => {
-    expect(describeProgress(progress({ state: 'idle' }))).toBeNull()
-  })
-
-  it('calls out a review that is waiting on a person again', () => {
-    expect(describeProgress(progress({ state: 'ready' }))).toBe('ready for re-review')
-  })
-
-  it('counts the answers once some are in', () => {
-    expect(describeProgress(progress({ answered_threads: 2, awaiting_threads: 3 }))).toBe(
-      '2 of 5 answered',
+  it('shows the verdict while the agent has not started', () => {
+    const status = describeStatus(
+      review({ submissions: [verdict('changes_requested')], threads: [thread(['human'])] }),
     )
+    expect(status).toMatchObject({ label: 'changes requested', tone: 'changes' })
   })
 
-  it('reports changes with nothing answered as started rather than as a ratio', () => {
-    expect(describeProgress(progress({ awaiting_threads: 3, code_changed: true }))).toBe(
-      'changes started',
+  it('shows an approval as one', () => {
+    expect(describeStatus(review({ submissions: [verdict('approved')] }))).toMatchObject({
+      label: 'approved',
+      tone: 'approved',
+    })
+  })
+
+  it('gives way to the agent working once it has started', () => {
+    const status = describeStatus(
+      review({
+        submissions: [verdict('changes_requested')],
+        threads: [thread(['human', 'agent']), thread(['human'])],
+      }),
     )
+    expect(status).toEqual({
+      label: 'agent working',
+      tone: 'working',
+      detail: '1 of 2 comments answered',
+    })
+  })
+
+  it('says whose turn it is once nothing is waiting on the agent', () => {
+    const status = describeStatus(
+      review({
+        submissions: [verdict('changes_requested')],
+        threads: [thread(['human', 'agent'])],
+      }),
+    )
+    expect(status).toEqual({
+      label: 'your turn',
+      tone: 'ready',
+      detail: '1 of 1 comments answered',
+    })
+  })
+
+  it('reads the latest verdict once the agent has moved the head past it', () => {
+    // The current head has no verdict yet, which is exactly the moment the
+    // status should say the agent has done something.
+    const status = describeStatus(
+      review({ head_sha: 'head2', submissions: [verdict('changes_requested', 'head1')] }),
+    )
+    expect(status).toMatchObject({ label: 'your turn', detail: null })
   })
 })

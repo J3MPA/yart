@@ -100,6 +100,7 @@ Early — the scaffold is in place, the product is not.
 - [x] Review UI: diff rendering, inline comments, review rounds
 - [x] Review UI: file tree, collapsed context expandable in place
 - [x] Replying to a verdict, and a signal for how far the agent has got
+- [x] A tab-title and favicon signal when the agent has answered
 - [x] Installable: `yart` and `yart-mcp` run from any repository
 - [ ] Clipboard export (fallback for non-MCP agents)
 
@@ -375,6 +376,50 @@ as much as one that rewrote the file, and both need a person to look. Changes
 with nothing answered are `in_progress`, not `ready` — moving the code is not an
 invitation to re-read it while the questions are still open.
 
+In the list this is one label, not two. The verdict and the agent's progress are
+the same fact read at different moments — a verdict is given, then the agent
+responds to it — so a review reads `open`, then its verdict, then `agent working`,
+then `your turn`. Once the agent has moved, whose turn it is matters more than
+what you decided, and the verdict is at the top of the page you are about to
+open. How many comments have been answered is in the label's tooltip.
+
+The unseen dot below answers a different question and does not replace this.
+The dot means something is new since you looked; the label means whose turn it
+is. They come apart when the agent has answered one comment of three — new, but
+not yet your turn — and when you have glanced at a finished review and moved on,
+which clears the dot but leaves the review waiting on you.
+
+## Noticing that the agent has answered
+
+The point of a local review tool is to work on something else while the agent
+responds, and that only pays if you find out when it has. The list shows a dot
+on a review that has moved since you last looked, the tab title carries a count,
+and the favicon grows a dot — both of the last two because neither is enough
+alone: a pinned tab shows no title, and a tab among twenty shows a favicon too
+small to read a number on.
+
+**Seen-ness is per person and per device, so it lives in the browser** and never
+reaches the daemon. That also means an agent cannot mark its own work as read.
+Storage can be absent or throw in a private window, so a failure degrades to
+showing no dot rather than to a blank page.
+
+**What is compared is not a timestamp.** `updated_at` moves when anyone touches
+a review, so writing a comment would mark the review unread to the person who
+wrote it. `agentActivity` counts what the agent has said and done — replies,
+resolves and rounds — as one number that only grows, and a review is unseen when
+that number is larger than it was when you last had the review open. Counting
+rather than hashing means a stale marker can only under-report: the worst case
+is a missed dot, never a dot that will not clear.
+
+A review you have never opened shows no dot. There is no "since" to measure
+from, and a list where everything shouts says nothing.
+
+**The list is polled rather than refetched on focus.** The rest of the app
+refetches when the window regains focus, which cannot deliver this signal: a
+page nobody is looking at never regains focus. Ten seconds against a daemon on
+localhost costs nothing, and browsers throttle timers in hidden tabs anyway,
+which is exactly the case this is for.
+
 ## Reviewing uncommitted work
 
 A review does not need a commit. By default `start_review` reviews the working
@@ -410,6 +455,13 @@ MCP server dies with its client and a review has to outlive that.
 | `reply_to_verdict` | Answer the summary left with the verdict                    |
 | `resolve_thread`   | Mark a comment addressed                                    |
 | `advance_review`   | Re-anchor every comment onto new commits                    |
+
+**A new review opens in your browser.** The one step of the loop that needs a
+person is the person looking, and relying on an agent to relay a URL is how that
+step gets skipped — it did, repeatedly, before this existed. An empty review
+opens nothing, since there would be nothing to read. Set `YART_NO_BROWSER=1`
+where a window would be wrong: a container, a remote shell, or a second screen
+you did not ask to have taken over.
 
 Comments come back rendered as text rather than JSON, because the consumer is a
 model deciding what to edit and a comment is easier to act on next to the code

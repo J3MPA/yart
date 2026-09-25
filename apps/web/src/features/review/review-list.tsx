@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { currentSubmission, reviewProgress } from '@yart/core'
 import type { Review } from '@yart/core'
 import { Menu, MenuItem } from '@/components/menu'
-import { describeProgress, describeRange, relativeTime, VERDICT_LABEL } from './format'
+import { describeRange, describeStatus, relativeTime, type StatusTone } from './format'
 import {
   useDeleteReviewMutation,
   useListReviewsQuery,
@@ -10,6 +9,14 @@ import {
 } from './review-api'
 import { countOpen } from './thread-anchors'
 import styles from './review.module.css'
+
+const STATUS_CLASS: Record<StatusTone, string> = {
+  plain: '',
+  approved: styles.badge_approved as string,
+  changes: styles.badge_changes as string,
+  working: styles.badge_working as string,
+  ready: styles.badge_ready as string,
+}
 
 /** The line under the title: where it is, what it covers, and when it appeared. */
 const describe = (review: Review): string =>
@@ -24,54 +31,45 @@ const describe = (review: Review): string =>
 
 interface ReviewRowProps {
   review: Review
+  unseen: boolean
   archived: boolean
   confirming_delete: boolean
   onConfirmDelete: (review_id: string | null) => void
 }
 
-const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: ReviewRowProps) => {
+const ReviewRow = ({
+  review,
+  unseen,
+  archived,
+  confirming_delete,
+  onConfirmDelete,
+}: ReviewRowProps) => {
   const [setArchived] = useSetReviewArchivedMutation()
   const [deleteReview] = useDeleteReviewMutation()
 
-  const submission = currentSubmission(review)
-  const progress = describeProgress(reviewProgress(review))
+  const status = describeStatus(review)
   const open = countOpen(review.threads)
 
   return (
     <div className={styles.list_item}>
       <a className={styles.list_link} href={`/reviews/${review.id}`}>
-        <div className={styles.list_title}>{review.title}</div>
+        <div className={styles.list_title}>
+          {unseen && (
+            <span className={styles.unseen_dot} aria-label="Moved since you last looked" />
+          )}
+          {review.title}
+        </div>
         <div className={styles.list_meta}>{describe(review)}</div>
       </a>
 
-      {review.head_is_snapshot && <span className={styles.badge}>uncommitted</span>}
-
-      {submission === null ? (
-        <span className={styles.badge}>open</span>
-      ) : (
-        <span
-          className={[
-            styles.badge,
-            submission.verdict === 'approved' ? styles.badge_approved : '',
-            submission.verdict === 'changes_requested' ? styles.badge_changes : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {VERDICT_LABEL[submission.verdict]}
-        </span>
-      )}
-
-      {progress !== null && (
-        <span
-          className={[
-            styles.badge,
-            progress === 'ready for re-review' ? styles.badge_ready : styles.badge_working,
-          ].join(' ')}
-        >
-          {progress}
-        </span>
-      )}
+      {/* A snapshot needs no badge of its own: the range in the meta line
+          already reads "working tree". */}
+      <span
+        className={[styles.badge, STATUS_CLASS[status.tone]].filter(Boolean).join(' ')}
+        title={status.detail ?? undefined}
+      >
+        {status.label}
+      </span>
 
       <span className={styles.list_counts}>
         {open} open / {review.threads.length}
@@ -117,7 +115,11 @@ const ReviewRow = ({ review, archived, confirming_delete, onConfirmDelete }: Rev
   )
 }
 
-export const ReviewList = () => {
+export interface ReviewListProps {
+  unseen: ReadonlySet<string>
+}
+
+export const ReviewList = ({ unseen }: ReviewListProps) => {
   const [archived, setArchivedView] = useState(false)
   const [confirming, setConfirming] = useState<string | null>(null)
   const { data, isLoading: is_loading } = useListReviewsQuery(archived)
@@ -166,6 +168,7 @@ export const ReviewList = () => {
             <ReviewRow
               key={review.id}
               review={review}
+              unseen={unseen.has(review.id)}
               archived={archived}
               confirming_delete={confirming === review.id}
               onConfirmDelete={setConfirming}

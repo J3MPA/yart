@@ -14,6 +14,7 @@ let http: ServerType
 let port: number
 let client: Client
 let base: string
+let opened: string[]
 
 /** Calls a tool and returns its text, failing loudly if the tool reported an error. */
 const call = async (name: string, args: Record<string, unknown> = {}): Promise<string> => {
@@ -80,7 +81,15 @@ beforeEach(async () => {
   port = (http.address() as AddressInfo).port
 
   // autostart is off: the daemon above is already listening on this port.
-  const mcp = createMcpServer({ port, repo_path: repo.path, autostart: false })
+  // The opener is recorded rather than run, so the suite never takes over a
+  // browser on whoever is running it.
+  opened = []
+  const mcp = createMcpServer({
+    port,
+    repo_path: repo.path,
+    autostart: false,
+    openBrowser: (url) => opened.push(url),
+  })
   const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
   client = new Client({ name: 'test', version: '0.0.0' })
   await Promise.all([mcp.connect(server_transport), client.connect(client_transport)])
@@ -174,6 +183,43 @@ describe('get_review and list_reviews', () => {
 
   it('reports an unknown review as a tool error', async () => {
     expect(await callExpectingError('get_review', { review_id: 'nope' })).toMatch(/no review/i)
+  })
+})
+
+describe('opening the review', () => {
+  it('shows a new review to the person who has to read it', async () => {
+    const rendered = await call('start_review', { base })
+    const review_id = idFrom(rendered)
+    expect(opened).toEqual([`http://localhost:${port}/reviews/${review_id}`])
+    expect(rendered).toContain('Opened in their browser')
+  })
+
+  it('does not open a window for a review with nothing in it', async () => {
+    await call('start_review', { base: 'HEAD' })
+    expect(opened).toEqual([])
+  })
+
+  it('falls back to asking for the URL to be opened when opening is off', async () => {
+    // The real switch, rather than a stand-in for it: this is the one path a
+    // person configures, so it is worth testing the thing they actually set.
+    process.env.YART_NO_BROWSER = '1'
+    const quiet = createMcpServer({
+      port,
+      repo_path: repo.path,
+      autostart: false,
+      openBrowser: (url) => opened.push(url),
+    })
+    const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
+    const quiet_client = new Client({ name: 'quiet', version: '0.0.0' })
+    await Promise.all([quiet.connect(server_transport), quiet_client.connect(client_transport)])
+
+    const result = await quiet_client.callTool({ name: 'start_review', arguments: { base } })
+    const rendered = (result.content as { text: string }[])[0]?.text ?? ''
+    expect(rendered).toContain('Ask the human to open that URL')
+    expect(opened).toEqual([])
+
+    await quiet_client.close()
+    delete process.env.YART_NO_BROWSER
   })
 })
 
