@@ -44,29 +44,57 @@ What was done about it:
 - `/health` reports the daemon's version, so a client can tell when the daemon
   it found is older than itself — which after an update it will be.
 
-**The prototype.** A throwaway build that answers the questions everything else
-depends on. None of them is verified; each is written as what has to be true.
+**Done: the prototype.** A throwaway Electron 44 build, served from a local web
+server and fetched both with `curl` and with a browser — what decides Gatekeeper
+is which program downloads the zip, not where it is hosted. Every question it
+was built to answer has an answer, and none rules the plan out:
 
-1. An ad-hoc signed Electron app, zipped, uploaded to a GitHub release and
-   downloaded with `curl`, opens on Apple Silicon with no Gatekeeper prompt.
-2. The same zip downloaded in a browser _is_ blocked — confirming the one thing
-   the install instructions have to warn about.
-3. The dock badge works on an app with only an ad-hoc signature.
-4. Notifications work on the same app. This is the one most likely to fail, and
-   it matters: it is half the reason for an app.
-5. `open yart://reviews/<id>` brings the running window forward and navigates
-   it, and launches the app first when it is not running.
-6. The daemon and MCP server, bundled to JavaScript, run on Electron's own Node
-   (`ELECTRON_RUN_AS_NODE`) and can still spawn `git`.
-7. What it costs: the zip's size, and how long a build takes.
+1. **An ad-hoc signed app installed with `curl` opens with no prompt.** Zipped
+   with `ditto`, fetched with `curl`, unpacked into `~/Applications`: the app
+   carries no `com.apple.quarantine` attribute and launches straight away on
+   Apple Silicon, macOS 26.4.
+2. **The same zip downloaded in a browser is blocked.** Chrome marks the
+   download, the mark carries over to the unpacked app, and opening it gives
+   "Apple could not verify “yart” is free of malware" with only _Done_ and
+   _Move to Bin_. This is what the install instructions have to warn about.
+3. **The dock badge works, but is off by default.** With only the notification
+   banner allowed, `app.setBadgeCount` returns true and `app.dock.getBadge()`
+   reads it back while the dock shows nothing. Turning on _Badge application
+   icon_ under the app's notification settings makes it appear. Nothing reports
+   the badge as hidden, so the app has to ask for it or point the user at the
+   setting.
+4. **Notifications arrive, but not reliably as banners.** No permission prompt
+   was ever shown. A freshly built app's first notifications were refused with
+   "Notifications are not allowed for this application" while it ran from a
+   temporary directory; the same build in `~/Applications` delivered them.
+   Delivered ones sometimes showed as a banner and sometimes went only to
+   Notification Center, with every setting for the app on and the app in the
+   background. The cause is not found — a Focus mode or screen sharing holding
+   banners back is the first thing to rule out — and needs settling while
+   building the app, since a notification nobody sees does not do its job.
+5. **`yart://reviews/<id>` works both ways.** With the app running, `open-url`
+   navigates the existing window and no second process starts; with it not
+   running, the link launches it and the URL arrives before `ready`, so it has
+   to be held until the window exists. `open -g` delivers a link without
+   bringing the app forward, which is what a badge or background update wants.
+6. **The daemon and MCP server run on Electron's Node.** Bundled with esbuild and
+   started with `ELECTRON_RUN_AS_NODE=1` on the app's own binary, both run
+   straight from inside `app.asar`, the daemon spawns `git` to build a diff, and
+   the MCP server answers `list_reviews` over stdio.
+7. **What it costs.** The app is 289 MB on disk and 127 MB zipped, per
+   architecture. esbuild takes about 50 ms, `electron-packager` about 2.4 s and
+   signing 0.3 s.
 
-None of this needs a public release. What decides the first two is which program
-downloads the zip — `curl` or a browser — not where it is hosted, so serving it
-from a local web server and fetching it both ways is a faithful test. The
-outcomes go in this file as findings, like the ones below. If 1 fails, the
-fallback is `yart init` building the app on the user's machine, which is never
-quarantined. If 3 and 4 both fail, most of the case for an app goes with them,
-and the browser with a single-tab fix is the better answer.
+Found on the way, and needed by the steps below:
+
+- `electron-packager`'s output fails `codesign --verify` as it comes: the
+  binary is only linker-signed and the bundle's resources are unsealed. It has
+  to be re-signed with `codesign --force --deep --sign -` after packaging.
+- The daemon finds its UI (`../../../apps/web/dist`) and its version
+  (`../package.json`) relative to `import.meta.url`, which bundling moves. The
+  prototype passed `ui_dir` in; the real bundle needs both to be options, or
+  paths that hold in the app's layout. Inside the app, `../package.json` is the
+  app's own, so the version reported is the app's version.
 
 **Developer mode.** The developer and the user can be the same person on the same
 machine, so the two must not reach each other's daemon.
@@ -140,7 +168,7 @@ a tap of our own could still carry the app later, on top of the same release.
 **Order of work.**
 
 1. ~~One daemon for every repository.~~ Done.
-2. The prototype, and its findings written down here.
+2. ~~The prototype, and its findings written down here.~~ Done.
 3. Developer mode: its own port, and `pnpm dev:desktop`.
 4. The app.
 5. Bundling, packaging, and the release workflow.
@@ -297,6 +325,11 @@ review actually contains would be the way to keep it honest.
 
 ## Smaller things
 
+- The daemon listens on every network interface, not only on this machine:
+  `serve()` is called with no hostname, and the prototype's daemon showed up as
+  `*:7790`. Anything on the same network can reach it and read file contents
+  from every repository it has served. Binding to `127.0.0.1` closes that, and
+  matters more than the `Host` check below.
 - The daemon checks nothing about who is asking. Requiring JSON on writes stops
   a web page from making it act, but a page that rebinds its own hostname to
   `127.0.0.1` can make same-origin requests and read the answers, including
