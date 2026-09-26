@@ -71,6 +71,29 @@ describe('health', () => {
   })
 })
 
+describe('a daemon with no default repository', () => {
+  it('refuses a review that does not say which repository it is for', async () => {
+    const detached = createServer({ repo_path: null })
+    const response = await detached.request('/api/reviews', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ base }),
+    })
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: string }).error).toMatch(/which repository/)
+  })
+
+  it('opens a review in the repository a request names', async () => {
+    const detached = createServer({ repo_path: null })
+    const response = await detached.request('/api/reviews', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ base, repo_path: repo.path }),
+    })
+    expect(response.status).toBe(201)
+  })
+})
+
 describe('POST /api/reviews', () => {
   it('creates a review and returns 201', async () => {
     const response = await post('/api/reviews', { base })

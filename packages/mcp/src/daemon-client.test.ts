@@ -49,6 +49,12 @@ describe('an older daemon still running after an update', () => {
     }
   })
 
+  it('is refused by a client that belongs to no repository', async () => {
+    const port = await oldDaemonServing(realpathSync(repo.path))
+    const client = new DaemonClient({ port, repo_path: null, autostart: false })
+    await expect(client.listReviews()).rejects.toThrow(/older yart/)
+  })
+
   it('is still used when it serves this same repository', async () => {
     const port = await oldDaemonServing(realpathSync(repo.path))
     const client = new DaemonClient({ port, repo_path: repo.path, autostart: false })

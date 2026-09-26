@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { DaemonClient } from '@yart/mcp/daemon-client'
 import { readConfig } from './config.ts'
 
 const config = readConfig(process.env)
@@ -8,6 +9,9 @@ const config = readConfig(process.env)
 if (config.profile !== null) {
   app.setPath('userData', join(app.getPath('appData'), config.profile))
 }
+
+// The app belongs to no repository, so the daemon it starts has no default one.
+const daemon = new DaemonClient({ port: config.daemon_port, repo_path: null })
 
 let window: BrowserWindow | null = null
 
@@ -55,5 +59,19 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  void app.whenReady().then(createWindow)
+  const start = async () => {
+    try {
+      await daemon.ensureRunning()
+    } catch (cause) {
+      dialog.showErrorBox(
+        'yart could not start',
+        cause instanceof Error ? cause.message : String(cause),
+      )
+      app.quit()
+      return
+    }
+    createWindow()
+  }
+
+  void app.whenReady().then(start)
 }

@@ -236,6 +236,8 @@ const main = async (): Promise<void> => {
       YART_DEV: '1',
       // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
       YART_START_URL: review_url,
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
+      YART_DAEMON_PORT: String(DAEMON_PORT),
     })
     desktop.on('exit', () => {
       shutdown()

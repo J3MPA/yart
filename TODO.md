@@ -128,8 +128,10 @@ machine, so the two must not reach each other's daemon.
   than opening another.
 - `yart://reviews/<id>` links. `start_review` opens one when the app is installed
   and falls back to the browser when it is not.
-- The app starts the daemon if none is running, with the same reuse rules the MCP
-  server uses, so either can come up first.
+- ~~The app starts the daemon if none is running, with the same reuse rules the
+  MCP server uses, so either can come up first.~~ Done: it uses the MCP server's
+  own client, on `YART_DAEMON_PORT` or 7777, and the daemon it starts belongs to
+  no repository. Like the MCP server's, it outlives the app.
 - The dock badge carries the unseen count the UI already computes, and a review
   turning `your turn` raises a notification.
 - The app carries the command line tools inside it. `yart` and `yart-mcp` are
