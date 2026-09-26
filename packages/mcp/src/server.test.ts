@@ -224,7 +224,7 @@ describe('opening the review', () => {
     const rendered = await call('start_review', { base })
     const review_id = idFrom(rendered)
     expect(opened).toEqual([`http://localhost:${port}/reviews/${review_id}`])
-    expect(rendered).toContain('Opened in their browser')
+    expect(rendered).toContain('Opened it for them')
   })
 
   it('does not open a window for a review with nothing in it', async () => {

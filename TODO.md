@@ -126,8 +126,14 @@ machine, so the two must not reach each other's daemon.
 
 - One window, loading the UI the daemon serves. A second launch focuses it rather
   than opening another.
-- `yart://reviews/<id>` links. `start_review` opens one when the app is installed
-  and falls back to the browser when it is not.
+- ~~`yart://reviews/<id>` links. `start_review` opens one when the app is
+  installed and falls back to the browser when it is not.~~ Done, and tried on a
+  packaged build: a link launches the app on the review, and switches the
+  running window between reviews without a second copy. `start_review` tries
+  the link only for the daemon on 7777, and treats `open` failing as the app
+  not being installed. macOS will not bind a scheme to an app in a temporary
+  directory, as it would not send its notifications; both work from
+  `~/Applications`.
 - ~~The app starts the daemon if none is running, with the same reuse rules the
   MCP server uses, so either can come up first.~~ Done: it uses the MCP server's
   own client, on `YART_DAEMON_PORT` or 7777, and the daemon it starts belongs to

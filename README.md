@@ -540,7 +540,9 @@ MCP server dies with its client and a review has to outlive that.
 | `resolve_thread`   | Mark a comment addressed                                    |
 | `advance_review`   | Re-anchor every comment onto new commits                    |
 
-**A new review opens in your browser.** The one step of the loop that needs a
+**A new review opens in the yart app**, or in your browser when the app is not
+installed — only for the daemon on 7777, since a link names a review but not
+the daemon serving it. The one step of the loop that needs a
 person is the person looking, and relying on an agent to relay a URL is how that
 step gets skipped — it did, repeatedly, before this existed. An empty review
 opens nothing, since there would be nothing to read. Set `YART_NO_BROWSER=1`

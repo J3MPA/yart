@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { latestSubmission } from '@yart/core'
-import { DaemonClient, type DaemonClientOptions } from './daemon-client.ts'
-import { browserOpeningEnabled, openInBrowser } from './open-browser.ts'
+import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-client.ts'
+import { browserOpeningEnabled, openReview } from './open-browser.ts'
 import {
   openThreads,
   renderReview,
@@ -70,7 +70,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
   const server = new McpServer({ name: 'yart', version: '0.0.0' })
 
-  const openBrowser = options.openBrowser ?? openInBrowser
+  const port = options.port ?? DEFAULT_PORT
+  const openBrowser = options.openBrowser ?? ((url: string) => openReview(url, port))
   const opening_enabled = browserOpeningEnabled()
 
   server.registerTool(
@@ -134,7 +135,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             renderReview(review, url),
             '',
             opening_enabled
-              ? 'Opened in their browser. Tell them it is up, then call await_review with this id.'
+              ? 'Opened it for them. Tell them it is up, then call await_review with this id.'
               : 'Ask the human to open that URL and review. Then call await_review with this id.',
           ].join('\n'),
         )
