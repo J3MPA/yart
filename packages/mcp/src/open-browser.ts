@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { DEFAULT_PORT } from './daemon-client.ts'
 
 /**
  * Opens a URL in whatever the machine treats as its browser.
@@ -29,6 +30,41 @@ export const openInBrowser: BrowserOpener = (url) => {
     child.unref()
   } catch {
     // Same reasoning as above, for the synchronous failures spawn can throw.
+  }
+}
+
+/** The desktop app's link to a review, from the review's address on the daemon. */
+export const appLink = (url: string): string => `yart:/${new URL(url).pathname}`
+
+/**
+ * Opens a review in the desktop app when it is installed, and in the browser
+ * when it is not.
+ *
+ * Only for the daemon on the default port, which is the one the installed app
+ * uses: a link names a review but not a daemon, so a development daemon's
+ * review would otherwise open in the installed app, served by other code. And
+ * only on macOS, as the app is. `open` fails when nothing claims the scheme,
+ * which is the check for whether the app is there.
+ */
+export const openReview = (url: string, port: number, fallback: BrowserOpener = openInBrowser) => {
+  if (process.platform !== 'darwin' || port !== DEFAULT_PORT) {
+    fallback(url)
+    return
+  }
+  let fell_back = false
+  const fallBack = () => {
+    if (fell_back) return
+    fell_back = true
+    fallback(url)
+  }
+  try {
+    const child = spawn('open', [appLink(url)], { stdio: 'ignore' })
+    child.on('error', fallBack)
+    child.on('exit', (code) => {
+      if (code !== 0) fallBack()
+    })
+  } catch {
+    fallBack()
   }
 }
 

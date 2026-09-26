@@ -1,7 +1,15 @@
 /* eslint-disable @typescript-eslint/naming-convention -- an environment
    variable's name is the operating system's shape, not this project's. */
 import { describe, expect, it } from 'vitest'
-import { browserOpeningEnabled } from './open-browser.ts'
+import { appLink, browserOpeningEnabled } from './open-browser.ts'
+
+describe('appLink', () => {
+  it('points the desktop app at the same review', () => {
+    expect(appLink('http://localhost:7777/reviews/9e0d8502-fa83')).toBe(
+      'yart://reviews/9e0d8502-fa83',
+    )
+  })
+})
 
 describe('browserOpeningEnabled', () => {
   it('is on when nothing is set, so the loop works without configuration', () => {
