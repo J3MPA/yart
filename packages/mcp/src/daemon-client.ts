@@ -26,6 +26,7 @@ interface DaemonHealth {
   ok: boolean
   repo_path?: string
   version?: string
+  code_dir?: string
 }
 
 export interface DaemonClientOptions {

@@ -19,7 +19,9 @@ const execFileAsync = promisify(execFile)
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const DAEMON_CLI = fileURLToPath(new URL('../packages/daemon/src/cli.ts', import.meta.url))
-const DAEMON_PORT = 7777
+const DAEMON_CODE_DIR = fileURLToPath(new URL('../packages/daemon/', import.meta.url))
+// Not 7777: that is where an installed yart listens, serving its own code.
+const DAEMON_PORT = 7778
 const VITE_PORT = 5173
 const STARTUP_TIMEOUT_MS = 20_000
 
@@ -61,11 +63,16 @@ const resolveBase = async (): Promise<string> => {
   return git('rev-parse', 'HEAD~1')
 }
 
-const isUp = async (url: string): Promise<boolean> => {
+interface Health {
+  code_dir?: string
+}
+
+const health = async (url: string): Promise<Health | null> => {
   try {
-    return (await fetch(url)).ok
+    const response = await fetch(url)
+    return response.ok ? ((await response.json()) as Health) : null
   } catch {
-    return false
+    return null
   }
 }
 
@@ -123,8 +130,17 @@ const openOrAdvanceReview = async (base_sha: string, head_sha: string): Promise<
 
 const children: ChildProcess[] = []
 
-const start = (command: string, args: string[], label: string): ChildProcess => {
-  const child = spawn(command, args, { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
+const start = (
+  command: string,
+  args: string[],
+  label: string,
+  env: Record<string, string> = {},
+): ChildProcess => {
+  const child = spawn(command, args, {
+    cwd: REPO_ROOT,
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
   child.stdout?.on('data', (chunk: Buffer) =>
     process.stdout.write(`[${label}] ${chunk.toString()}`),
   )
@@ -144,11 +160,20 @@ const main = async (): Promise<void> => {
   const head_sha = await git('rev-parse', 'HEAD')
   const branch = await git('rev-parse', '--abbrev-ref', 'HEAD')
 
-  // Reuse a daemon that is already listening. Spawning blindly would crash the
-  // child with EADDRINUSE while the old one kept answering, leaving this script
-  // reporting success against a daemon it does not own and cannot stop.
+  // Reuse a daemon that is already listening, but only one running this
+  // checkout's code: another checkout's would serve changes other than the ones
+  // being worked on. Spawning blindly would crash the child with EADDRINUSE
+  // while the old one kept answering, leaving this script reporting success
+  // against a daemon it does not own and cannot stop.
   const health_url = `http://localhost:${DAEMON_PORT}/health`
-  const reused = await isUp(health_url)
+  const found = await health(health_url)
+  if (found !== null && found.code_dir !== DAEMON_CODE_DIR) {
+    throw new Error(
+      `Port ${DAEMON_PORT} is taken by a yart daemon from ` +
+        `${found.code_dir ?? 'an older checkout'}, not this one. Stop it and re-run.`,
+    )
+  }
+  const reused = found !== null
   if (!reused) {
     start(
       process.execPath,
@@ -168,7 +193,13 @@ const main = async (): Promise<void> => {
 
   const review = await openOrAdvanceReview(base_sha, head_sha)
 
-  start('pnpm', ['--filter', '@yart/web', 'dev'], 'vite')
+  // A strict port, so a Vite already running for another checkout is an error
+  // rather than this one quietly moving to the next port while the address
+  // printed below points at the other.
+  start('pnpm', ['--filter', '@yart/web', 'dev', '--strictPort'], 'vite', {
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
+    YART_DAEMON_PORT: String(DAEMON_PORT),
+  })
   await waitForPort(`http://localhost:${VITE_PORT}/`, 'vite')
 
   const changed = await git('diff', '--name-only', `${base_sha}..${head_sha}`)
