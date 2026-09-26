@@ -27,6 +27,12 @@ const VERSION = (
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
 
+/**
+ * Where this daemon's code lives, so a client can tell a daemon from its own
+ * checkout apart from one belonging to another checkout or an installed yart.
+ */
+const CODE_DIR = fileURLToPath(new URL('..', import.meta.url))
+
 interface SubmitBody {
   verdict?: ReviewVerdict
   body?: string
@@ -184,7 +190,9 @@ export const createServer = ({
   // The version lets a client notice a daemon older than itself, which after an
   // update is the one still running; a daemon from before this field existed
   // also predates serving more than one repository.
-  app.get('/health', (context) => context.json({ ok: true, repo_path, version: VERSION }))
+  app.get('/health', (context) =>
+    context.json({ ok: true, repo_path, version: VERSION, code_dir: CODE_DIR }),
+  )
 
   app.get('/api/reviews', async (context) => {
     const archived = context.req.query('archived') === 'true'

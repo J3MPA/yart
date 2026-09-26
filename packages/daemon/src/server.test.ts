@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Review } from './types.ts'
@@ -62,6 +63,11 @@ describe('health', () => {
   it('reports the repository it is serving', async () => {
     const body = (await (await app.request('/health')).json()) as { repo_path: string }
     expect(body.repo_path).toBe(repo.path)
+  })
+
+  it('reports where its code runs from', async () => {
+    const body = (await (await app.request('/health')).json()) as { code_dir: string }
+    expect(body.code_dir).toBe(fileURLToPath(new URL('..', import.meta.url)))
   })
 })
 

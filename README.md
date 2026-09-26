@@ -162,7 +162,11 @@ the same branch advances the existing review instead of opening another, so
 comments left earlier follow your new commits and the re-anchoring is exercised
 every time you iterate.
 
-A daemon that is already listening is reused rather than replaced.
+Its daemon listens on 7778, leaving 7777 to the yart you use, so developing
+yart never talks to a daemon running some other version of its code. A daemon
+already on 7778 is reused only when it runs this checkout's code, which it
+reports on `/health`; one from another checkout is an error, and so is a Vite
+already holding 5173.
 
 For UI work without a review, `pnpm dev` runs Vite alone on 5173 with `/api`
 proxied to the daemon on 7777.
