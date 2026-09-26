@@ -99,11 +99,13 @@ Found on the way, and needed by the steps below:
 **Developer mode.** The developer and the user can be the same person on the same
 machine, so the two must not reach each other's daemon.
 
-- `pnpm dev:actual` uses its own port and only ever reuses a daemon from the same
-  checkout. Today it reuses anything on 7777, which with an installed yart
-  would be serving the installed version's code.
-- `pnpm dev:desktop` runs the Electron shell against the Vite dev server, so the
-  shell can be worked on with the UI still hot-reloading.
+- ~~`pnpm dev:actual` uses its own port and only ever reuses a daemon from the
+  same checkout.~~ Done: port 7778, and `/health` reports where a daemon's code
+  runs from.
+- ~~`pnpm dev:desktop` runs the Electron shell against the Vite dev server.~~
+  Done: `apps/desktop` is a bare shell so far, one window on a profile of its
+  own, and quitting it ends the session. Electron 44 runs its TypeScript main
+  process directly, so development needs no build step for it.
 - Which `yart-mcp` an agent talks to is decided by the MCP registration. A
   project-scoped registration in the yart repository pointing at the clone would
   let the installed one stay registered for everything else — if a project
@@ -169,7 +171,8 @@ a tap of our own could still carry the app later, on top of the same release.
 
 1. ~~One daemon for every repository.~~ Done.
 2. ~~The prototype, and its findings written down here.~~ Done.
-3. Developer mode: its own port, and `pnpm dev:desktop`.
+3. ~~Developer mode: its own port, and `pnpm dev:desktop`.~~ Done, but for the MCP
+   registration question above.
 4. The app.
 5. Bundling, packaging, and the release workflow.
 6. The install, update and uninstall scripts.

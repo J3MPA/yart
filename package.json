@@ -25,7 +25,8 @@
     "mcp": "pnpm --filter @yart/mcp start",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev:actual": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts"
+    "dev:actual": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts",
+    "dev:desktop": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts --desktop"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

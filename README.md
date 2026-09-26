@@ -168,6 +168,16 @@ already on 7778 is reused only when it runs this checkout's code, which it
 reports on `/health`; one from another checkout is an error, and so is a Vite
 already holding 5173.
 
+```sh
+pnpm dev:desktop
+```
+
+The same, but the review opens in the desktop shell from `apps/desktop` rather
+than in a browser, with the UI still hot-reloading inside it. The shell keeps
+its storage in a `yart-dev` profile, apart from an installed yart's, and
+quitting it ends the session. Changes to the shell's own main process need a
+restart.
+
 For UI work without a review, `pnpm dev` runs Vite alone on 5173 with `/api`
 proxied to the daemon on 7777.
 
