@@ -106,10 +106,21 @@ machine, so the two must not reach each other's daemon.
   Done: `apps/desktop` is a bare shell so far, one window on a profile of its
   own, and quitting it ends the session. Electron 44 runs its TypeScript main
   process directly, so development needs no build step for it.
-- Which `yart-mcp` an agent talks to is decided by the MCP registration. A
-  project-scoped registration in the yart repository pointing at the clone would
-  let the installed one stay registered for everything else — if a project
-  scope does win over a user scope of the same name. Unverified.
+- ~~Which `yart-mcp` an agent talks to is decided by the MCP registration.~~
+  Settled: when servers share a name, Claude Code launches exactly one, and
+  local scope beats project scope beats user scope. Checked with a probe
+  server registered under one name in all three scopes, recording which copy
+  started, on Claude Code 2.1.29. So the installed yart stays registered in user
+  scope, and a developer registers the clone in local scope from inside it,
+  pointed at the development daemon's port:
+
+  ```sh
+  claude mcp add -s local yart -- node --experimental-strip-types \
+    "$PWD/packages/mcp/src/cli.ts" --port 7778
+  ```
+
+  Local scope rather than a committed `.mcp.json`, because that would push one
+  person's path on everyone who clones the repository.
 
 **The app.** A new `apps/desktop`.
 
@@ -171,8 +182,7 @@ a tap of our own could still carry the app later, on top of the same release.
 
 1. ~~One daemon for every repository.~~ Done.
 2. ~~The prototype, and its findings written down here.~~ Done.
-3. ~~Developer mode: its own port, and `pnpm dev:desktop`.~~ Done, but for the MCP
-   registration question above.
+3. ~~Developer mode: its own port, and `pnpm dev:desktop`.~~ Done.
 4. The app.
 5. Bundling, packaging, and the release workflow.
 6. The install, update and uninstall scripts.
