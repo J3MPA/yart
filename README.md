@@ -292,6 +292,10 @@ read the answer, the daemon would still act on it — in any repository a page
 could name. Requiring `application/json` on every POST and PATCH makes such a
 request one a browser must ask permission for, and the daemon never grants it.
 
+**Only this machine can reach it.** The daemon listens on `127.0.0.1` rather
+than on every interface, so nothing else on the network can reach it — and it
+can read any file in any repository it has served.
+
 It owns three things.
 
 **A git adapter.** Revision ranges, changed files with the blob on each side,
