@@ -325,11 +325,6 @@ review actually contains would be the way to keep it honest.
 
 ## Smaller things
 
-- The daemon listens on every network interface, not only on this machine:
-  `serve()` is called with no hostname, and the prototype's daemon showed up as
-  `*:7790`. Anything on the same network can reach it and read file contents
-  from every repository it has served. Binding to `127.0.0.1` closes that, and
-  matters more than the `Host` check below.
 - The daemon checks nothing about who is asking. Requiring JSON on writes stops
   a web page from making it act, but a page that rebinds its own hostname to
   `127.0.0.1` can make same-origin requests and read the answers, including

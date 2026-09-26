@@ -7,6 +7,14 @@ import { createServer } from './server.ts'
 
 const DEFAULT_PORT = 7777
 
+/**
+ * The daemon reads any file in any repository it has served, so it must not be
+ * reachable from other machines. Left unset, Node listens on every interface.
+ * Clients keep calling it `localhost`, which the browser's per-origin seen
+ * state and drafts are keyed on, and which resolves here as well.
+ */
+const LOOPBACK = '127.0.0.1'
+
 export const main = async (argv: readonly string[]): Promise<void> => {
   const { values } = parseArgs({
     args: [...argv],
@@ -45,7 +53,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
   const state_dir = defaultStateDir()
   const app = createServer({ repo_path, state_dir })
 
-  serve({ fetch: app.fetch, port }, (info) => {
+  serve({ fetch: app.fetch, port, hostname: LOOPBACK }, (info) => {
     process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
     process.stdout.write(`listening on http://localhost:${info.port}\n`)
   })
