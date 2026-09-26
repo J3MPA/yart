@@ -9,6 +9,9 @@
  * Re-running on the same branch advances the existing review rather than making
  * a new one, so comments left last time follow your new commits — which is the
  * behaviour most worth having under your nose while developing.
+ *
+ * With `--desktop` it opens the review in the Electron shell instead of printing
+ * a URL for the browser, and quitting the shell ends the session.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +27,9 @@ const DAEMON_CODE_DIR = fileURLToPath(new URL('../packages/daemon/', import.meta
 const DAEMON_PORT = 7778
 const VITE_PORT = 5173
 const STARTUP_TIMEOUT_MS = 20_000
+
+const ARGS = process.argv.slice(2)
+const DESKTOP = ARGS.includes('--desktop')
 
 interface Review {
   id: string
@@ -46,8 +52,8 @@ const git = async (...args: string[]): Promise<string> => {
  * branch did and not whatever else has landed on main meanwhile.
  */
 const resolveBase = async (): Promise<string> => {
-  const explicit = process.argv[2]
-  if (explicit !== undefined && !explicit.startsWith('-')) return explicit
+  const explicit = ARGS.find((arg) => !arg.startsWith('-'))
+  if (explicit !== undefined) return explicit
 
   for (const trunk of ['main', 'master']) {
     try {
@@ -202,6 +208,7 @@ const main = async (): Promise<void> => {
   })
   await waitForPort(`http://localhost:${VITE_PORT}/`, 'vite')
 
+  const review_url = `http://localhost:${VITE_PORT}/reviews/${review.id}`
   const changed = await git('diff', '--name-only', `${base_sha}..${head_sha}`)
   const file_count = changed === '' ? 0 : changed.split('\n').length
 
@@ -215,13 +222,26 @@ const main = async (): Promise<void> => {
       `    round    ${review.rounds.length}, ${review.threads.length} thread(s) carried over`,
       `    daemon   ${reused ? 'reused one already running' : 'started'} on ${DAEMON_PORT}`,
       '',
-      `    open     http://localhost:${VITE_PORT}/reviews/${review.id}`,
+      DESKTOP ? '    open     in the desktop shell' : `    open     ${review_url}`,
       '',
       '  Vite has the UI with hot reload; the daemon serves /api behind it.',
       '  Commit, re-run, and your comments follow the lines they were on.',
       '',
     ].join('\n'),
   )
+
+  if (DESKTOP) {
+    const desktop = start('pnpm', ['--filter', '@yart/desktop', 'start'], 'desktop', {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
+      YART_DEV: '1',
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
+      YART_START_URL: review_url,
+    })
+    desktop.on('exit', () => {
+      shutdown()
+      process.exit(0)
+    })
+  }
 }
 
 process.on('SIGINT', () => {
