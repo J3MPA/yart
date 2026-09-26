@@ -17,8 +17,12 @@ interface RegistryFile {
 }
 
 export interface RepositoriesOptions {
-  /** Used for a request that does not say which repository it is for. */
-  default_repo: string
+  /**
+   * Used for a request that does not say which repository it is for, or null
+   * to require every request to say — as a daemon the desktop app starts must,
+   * belonging to no repository in particular.
+   */
+  default_repo: string | null
   /**
    * Where the repositories seen are remembered across restarts, or null to
    * remember them only for this process — which is what a test wants, so that
@@ -40,7 +44,7 @@ export interface RepositoriesOptions {
  * as they already share one store.
  */
 export class Repositories {
-  private readonly default_repo: string
+  private readonly default_repo: string | null
   private readonly registry_path: string | null
   private readonly services = new Map<string, ReviewService>()
   /** Which service holds a review, learned on first lookup; reviews never move. */
@@ -66,7 +70,7 @@ export class Repositories {
   private async knownRepositories(): Promise<Set<string>> {
     if (this.known === null) {
       this.known = await this.readRegistry()
-      this.known.add(this.default_repo)
+      if (this.default_repo !== null) this.known.add(this.default_repo)
     }
     return this.known
   }
@@ -108,9 +112,11 @@ export class Repositories {
    * uncommitted work has to snapshot.
    */
   async resolve(path: string | undefined): Promise<{ service: ReviewService; repo_root: string }> {
+    const asked = path ?? this.default_repo
+    if (asked === null) throw new ReviewError('Say which repository this is for', 400)
     let repo_root: string
     try {
-      repo_root = await findRepoRoot(path ?? this.default_repo)
+      repo_root = await findRepoRoot(asked)
     } catch (cause) {
       if (cause instanceof GitError) throw new ReviewError(`${path} is not a git repository`, 400)
       throw cause

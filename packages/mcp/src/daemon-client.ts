@@ -31,7 +31,8 @@ interface DaemonHealth {
 
 export interface DaemonClientOptions {
   port?: number
-  repo_path?: string
+  /** The repository this client works in; null for none, as in the desktop app. */
+  repo_path?: string | null
   /** Start a daemon when none is listening. On by default, so the agent's first call works. */
   autostart?: boolean
 }
@@ -44,13 +45,13 @@ const resolveDaemonCli = (): string => {
 export class DaemonClient {
   readonly base_url: string
   private readonly port: number
-  private readonly repo_path: string
+  private readonly repo_path: string | null
   private readonly autostart: boolean
   private started: boolean
 
   constructor(options: DaemonClientOptions = {}) {
     this.port = options.port ?? DEFAULT_PORT
-    this.repo_path = options.repo_path ?? process.cwd()
+    this.repo_path = options.repo_path === undefined ? process.cwd() : options.repo_path
     this.autostart = options.autostart ?? true
     this.base_url = `http://localhost:${this.port}`
     this.started = false
@@ -80,12 +81,13 @@ export class DaemonClient {
    */
   private checkServes(health: DaemonHealth): void {
     if (health.version !== undefined || health.repo_path === undefined) return
-    const mine = realpathSync(this.repo_path)
-    const inside = mine === health.repo_path || mine.startsWith(health.repo_path + sep)
+    const mine = this.repo_path === null ? null : realpathSync(this.repo_path)
+    const inside =
+      mine !== null && (mine === health.repo_path || mine.startsWith(health.repo_path + sep))
     if (inside) return
     throw new DaemonError(
       `The yart daemon on port ${this.port} is from an older yart and only serves ` +
-        `${health.repo_path}, so it would review that instead of ${mine}. Stop the process ` +
+        `${health.repo_path}, so it would review that instead of ${mine ?? 'the others'}. Stop the process ` +
         `listening on port ${this.port}; the next request starts a daemon that serves every ` +
         'repository.',
       null,
@@ -116,12 +118,18 @@ export class DaemonClient {
       [
         '--experimental-strip-types',
         resolveDaemonCli(),
-        '--repo',
-        this.repo_path,
+        ...(this.repo_path === null ? [] : ['--repo', this.repo_path]),
         '--port',
         String(this.port),
       ],
-      { detached: true, stdio: 'ignore' },
+      {
+        detached: true,
+        stdio: 'ignore',
+        // Inside the desktop app this process is Electron, which runs as plain
+        // Node only when told to; anywhere else the variable is ignored.
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      },
     )
     child.unref()
 

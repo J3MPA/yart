@@ -10,8 +10,8 @@ import { Repositories } from './repositories.ts'
 import { ReviewError, type SubmitParams } from './review.ts'
 
 export interface ServerOptions {
-  /** The repository a request is for when it does not say. */
-  repo_path: string
+  /** The repository a request is for when it does not say, or null for none. */
+  repo_path: string | null
   /** Where the repositories seen are remembered; null keeps them in memory. */
   state_dir?: string | null
   /** Built web UI to serve. Defaults to this workspace's `apps/web/dist`. */

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
-import { findRepoRoot } from './git.ts'
+import { findRepoRoot, GitError } from './git.ts'
 import { defaultStateDir } from './repositories.ts'
 import { createServer } from './server.ts'
 
@@ -14,6 +14,21 @@ const DEFAULT_PORT = 7777
  * state and drafts are keyed on, and which resolves here as well.
  */
 const LOOPBACK = '127.0.0.1'
+
+/**
+ * A repository named with `--repo` has to be one. Otherwise the one the daemon
+ * was started in is the default, and started outside any — as the desktop app
+ * starts it — there is none, and every request has to name its own.
+ */
+const defaultRepo = async (named: string | undefined): Promise<string | null> => {
+  if (named !== undefined) return findRepoRoot(named)
+  try {
+    return await findRepoRoot(process.cwd())
+  } catch (cause) {
+    if (cause instanceof GitError) return null
+    throw cause
+  }
+}
 
 export const main = async (argv: readonly string[]): Promise<void> => {
   const { values } = parseArgs({
@@ -49,7 +64,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     throw new Error(`Invalid port: ${values.port}`)
   }
 
-  const repo_path = await findRepoRoot(values.repo ?? process.cwd())
+  const repo_path = await defaultRepo(values.repo)
   const state_dir = defaultStateDir()
   const app = createServer({ repo_path, state_dir })
 

@@ -293,7 +293,9 @@ daemon keeps one service per repository, keyed by the shared git directory so
 that a repository's worktrees share one list, and remembers the repositories it
 has served in `~/.yart` (or `YART_HOME`) so that a review in any of them can be
 found by id after a restart. A request that names no repository gets the one
-the daemon was started in, which keeps an agent on an older yart working.
+the daemon was started in, which keeps an agent on an older yart working. One
+started outside any repository, as the desktop app starts it, has no such
+default, and a request that names none is refused.
 
 After an update, the daemon still running is the old one. The MCP server checks
 `/health`, which now carries a version, and refuses an older daemon that serves
