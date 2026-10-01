@@ -1,0 +1,99 @@
+.back {
+  display: inline-block;
+  margin-bottom: var(--yart-space-3);
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-text-muted);
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--yart-color-text);
+}
+
+.title {
+  font-size: var(--yart-text-xl);
+  letter-spacing: -0.02em;
+}
+
+.notice {
+  margin-top: var(--yart-space-4);
+  color: var(--yart-color-text-muted);
+}
+
+.group {
+  max-width: 40rem;
+  margin: var(--yart-space-6) 0 0;
+  padding: var(--yart-space-4);
+  background-color: var(--yart-color-surface);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-lg);
+}
+
+.legend {
+  padding: 0 var(--yart-space-2);
+  font-weight: 600;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yart-space-3);
+  padding: var(--yart-space-3) var(--yart-space-2);
+  border-radius: var(--yart-radius-md);
+  cursor: pointer;
+}
+
+.choice:hover {
+  background-color: var(--yart-color-surface-sunken);
+}
+
+/* Drawn from the tokens, as the list's checkboxes are, rather than the
+   browser's own bright control. */
+.radio {
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.2rem 0 0;
+  appearance: none;
+  border: 1px solid var(--yart-color-border-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.radio:checked {
+  border-color: var(--yart-color-accent);
+}
+
+.radio:checked::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: var(--yart-color-accent);
+  border-radius: 50%;
+}
+
+.radio:focus-visible {
+  outline: 2px solid var(--yart-color-accent);
+  outline-offset: 1px;
+}
+
+.choice_label {
+  display: block;
+  font-size: var(--yart-text-sm);
+}
+
+.choice_detail {
+  display: block;
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-text-muted);
+}
+
+.note {
+  margin-top: var(--yart-space-3);
+  padding: 0 var(--yart-space-2);
+  font-size: var(--yart-text-xs);
+  line-height: var(--yart-line-normal);
+  color: var(--yart-color-text-muted);
+}

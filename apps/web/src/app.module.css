@@ -16,3 +16,16 @@
   margin-top: var(--yart-space-2);
   color: var(--yart-color-text-muted);
 }
+
+.settings_link {
+  margin-left: auto;
+  font-size: var(--yart-text-sm);
+  font-weight: normal;
+  letter-spacing: normal;
+  color: var(--yart-color-text-muted);
+  text-decoration: none;
+}
+
+.settings_link:hover {
+  color: var(--yart-color-text);
+}

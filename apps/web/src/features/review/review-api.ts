@@ -8,6 +8,7 @@ import type {
   FileDiff,
   Review,
   ReviewVerdict,
+  Settings,
   ThreadStatus,
 } from '@yart/core'
 
@@ -57,12 +58,20 @@ export const reviewApi = createApi({
   // The diff is tagged separately because it does not change when someone
   // comments — only when head advances. Sharing one tag made every comment
   // re-run `git diff` over every file in the review.
-  tagTypes: ['Review', 'ReviewList', 'Diff'],
+  tagTypes: ['Review', 'ReviewList', 'Diff', 'Settings'],
   // Nothing in this app advances the review; an agent does, over MCP. Refetching
   // when the window regains focus is how the page notices that happened.
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
+    getSettings: builder.query<Settings, void>({
+      query: () => '/settings',
+      providesTags: ['Settings'],
+    }),
+    updateSettings: builder.mutation<Settings, Partial<Settings>>({
+      query: (changes) => ({ url: '/settings', method: 'PATCH', body: changes }),
+      invalidatesTags: ['Settings'],
+    }),
     listReviews: builder.query<Review[], boolean | void>({
       query: (archived) => (archived === true ? '/reviews?archived=true' : '/reviews'),
       providesTags: ['ReviewList'],
@@ -138,6 +147,8 @@ export const reviewApi = createApi({
 })
 
 export const {
+  useGetSettingsQuery,
+  useUpdateSettingsMutation,
   useListReviewsQuery,
   useSetReviewArchivedMutation,
   useDeleteReviewMutation,
