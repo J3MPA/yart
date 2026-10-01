@@ -103,11 +103,88 @@ Early — the scaffold is in place, the product is not.
 - [x] A tab-title and favicon signal when the agent has answered
 - [x] Pending reviews, a Reviewed mark per file, and folding in the file tree
 - [x] Installable: `yart` and `yart-mcp` run from any repository
+- [x] A desktop app, installed, updated and removed with one command each
 - [ ] Clipboard export (fallback for non-MCP agents)
 
-## Getting started
+## Using yart
 
-Requires Node 20+ and pnpm.
+yart runs on macOS, as an app carrying the two commands an agent and a terminal
+need. Installing it needs neither Node, npm nor `sudo`.
+
+> Releases are not public yet. Until they are, yart is run from a clone, as
+> described under [Developing yart](#developing-yart).
+
+### Installing
+
+```sh
+curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
+```
+
+That puts `yart.app` in `~/Applications` and links `yart` and `yart-mcp` into
+`~/.local/bin`, and says so if that directory is not on your `PATH`.
+
+Install with `curl` rather than by downloading the zip in a browser. A browser
+marks what it downloads as quarantined, and macOS then refuses to open the app
+("Apple could not verify yart is free of malware"), because it carries a free
+ad-hoc signature rather than a paid, notarized one. `curl` does not mark it.
+
+### Connecting your agent
+
+```sh
+claude mcp add -s user yart -- ~/.local/bin/yart-mcp
+```
+
+The path is absolute because Claude Code starts MCP servers with its own
+environment, which may not include your shell's `PATH`. Claude Desktop and other
+clients are covered under [Registering it](#registering-it).
+
+Then ask for a review — saying you want to review the code is enough. An agent
+will not open one on its own, since deciding a change is ready to look at is not
+a judgement it has a reason to make.
+
+### Reviewing
+
+A new review opens in the yart window. Comment on any line, hold comments to send
+with a verdict, mark files reviewed as you go, and submit: the agent reads your
+comments, answers them, and advances the review onto its fixes, with every
+comment following the line it was on. The window lists reviews from every
+repository yart has served.
+
+The same reviews are at `http://localhost:7777` in a browser. The app and a
+browser keep their own seen state and drafts, so moving between them starts
+those afresh.
+
+### Notifications and the dock badge
+
+When the agent answers on a review, yart raises a notification and its dock icon
+counts the reviews waiting for you. Only reviews already opened in the app count,
+since one never opened has nothing to have changed since.
+
+The badge starts off. Turn on **Badge application icon** under System Settings →
+Notifications → yart, which lists yart once it has sent its first notification.
+
+### Updating
+
+```sh
+yart up
+```
+
+Installs the latest release over the current one, stopping and restarting yart
+around it. Agent sessions already running keep the old `yart-mcp` until they
+restart.
+
+### Uninstalling
+
+```sh
+yart uninstall
+```
+
+Stops yart and removes the app and its two commands. Seen state and drafts are
+kept unless you pass `--purge`, since a draft is something you wrote. Reviews are
+never touched: they live in each repository's `.git/yart`. It prints the
+`claude mcp remove` command to finish with.
+
+## Developing yart
 
 Requires Node 20+ and pnpm.
 
@@ -116,7 +193,7 @@ pnpm install
 pnpm build      # the daemon serves the built UI, so build it first
 ```
 
-### Installing the commands
+### Using a clone as your yart
 
 ```sh
 pnpm --filter @yart/daemon link --global
@@ -136,6 +213,17 @@ TypeScript with a `#!/usr/bin/env -S node --experimental-strip-types` shebang, s
 Node strips the types as it loads them.
 
 Undo with `pnpm uninstall --global @yart/daemon @yart/mcp`.
+
+Alongside an installed yart, leave that one registered with Claude Code and
+register the clone in local scope from inside it, pointed at the development
+daemon. Local scope wins over user scope for a server of the same name, so
+agents in this repository talk to the clone and every other project keeps the
+installed yart:
+
+```sh
+claude mcp add -s local yart -- node --experimental-strip-types \
+  "$PWD/packages/mcp/src/cli.ts" --port 7778
+```
 
 ### Running it
 
@@ -192,6 +280,8 @@ pnpm test       # unit tests
 pnpm package:desktop [--arch arm64|x64] [--version <version>]
 ```
 
+### Packaging and releasing
+
 `package:desktop` builds `yart.app` into `apps/desktop/out`, ad-hoc signed,
 with a zip and its SHA-256 checksum beside it. The daemon, the MCP server and
 the app are bundled with esbuild into a copy of the workspace's layout, so the
@@ -199,7 +289,13 @@ daemon finds its UI and version where it would in the workspace. The app carries
 `yart` and `yart-mcp` in `Contents/Resources/bin`, which run the bundles on the
 app's own Node.
 
-## Project layout
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which packages both
+architectures on one Apple Silicon runner and publishes a release with the zips,
+their checksums and the install scripts. A version with a suffix, such as
+`v0.2.0-rc.1`, makes a draft prerelease instead, which is how a change to the
+workflow gets tried without putting anything in front of users.
+
+### Project layout
 
 ```
 apps/
@@ -214,6 +310,18 @@ packages/
   daemon/           Git adapter, review store, HTTP API, CLI
   mcp/              MCP server — the agent's side of the loop
 ```
+
+### Conventions
+
+Naming is a project requirement rather than a preference, and is enforced by
+ESLint: variables and properties are `snake_case`, functions are `camelCase`,
+types are `PascalCase`, constants are `UPPER_SNAKE_CASE`, and files and
+directories are `kebab-case`. Callables are const arrows rather than `function`
+declarations, and Prettier owns formatting (no semicolons, single quotes, 100
+columns). Properties stay
+`snake_case` on serialized types too, so the JSON that travels over MCP matches
+the source. The full rules and their exceptions are in
+[`AGENTS.md`](AGENTS.md).
 
 ## Comment anchoring
 
@@ -273,18 +381,6 @@ so the model is a pure lookup and does not care where the diff came from. A
 mapping can be built from text with `buildLineMap` (which uses
 [`diff`](https://github.com/kpdecker/jsdiff)), or later from `git diff` output —
 swapping one for the other does not touch the anchoring logic.
-
-## Conventions
-
-Naming is a project requirement rather than a preference, and is enforced by
-ESLint: variables and properties are `snake_case`, functions are `camelCase`,
-types are `PascalCase`, constants are `UPPER_SNAKE_CASE`, and files and
-directories are `kebab-case`. Callables are const arrows rather than `function`
-declarations, and Prettier owns formatting (no semicolons, single quotes, 100
-columns). Properties stay
-`snake_case` on serialized types too, so the JSON that travels over MCP matches
-the source. The full rules and their exceptions are in
-[`AGENTS.md`](AGENTS.md).
 
 ## The daemon
 
@@ -577,19 +673,17 @@ simply call it again.
 
 ### Registering it
 
-With Claude Code, from the repository you want to review:
+With Claude Code, see [Connecting your agent](#connecting-your-agent).
 
-```sh
-claude mcp add yart -- yart-mcp
-```
-
-With Claude Desktop, add to its MCP configuration:
+With Claude Desktop, add to its MCP configuration, with the absolute path to
+`yart-mcp` (for an installed yart, `~/.local/bin/yart-mcp` with your home
+directory written out):
 
 ```json
 {
   "mcpServers": {
     "yart": {
-      "command": "yart-mcp",
+      "command": "/Users/you/.local/bin/yart-mcp",
       "args": ["--repo", "/absolute/path/to/the/repository"]
     }
   }

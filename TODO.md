@@ -236,7 +236,7 @@ a tap of our own could still carry the app later, on top of the same release.
 5. ~~Bundling, packaging, and the release workflow.~~ Done.
 6. ~~The install, update and uninstall scripts.~~ Done, but for making the
    repository public.
-7. The README split into using yart and developing it.
+7. ~~The README split into using yart and developing it.~~ Done.
 
 Left out on purpose: Linux and Windows, though Electron would carry both —
 `install.sh` refuses anything but macOS for now. And the Claude Code plugin,
