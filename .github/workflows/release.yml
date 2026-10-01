@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Apple Silicon, building the Intel app too: packaging for another
+    # architecture only downloads that architecture's Electron, and macOS
+    # minutes are the expensive kind.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Package for Apple Silicon
+        run: pnpm package:desktop --arch arm64 --version "${GITHUB_REF_NAME#v}"
+
+      - name: Package for Intel
+        run: pnpm package:desktop --arch x64 --version "${GITHUB_REF_NAME#v}"
+
+      # A version with a suffix, such as v0.2.0-rc.1, makes a draft prerelease
+      # that nobody sees until it is published by hand. That is how a change to
+      # this workflow gets tried without putting anything in front of users.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          case "$GITHUB_REF_NAME" in
+            *-*) flags=(--draft --prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" "${flags[@]}" --generate-notes \
+            apps/desktop/out/yart-darwin-arm64.zip \
+            apps/desktop/out/yart-darwin-arm64.zip.sha256 \
+            apps/desktop/out/yart-darwin-x64.zip \
+            apps/desktop/out/yart-darwin-x64.zip.sha256
