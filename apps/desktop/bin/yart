@@ -1,8 +1,25 @@
 #!/bin/sh
 # Runs yart's daemon on the Node built into yart.app, so neither Node nor npm is
 # needed. Resolves its own link first: it is installed as a link elsewhere.
+#
+#   yart up          update to the latest release
+#   yart uninstall   remove yart, keeping seen state and drafts unless --purge
 set -e
 here=$(dirname "$(readlink -f "$0")")
 contents=$(cd "$here/../.." && pwd)
 app="$contents/Resources/app.asar"
+
+case "${1:-}" in
+  up)
+    # The latest release's own installer, since it is the one that knows how to
+    # put that release in place.
+    curl -fsSL "${YART_RELEASE_URL:-https://github.com/J3MPA/yart/releases/latest/download}/install.sh" | sh
+    exit
+    ;;
+  uninstall)
+    shift
+    exec sh "$contents/Resources/uninstall.sh" "$@"
+    ;;
+esac
+
 ELECTRON_RUN_AS_NODE=1 exec "$contents/MacOS/yart" "$app/packages/daemon/dist/cli.mjs" "$@"
