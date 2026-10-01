@@ -35,6 +35,11 @@ export interface DaemonClientOptions {
   repo_path?: string | null
   /** Start a daemon when none is listening. On by default, so the agent's first call works. */
   autostart?: boolean
+  /**
+   * The daemon entry point to start. Defaults to this workspace's, which a
+   * packaged app does not have: it passes the bundled one instead.
+   */
+  daemon_cli?: string
 }
 
 const resolveDaemonCli = (): string => {
@@ -47,12 +52,14 @@ export class DaemonClient {
   private readonly port: number
   private readonly repo_path: string | null
   private readonly autostart: boolean
+  private readonly daemon_cli: string | undefined
   private started: boolean
 
   constructor(options: DaemonClientOptions = {}) {
     this.port = options.port ?? DEFAULT_PORT
     this.repo_path = options.repo_path === undefined ? process.cwd() : options.repo_path
     this.autostart = options.autostart ?? true
+    this.daemon_cli = options.daemon_cli
     this.base_url = `http://localhost:${this.port}`
     this.started = false
   }
@@ -117,7 +124,7 @@ export class DaemonClient {
       process.execPath,
       [
         '--experimental-strip-types',
-        resolveDaemonCli(),
+        this.daemon_cli ?? resolveDaemonCli(),
         ...(this.repo_path === null ? [] : ['--repo', this.repo_path]),
         '--port',
         String(this.port),

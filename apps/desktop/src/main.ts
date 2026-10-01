@@ -22,7 +22,14 @@ if (config.profile !== null) {
 }
 
 // The app belongs to no repository, so the daemon it starts has no default one.
-const daemon = new DaemonClient({ port: config.daemon_port, repo_path: null })
+// Packaged, it carries its own bundled daemon laid out as the workspace is.
+const daemon = new DaemonClient({
+  port: config.daemon_port,
+  repo_path: null,
+  daemon_cli: app.isPackaged
+    ? join(app.getAppPath(), 'packages', 'daemon', 'dist', 'cli.mjs')
+    : undefined,
+})
 
 let window: BrowserWindow | null = null
 let started = false

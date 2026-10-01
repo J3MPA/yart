@@ -189,12 +189,21 @@ pnpm typecheck  # types only
 pnpm lint       # ESLint, including the naming conventions
 pnpm format     # Prettier
 pnpm test       # unit tests
+pnpm package:desktop [--arch arm64|x64] [--version <version>]
 ```
+
+`package:desktop` builds `yart.app` into `apps/desktop/out`, ad-hoc signed,
+with a zip and its SHA-256 checksum beside it. The daemon, the MCP server and
+the app are bundled with esbuild into a copy of the workspace's layout, so the
+daemon finds its UI and version where it would in the workspace. The app carries
+`yart` and `yart-mcp` in `Contents/Resources/bin`, which run the bundles on the
+app's own Node.
 
 ## Project layout
 
 ```
 apps/
+  desktop/          Electron app, its packaging, and the commands it carries
   web/              React UI
     src/
       app/          Redux store and typed hooks

@@ -26,6 +26,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:actual": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts",
+    "package:desktop": "pnpm --filter @yart/desktop package",
     "dev:desktop": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/dev-actual.ts --desktop"
   },
   "devDependencies": {
