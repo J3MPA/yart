@@ -5,6 +5,7 @@ import { CommentThread } from './comment-thread'
 import { DraftComment } from './draft-comment'
 import { newThreadDraft, type Drafting, type FileBlobs } from './drafts'
 import { draftAdded } from './local-review-slice'
+import type { SyntaxToken } from './syntax'
 import { anchorKey } from './thread-anchors'
 import styles from './review.module.css'
 
@@ -25,6 +26,8 @@ export interface DiffRowProps {
   review_id: string
   file_path: string
   line: DiffLine
+  /** The line's colours, or null to show it plain. */
+  tokens: readonly SyntaxToken[] | null
   /** The file's blobs, which a drafted comment records its line against. */
   file_blobs: FileBlobs
   threads_by_anchor: ReadonlyMap<string, Thread[]>
@@ -67,6 +70,7 @@ export const DiffRow = ({
   review_id,
   file_path,
   line,
+  tokens,
   file_blobs,
   threads_by_anchor,
   drafting,
@@ -144,7 +148,24 @@ export const DiffRow = ({
             </button>
           )}
         </span>
-        <span className={styles.code}>{line.text}</span>
+        <span className={styles.code}>
+          {tokens === null
+            ? line.text
+            : tokens.map((token, index) => (
+                <span
+                  key={index}
+                  style={{
+                    color: token.color ?? undefined,
+                    // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
+                    fontStyle: token.italic ? 'italic' : undefined,
+                    // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
+                    fontWeight: token.bold ? 'bold' : undefined,
+                  }}
+                >
+                  {token.content}
+                </span>
+              ))}
+        </span>
       </div>
 
       {(at_line.length > 0 || held.length > 0 || is_composing) && (
