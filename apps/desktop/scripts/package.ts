@@ -116,7 +116,8 @@ const main = async () => {
     asar: true,
     overwrite: true,
     protocols: [{ name: 'yart', schemes: ['yart'] }],
-    extraResource: [join(DESKTOP, 'bin')],
+    // `yart uninstall` runs the uninstaller the app carries, which matches it.
+    extraResource: [join(DESKTOP, 'bin'), join(DESKTOP, 'install', 'uninstall.sh')],
   })
   if (app_dir === undefined) throw new Error('Packaging produced no app')
   const app_path = join(app_dir, 'yart.app')

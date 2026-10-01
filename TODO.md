@@ -172,12 +172,34 @@ machine, so the two must not reach each other's daemon.
   128 MB for Intel, about 15 seconds each on an M-series Mac, both built there.
   A zip rather than a disk image: a disk image is made for dragging an app into
   place by hand, and is awkward to script.
-- A GitHub Actions workflow on a `v*` tag builds on macOS runners and publishes
-  the release, with `install.sh` and `uninstall.sh` as assets of it so each
-  script is the one that matches its release.
+- ~~A GitHub Actions workflow on a `v*` tag builds on macOS runners and
+  publishes the release, with `install.sh` and `uninstall.sh` as assets of it
+  so each script is the one that matches its release.~~ Done: one Apple Silicon
+  runner packages both, in under a minute and a half. A version with a suffix,
+  such as `v0.2.0-rc.1`, makes a draft prerelease, which is how the workflow
+  was tried.
 
 **Install, update, uninstall.** Nothing needs `sudo`; everything lives in the
 user's own directories.
+
+**Done**, in `apps/desktop/install`, as described below. Tried end to end with
+`HOME` set to a temporary directory and the release served from a local web
+server, which `YART_RELEASE_URL` points the scripts at: a fresh install, an
+update over it that stopped the old daemon, a corrupted checksum leaving the
+installed app untouched, `yart up`, `yart uninstall` keeping drafts, a second
+uninstall, `--purge`, and a `yart` link that was not the app's surviving.
+Not tried: reopening the app after an update when it was running, and an
+install into the real `~/Applications`.
+
+**The repository is private**, and GitHub serves release downloads without
+signing in only for public repositories, so the `curl` command below works for
+nobody until it is made public. That waits on protecting `main`.
+
+**Every `yart.app` on a disk claims `yart://`.** macOS registers apps it comes
+across, including copies in the Bin and the build output in `apps/desktop/out`,
+so on a machine that builds yart a link can reach a stray copy. The install
+script registers the installed app explicitly, which should make it the one
+links reach, but that is not verified.
 
 - `curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh`
   detects the architecture, downloads the zip and its checksum, verifies it,
@@ -211,8 +233,9 @@ a tap of our own could still carry the app later, on top of the same release.
 2. ~~The prototype, and its findings written down here.~~ Done.
 3. ~~Developer mode: its own port, and `pnpm dev:desktop`.~~ Done.
 4. The app.
-5. Bundling, packaging, and the release workflow.
-6. The install, update and uninstall scripts.
+5. ~~Bundling, packaging, and the release workflow.~~ Done.
+6. ~~The install, update and uninstall scripts.~~ Done, but for making the
+   repository public.
 7. The README split into using yart and developing it.
 
 Left out on purpose: Linux and Windows, though Electron would carry both —
