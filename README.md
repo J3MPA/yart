@@ -154,6 +154,18 @@ The same reviews are at `http://localhost:7777` in a browser. The app and a
 browser keep their own seen state and drafts, so moving between them starts
 those afresh.
 
+### Cleaning up approved reviews
+
+**Settings**, linked from the review list, choose what happens to a review once
+you approve it: keep it, archive it, or delete it. Keeping is the default. It
+happens a minute after the approval, so that an agent waiting on the review
+reads your verdict first, and not at all if you reopen the review in that
+minute. The choice is kept by the daemon in `~/.yart/settings.json`, so it
+applies in the app and in any browser alike.
+
+Reviews can also be archived or deleted in bulk: tick them in the list and use
+the actions above it.
+
 ### Notifications and the dock badge
 
 When the agent answers on a review, yart raises a notification and its dock icon

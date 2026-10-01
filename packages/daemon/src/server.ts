@@ -3,11 +3,19 @@ import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
-import type { CommentAuthor, DiffSide, FileContents, ReviewVerdict, Thread } from '@yart/core'
+import {
+  latestSubmission,
+  type CommentAuthor,
+  type DiffSide,
+  type FileContents,
+  type ReviewVerdict,
+  type Thread,
+} from '@yart/core'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { Repositories } from './repositories.ts'
 import { ReviewError, type SubmitParams } from './review.ts'
+import { SettingsStore } from './settings.ts'
 
 export interface ServerOptions {
   /** The repository a request is for when it does not say, or null for none. */
@@ -16,7 +24,16 @@ export interface ServerOptions {
   state_dir?: string | null
   /** Built web UI to serve. Defaults to this workspace's `apps/web/dist`. */
   ui_dir?: string
+  /** How long after an approval the settings' action is taken. */
+  approval_grace_ms?: number
 }
+
+/**
+ * Long enough for an agent waiting in `await_review` to read the approval
+ * before the review is archived or deleted from under it, which it polls for
+ * every few seconds.
+ */
+const APPROVAL_GRACE_MS = 60_000
 
 /** Read once at start: a running daemon does not change version. */
 const VERSION = (
@@ -152,9 +169,36 @@ export const createServer = ({
   repo_path,
   ui_dir = DEFAULT_UI_DIR,
   state_dir = null,
+  approval_grace_ms = APPROVAL_GRACE_MS,
 }: ServerOptions): Hono => {
   const repositories = new Repositories({ default_repo: repo_path, state_dir })
+  const settings = new SettingsStore(state_dir)
   const app = new Hono()
+
+  /**
+   * Archives or deletes a review a while after it was approved, as the settings
+   * say. Checked again when the time comes rather than decided now: the setting
+   * may have changed, and a review reopened or approved again since is left to
+   * the newer verdict.
+   */
+  const settleApproval = (review_id: string, submission_id: string) => {
+    const timer = setTimeout(() => {
+      void (async () => {
+        const { on_approve } = await settings.read()
+        if (on_approve === 'keep') return
+        const service = await repositories.locate(review_id)
+        const review = await service.get(review_id)
+        const latest = latestSubmission(review)
+        if (latest?.id !== submission_id || latest.verdict !== 'approved') return
+        if (on_approve === 'delete') await service.remove(review_id)
+        else if (review.archived_at === null) await service.setArchived(review_id, true)
+      })().catch(() => {
+        // Already deleted by hand, most likely; there is nothing left to settle.
+      })
+    }, approval_grace_ms)
+    // A pending clean-up is no reason to keep the process alive.
+    timer.unref()
+  }
 
   app.onError((cause, context) => {
     const status = statusFor(cause)
@@ -367,14 +411,25 @@ export const createServer = ({
       throw new ReviewError('expected_head_sha must be a string', 400)
     }
 
-    return context.json(
-      await service.submit(context.req.param('id'), {
-        verdict: body.verdict,
-        body: body.body,
-        ...parseDrafts(body),
-        expected_head_sha: body.expected_head_sha,
-      }),
-    )
+    const review = await service.submit(context.req.param('id'), {
+      verdict: body.verdict,
+      body: body.body,
+      ...parseDrafts(body),
+      expected_head_sha: body.expected_head_sha,
+    })
+    const latest = latestSubmission(review)
+    if (latest?.verdict === 'approved') settleApproval(review.id, latest.id)
+    return context.json(review)
+  })
+
+  app.get('/api/settings', async (context) => context.json(await settings.read()))
+
+  app.patch('/api/settings', async (context) => {
+    const body = await context.req.json<unknown>().catch(() => null)
+    if (typeof body !== 'object' || body === null) {
+      throw new ReviewError('Settings must be sent as an object', 400)
+    }
+    return context.json(await settings.update(body as Record<string, unknown>))
   })
 
   app.post('/api/reviews/:id/advance', async (context) => {

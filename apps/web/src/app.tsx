@@ -4,6 +4,7 @@ import { useUnseenSignal } from '@/features/review/use-unseen-signal'
 import { useDesktopSignal } from '@/features/review/use-desktop-signal'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
+import { SettingsPage } from '@/features/settings/settings-page'
 import styles from './app.module.css'
 
 /**
@@ -19,6 +20,7 @@ const reviewIdFromPath = (pathname: string): string | null => {
 
 export const App = () => {
   const review_id = reviewIdFromPath(window.location.pathname)
+  const on_settings = /^\/settings\/?$/.test(window.location.pathname)
   // Held here rather than in the list, because the tab has to carry the count
   // while a single review is open too.
   const unseen = useUnseenReviews()
@@ -27,11 +29,16 @@ export const App = () => {
 
   return (
     <main className={styles.shell}>
-      {review_id === null ? (
+      {on_settings ? (
+        <SettingsPage />
+      ) : review_id === null ? (
         <>
           <h1 className={styles.title}>
             <Logo size={30} />
             yart
+            <a className={styles.settings_link} href="/settings">
+              Settings
+            </a>
           </h1>
           <p className={styles.tagline}>Local, GitHub-style code review for AI-generated diffs.</p>
           <ReviewList unseen={unseen.ids} />

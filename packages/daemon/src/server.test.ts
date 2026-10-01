@@ -390,3 +390,116 @@ describe('serving the web UI', () => {
     expect(await response.text()).toContain('has not been built')
   })
 })
+
+describe('settings', () => {
+  it('keeps approved reviews unless told otherwise', async () => {
+    const body = (await (await app.request('/api/settings')).json()) as { on_approve: string }
+    expect(body.on_approve).toBe('keep')
+  })
+
+  it('changes what happens on approval, and refuses what is not a choice', async () => {
+    const changed = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ on_approve: 'archive' }),
+    })
+    expect(((await changed.json()) as { on_approve: string }).on_approve).toBe('archive')
+
+    const refused = await app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ on_approve: 'shred' }),
+    })
+    expect(refused.status).toBe(400)
+  })
+})
+
+describe('settling an approved review', () => {
+  // No grace period, so the clean-up runs as soon as the test lets timers run.
+  let settling: Hono
+
+  beforeEach(() => {
+    settling = createServer({ repo_path: repo.path, approval_grace_ms: 0 })
+  })
+
+  const send = (path: string, method: string, body?: unknown) =>
+    settling.request(path, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+
+  const choose = (on_approve: string) => send('/api/settings', 'PATCH', { on_approve })
+
+  const openOne = async (): Promise<Review> =>
+    (await (await send('/api/reviews', 'POST', { base })).json()) as Review
+
+  const timersRun = () => new Promise((resolve) => setTimeout(resolve, 20))
+
+  const fetchReview = (id: string) => settling.request(`/api/reviews/${id}`)
+
+  it('archives it when the settings say so', async () => {
+    await choose('archive')
+    const review = await openOne()
+    await send(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'approved' })
+    await timersRun()
+    const settled = (await (await fetchReview(review.id)).json()) as Review
+    expect(settled.archived_at).not.toBeNull()
+  })
+
+  it('deletes it when the settings say so', async () => {
+    await choose('delete')
+    const review = await openOne()
+    await send(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'approved' })
+    await timersRun()
+    expect((await fetchReview(review.id)).status).toBe(404)
+  })
+
+  it('leaves it alone when the settings keep it', async () => {
+    const review = await openOne()
+    await send(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'approved' })
+    await timersRun()
+    const settled = (await (await fetchReview(review.id)).json()) as Review
+    expect(settled.archived_at).toBeNull()
+  })
+
+  it('leaves a review with a verdict other than approval alone', async () => {
+    await choose('delete')
+    const review = await openOne()
+    await send(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'changes_requested' })
+    await timersRun()
+    expect((await fetchReview(review.id)).status).toBe(200)
+  })
+
+  it('does nothing once the setting is turned off before the time comes', async () => {
+    const slow = createServer({ repo_path: repo.path, approval_grace_ms: 30 })
+    const request = (path: string, method: string, body?: unknown) =>
+      slow.request(path, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    await request('/api/settings', 'PATCH', { on_approve: 'delete' })
+    const review = (await (await request('/api/reviews', 'POST', { base })).json()) as Review
+    await request(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'approved' })
+    await request('/api/settings', 'PATCH', { on_approve: 'keep' })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect((await slow.request(`/api/reviews/${review.id}`)).status).toBe(200)
+  })
+
+  it('leaves a review reopened before the time comes to its newer verdict', async () => {
+    const slow = createServer({ repo_path: repo.path, approval_grace_ms: 30 })
+    const request = (path: string, method: string, body?: unknown) =>
+      slow.request(path, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    await request('/api/settings', 'PATCH', { on_approve: 'delete' })
+    const review = (await (await request('/api/reviews', 'POST', { base })).json()) as Review
+    await request(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'approved' })
+    await request(`/api/reviews/${review.id}/submit`, 'POST', { verdict: 'changes_requested' })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect((await slow.request(`/api/reviews/${review.id}`)).status).toBe(200)
+  })
+})
