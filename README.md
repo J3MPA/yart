@@ -1,11 +1,36 @@
-<img src="apps/web/public/logo.svg" width="72" alt="" align="left" />
+<div align="center">
+
+<img src="apps/web/public/logo.svg" width="88" alt="yart" />
 
 # yart
 
-> **Y**et **A**nother **R**eview **T**ool
+**Y**et **A**nother **R**eview **T**ool — local, GitHub-style code review for
+AI-generated diffs, with inline comments that loop back to your agent over MCP.
 
-Local, GitHub-style code review for AI-generated diffs — inline comments loop back
-to your agent over MCP.
+[![CI](https://github.com/J3MPA/yart/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/J3MPA/yart/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/J3MPA/yart?sort=semver&label=release)](https://github.com/J3MPA/yart/releases/latest)
+[![Latest pre-release](https://img.shields.io/github/v/release/J3MPA/yart?include_prereleases&sort=semver&label=pre-release)](https://github.com/J3MPA/yart/releases)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#using-yart)
+[![License: MIT](https://img.shields.io/github/license/J3MPA/yart)](LICENSE)
+
+[Quick start](#quick-start) · [Using yart](#using-yart) ·
+[Developing yart](#developing-yart) · [How it works](#how-it-works)
+
+</div>
+
+## Quick start
+
+```sh
+# Install the app and its two commands
+curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
+
+# Let Claude Code use it
+claude mcp add -s user yart -- ~/.local/bin/yart-mcp
+```
+
+Then tell your agent you want to review its changes. A review opens in the yart
+window; comment on lines, submit, and the agent answers, fixes, and asks you to
+look again — with every comment following the line it was on.
 
 ## Why
 
@@ -27,6 +52,26 @@ reply to them, and mark threads resolved — without anything being pushed to Gi
 
 The last row is the point. Review is a _loop_ — change, review, comment, fix,
 re-review showing only what is still open — and a clipboard has no memory.
+
+## Features
+
+- **Reviews your agent opens and answers.** The agent starts a review with a
+  tool call, waits for your verdict, replies on each comment, resolves what it
+  fixed, and moves the review onto its new commits.
+- **Comments that survive change.** Each comment is anchored to the content it
+  was written on, so it follows its line through edits and is marked outdated
+  only when that line is gone.
+- **A diff made for reading.** A file tree, collapsed context that opens in
+  place, syntax highlighting, files marked reviewed, and comments held for one
+  submission with a verdict.
+- **Knowing when to look.** A notification and a dock badge when the agent has
+  answered, and a sign of how far it has got.
+- **Every repository, one place.** One daemon serves them all, with reviews kept
+  in each repository's own `.git`, so nothing appears in `git status`.
+- **A desktop app**, installed, updated and removed with one command each, and
+  needing neither Node nor npm.
+
+Planned: exporting a review to the clipboard, for agents that do not speak MCP.
 
 ## How it works
 
@@ -87,24 +132,6 @@ sequenceDiagram
     Daemon->>Daemon: re-anchor every thread
     Daemon-->>Agent: what shifted, what went outdated
 ```
-
-## Status
-
-Early — the scaffold is in place, the product is not.
-
-- [x] pnpm workspace, React + TypeScript + Redux Toolkit
-- [x] Design token foundation
-- [x] Comment anchoring model
-- [x] Review daemon: git adapter, thread storage, review rounds, HTTP API
-- [x] MCP server
-- [x] Review UI: diff rendering, inline comments, review rounds
-- [x] Review UI: file tree, collapsed context expandable in place
-- [x] Replying to a verdict, and a signal for how far the agent has got
-- [x] A tab-title and favicon signal when the agent has answered
-- [x] Pending reviews, a Reviewed mark per file, and folding in the file tree
-- [x] Installable: `yart` and `yart-mcp` run from any repository
-- [x] A desktop app, installed, updated and removed with one command each
-- [ ] Clipboard export (fallback for non-MCP agents)
 
 ## Using yart
 
