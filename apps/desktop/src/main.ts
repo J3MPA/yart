@@ -1,8 +1,18 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { fileURLToPath } from 'node:url'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Notification,
+  shell,
+  type IpcMainEvent,
+} from 'electron'
 import { DaemonClient } from '@yart/mcp/daemon-client'
 import { readConfig } from './config.ts'
 import { reviewIdFromLink, SCHEME } from './links.ts'
+import { parseCount, parseNotice } from './signals.ts'
 
 const config = readConfig(process.env)
 
@@ -18,6 +28,13 @@ let window: BrowserWindow | null = null
 let started = false
 /** A review asked for before there was a window to show it in. */
 let pending_review: string | null = null
+/**
+ * Notifications on screen. Held because Electron lets go of one that nothing
+ * references, and a notification collected that way no longer reports a click.
+ */
+const notifications = new Set<Notification>()
+
+const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 
 const openOutside = (url: string) => {
   const { protocol } = new URL(url)
@@ -28,7 +45,13 @@ const reviewUrl = (review_id: string): string =>
   new URL(`/reviews/${review_id}`, config.origin).href
 
 const createWindow = (url: string = config.start_url) => {
-  const created = new BrowserWindow({ width: 1280, height: 860, title: 'yart' })
+  const created = new BrowserWindow({
+    width: 1280,
+    height: 860,
+    title: 'yart',
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Electron's option name
+    webPreferences: { preload: PRELOAD },
+  })
 
   // The window shows yart and nothing else: a link to another site in a review
   // opens in the browser rather than turning this window into one.
@@ -68,6 +91,32 @@ const openLink = (link: string) => {
   const review_id = reviewIdFromLink(link)
   if (review_id !== null) showReview(review_id)
 }
+
+/** Only yart's own page may set the badge or raise a notification. */
+const fromYart = (event: IpcMainEvent): boolean => event.senderFrame?.origin === config.origin
+
+ipcMain.on('unseen-changed', (event, value: unknown) => {
+  const count = parseCount(value)
+  if (!fromYart(event) || count === null) return
+  app.setBadgeCount(count)
+})
+
+ipcMain.on('notify', (event, value: unknown) => {
+  const notice = parseNotice(value)
+  if (!fromYart(event) || notice === null || !Notification.isSupported()) return
+  const notification = new Notification({
+    title: notice.title,
+    body: 'The agent has answered. Your turn.',
+  })
+  const release = () => notifications.delete(notification)
+  notification.on('click', () => {
+    release()
+    showReview(notice.review_id)
+  })
+  notification.on('close', release)
+  notifications.add(notification)
+  notification.show()
+})
 
 // Registered before anything else: on macOS a link that launches the app
 // arrives before it is ready.

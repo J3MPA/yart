@@ -138,8 +138,23 @@ machine, so the two must not reach each other's daemon.
   MCP server uses, so either can come up first.~~ Done: it uses the MCP server's
   own client, on `YART_DAEMON_PORT` or 7777, and the daemon it starts belongs to
   no repository. Like the MCP server's, it outlives the app.
-- The dock badge carries the unseen count the UI already computes, and a review
-  turning `your turn` raises a notification.
+- ~~The dock badge carries the unseen count the UI already computes, and a review
+  turning `your turn` raises a notification.~~ Done: a preload bridge carries
+  the count and each review that turns unseen from the page to the app, which
+  checks both before acting. Seen working end to end on an ad-hoc signed build
+  in `~/Applications`: a banner on the first notification with no permission
+  prompt, with the app in the background, so the prototype's unreliable banners
+  did not recur. What the install instructions have to say:
+  - The badge is off for a new app even once its banners show. _Badge
+    application icon_ has to be turned on in the app's notification settings,
+    and the app is only listed there after its first notification.
+  - The app keeps its own seen state, and a review only counts as unseen once
+    it has been opened in the app, so a fresh install shows no count and raises
+    nothing until reviews are opened in it.
+
+  Not tried: clicking a notification, which should open its review the way a
+  link does.
+
 - The app carries the command line tools inside it. `yart` and `yart-mcp` are
   small scripts that run the bundled JavaScript on Electron's Node, so a user
   needs neither Node nor npm.

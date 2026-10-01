@@ -69,7 +69,7 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           // Build configs live outside the app's tsconfig include path.
-          allowDefaultProject: ['apps/web/vite.config.ts'],
+          allowDefaultProject: ['apps/web/vite.config.ts', 'apps/desktop/src/preload.cjs'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -96,6 +96,12 @@ export default tseslint.config(
         { 'apps/**/src/**/': 'KEBAB_CASE', 'packages/**/src/**/': 'KEBAB_CASE' },
       ],
     },
+  },
+  {
+    files: ['apps/desktop/src/preload.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    // A sandboxed preload can only load what it needs with require().
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: ['apps/web/**/*.{ts,tsx}'],

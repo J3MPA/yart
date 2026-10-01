@@ -1,6 +1,7 @@
 import { Logo } from '@/components/logo'
 import { useUnseenReviews } from '@/features/review/use-unseen'
 import { useUnseenSignal } from '@/features/review/use-unseen-signal'
+import { useDesktopSignal } from '@/features/review/use-desktop-signal'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
 import styles from './app.module.css'
@@ -22,6 +23,7 @@ export const App = () => {
   // while a single review is open too.
   const unseen = useUnseenReviews()
   useUnseenSignal(unseen.count)
+  useDesktopSignal(unseen)
 
   return (
     <main className={styles.shell}>
