@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs yart's daemon on the Node built into yart.app, so neither Node nor npm is
+# needed. Resolves its own link first: it is installed as a link elsewhere.
+set -e
+here=$(dirname "$(readlink -f "$0")")
+contents=$(cd "$here/../.." && pwd)
+app="$contents/Resources/app.asar"
+ELECTRON_RUN_AS_NODE=1 exec "$contents/MacOS/yart" "$app/packages/daemon/dist/cli.mjs" "$@"

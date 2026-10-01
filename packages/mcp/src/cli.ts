@@ -39,6 +39,8 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     port: values.port === undefined ? DEFAULT_PORT : Number(values.port),
     repo_path: values.repo ?? process.cwd(),
     autostart: values['no-autostart'] !== true,
+    // Set by the `yart-mcp` the desktop app carries, pointing at its own daemon.
+    daemon_cli: process.env.YART_DAEMON_CLI,
   })
 
   await server.connect(new StdioServerTransport())

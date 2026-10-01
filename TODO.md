@@ -155,19 +155,23 @@ machine, so the two must not reach each other's daemon.
   Not tried: clicking a notification, which should open its review the way a
   link does.
 
-- The app carries the command line tools inside it. `yart` and `yart-mcp` are
+- ~~The app carries the command line tools inside it. `yart` and `yart-mcp` are
   small scripts that run the bundled JavaScript on Electron's Node, so a user
-  needs neither Node nor npm.
+  needs neither Node nor npm.~~ Done, in `Contents/Resources/bin`. They resolve
+  their own link, so they can be linked into `~/.local/bin`, and `yart-mcp`
+  points the MCP server at the bundled daemon with `YART_DAEMON_CLI`.
 - Seen state and drafts live in the app's own storage, separate from any
   browser's. Moving between the two starts them afresh; worth saying in the docs.
 
 **Build and release.**
 
-- The daemon and MCP entry points are bundled to JavaScript with esbuild. That
-  retires `--experimental-strip-types` for everyone but developers.
-- One zip per architecture, Apple Silicon and Intel, each ad-hoc signed, each
-  with a SHA-256 checksum beside it. A zip rather than a disk image: a disk image
-  is made for dragging an app into place by hand, and is awkward to script.
+- ~~The daemon and MCP entry points are bundled to JavaScript with esbuild.~~
+  Done, with the app's main process, by `pnpm package:desktop`.
+- ~~One zip per architecture, Apple Silicon and Intel, each ad-hoc signed, each
+  with a SHA-256 checksum beside it.~~ Done: 122 MB for Apple Silicon and
+  128 MB for Intel, about 15 seconds each on an M-series Mac, both built there.
+  A zip rather than a disk image: a disk image is made for dragging an app into
+  place by hand, and is awkward to script.
 - A GitHub Actions workflow on a `v*` tag builds on macOS runners and publishes
   the release, with `install.sh` and `uninstall.sh` as assets of it so each
   script is the one that matches its release.
