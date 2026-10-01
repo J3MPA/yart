@@ -49,3 +49,17 @@
   color: var(--yart-color-text);
   border-color: var(--yart-color-border-strong);
 }
+
+/* For an action that cannot be undone, and only where it is the one being
+   confirmed: everywhere else it stays a default button. */
+.danger {
+  color: var(--yart-color-surface);
+  background-color: var(--yart-color-remove-emphasis);
+  border-color: var(--yart-color-remove-emphasis);
+}
+
+.danger:hover:not(:disabled) {
+  background-color: var(--yart-color-remove-emphasis);
+  border-color: var(--yart-color-remove-emphasis);
+  filter: brightness(0.92);
+}

@@ -1,12 +1,13 @@
 import type { ButtonHTMLAttributes } from 'react'
 import styles from './button.module.css'
 
-export type ButtonTone = 'default' | 'primary' | 'quiet'
+export type ButtonTone = 'default' | 'primary' | 'quiet' | 'danger'
 
 const TONE_CLASS: Record<ButtonTone, string> = {
   default: '',
   primary: styles.primary as string,
   quiet: styles.quiet as string,
+  danger: styles.danger as string,
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
