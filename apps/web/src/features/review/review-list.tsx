@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Review } from '@yart/core'
+import { Button } from '@/components/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Menu, MenuItem } from '@/components/menu'
 import {
   describeRange,
@@ -13,6 +15,13 @@ import {
   useListReviewsQuery,
   useSetReviewArchivedMutation,
 } from './review-api'
+import {
+  keepListed,
+  selectionState,
+  toggleAll,
+  toggleSelected,
+  type Selection,
+} from './review-selection'
 import { countOpen } from './thread-anchors'
 import styles from './review.module.css'
 
@@ -41,13 +50,17 @@ const describe = (review: Review, show_repository: boolean): string =>
     .filter((part): part is string => part !== null)
     .join(' · ')
 
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`
+
 interface ReviewRowProps {
   review: Review
   show_repository: boolean
   unseen: boolean
   archived: boolean
-  confirming_delete: boolean
-  onConfirmDelete: (review_id: string | null) => void
+  selected: boolean
+  onToggleSelected: () => void
+  onArchive: () => void
+  onDelete: () => void
 }
 
 const ReviewRow = ({
@@ -55,17 +68,23 @@ const ReviewRow = ({
   show_repository,
   unseen,
   archived,
-  confirming_delete,
-  onConfirmDelete,
+  selected,
+  onToggleSelected,
+  onArchive,
+  onDelete,
 }: ReviewRowProps) => {
-  const [setArchived] = useSetReviewArchivedMutation()
-  const [deleteReview] = useDeleteReviewMutation()
-
   const status = describeStatus(review)
   const open = countOpen(review.threads)
 
   return (
-    <div className={styles.list_item}>
+    <div className={[styles.list_item, selected ? styles.list_item_selected : ''].join(' ')}>
+      <input
+        type="checkbox"
+        className={styles.list_select}
+        checked={selected}
+        onChange={onToggleSelected}
+        aria-label={`Select ${review.title}`}
+      />
       <a className={styles.list_link} href={`/reviews/${review.id}`}>
         <div className={styles.list_title}>
           {unseen && (
@@ -89,39 +108,26 @@ const ReviewRow = ({
         {open} open / {review.threads.length}
       </span>
 
-      <Menu label={`Actions for ${review.title}`} onClose={() => onConfirmDelete(null)}>
+      <Menu label={`Actions for ${review.title}`}>
         {(close) => (
           <>
             <MenuItem
               onClick={() => {
-                void setArchived({ review_id: review.id, archived: !archived })
+                onArchive()
                 close()
               }}
             >
               {archived ? 'Restore' : 'Archive'}
             </MenuItem>
-
-            {/* Two steps rather than a browser dialog: deleting a review
-                discards every comment on it, and there is no undo. */}
-            {confirming_delete ? (
-              <>
-                <MenuItem
-                  danger
-                  onClick={() => {
-                    void deleteReview(review.id)
-                    onConfirmDelete(null)
-                    close()
-                  }}
-                >
-                  Confirm delete
-                </MenuItem>
-                <MenuItem onClick={() => onConfirmDelete(null)}>Keep it</MenuItem>
-              </>
-            ) : (
-              <MenuItem danger onClick={() => onConfirmDelete(review.id)}>
-                Delete
-              </MenuItem>
-            )}
+            <MenuItem
+              danger
+              onClick={() => {
+                onDelete()
+                close()
+              }}
+            >
+              Delete
+            </MenuItem>
           </>
         )}
       </Menu>
@@ -135,11 +141,41 @@ export interface ReviewListProps {
 
 export const ReviewList = ({ unseen }: ReviewListProps) => {
   const [archived, setArchivedView] = useState(false)
-  const [confirming, setConfirming] = useState<string | null>(null)
+  const [selection, setSelection] = useState<Selection>(new Set())
+  /** The reviews the delete dialog is asking about, or null when it is closed. */
+  const [deleting, setDeleting] = useState<readonly Review[] | null>(null)
   const { data, isLoading: is_loading } = useListReviewsQuery(archived)
+  const [setArchived] = useSetReviewArchivedMutation()
+  const [deleteReview] = useDeleteReviewMutation()
+  const select_all = useRef<HTMLInputElement>(null)
 
-  const reviews = data ?? []
+  const reviews = useMemo(() => data ?? [], [data])
+  const ids = useMemo(() => reviews.map((review) => review.id), [reviews])
   const show_repository = new Set(reviews.map((review) => review.repo_path)).size > 1
+  const state = selectionState(selection, ids)
+  const selected = reviews.filter((review) => selection.has(review.id))
+
+  useEffect(() => setSelection((previous) => keepListed(previous, ids)), [ids])
+
+  // A checkbox can only be part-ticked from script.
+  useEffect(() => {
+    if (select_all.current !== null) select_all.current.indeterminate = state === 'some'
+  }, [state])
+
+  const archiveAll = (targets: readonly Review[]) => {
+    void Promise.all(
+      targets.map((review) => setArchived({ review_id: review.id, archived: !archived })),
+    )
+    setSelection(new Set())
+  }
+
+  const deleteAll = (targets: readonly Review[]) => {
+    void Promise.all(targets.map((review) => deleteReview(review.id)))
+    setSelection(new Set())
+    setDeleting(null)
+  }
+
+  const threads_lost = (deleting ?? []).reduce((total, review) => total + review.threads.length, 0)
 
   return (
     <>
@@ -154,7 +190,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
               .join(' ')}
             onClick={() => {
               setArchivedView(is_archived)
-              setConfirming(null)
+              setSelection(new Set())
             }}
           >
             {is_archived ? 'Archived' : 'Active'}
@@ -178,19 +214,79 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
       )}
 
       {reviews.length > 0 && (
-        <div className={styles.list}>
-          {reviews.map((review) => (
-            <ReviewRow
-              key={review.id}
-              review={review}
-              show_repository={show_repository}
-              unseen={unseen.has(review.id)}
-              archived={archived}
-              confirming_delete={confirming === review.id}
-              onConfirmDelete={setConfirming}
-            />
-          ))}
-        </div>
+        <>
+          <div className={styles.list_toolbar}>
+            <label className={styles.list_select_all}>
+              <input
+                ref={select_all}
+                type="checkbox"
+                className={styles.list_select}
+                checked={state === 'all'}
+                onChange={() => setSelection((previous) => toggleAll(previous, ids))}
+              />
+              {state === 'none' ? 'Select all' : `${selected.length} selected`}
+            </label>
+            {state !== 'none' && (
+              <>
+                <Button onClick={() => archiveAll(selected)}>
+                  {archived ? 'Restore' : 'Archive'}
+                </Button>
+                <Button onClick={() => setDeleting(selected)}>Delete</Button>
+                <Button tone="quiet" onClick={() => setSelection(new Set())}>
+                  Clear
+                </Button>
+              </>
+            )}
+          </div>
+
+          <div className={styles.list}>
+            {reviews.map((review) => (
+              <ReviewRow
+                key={review.id}
+                review={review}
+                show_repository={show_repository}
+                unseen={unseen.has(review.id)}
+                archived={archived}
+                selected={selection.has(review.id)}
+                onToggleSelected={() =>
+                  setSelection((previous) => toggleSelected(previous, review.id))
+                }
+                onArchive={() => archiveAll([review])}
+                onDelete={() => setDeleting([review])}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Deleting discards every comment on a review and cannot be undone, so
+          the dialog names what goes rather than only asking whether. */}
+      {deleting !== null && (
+        <ConfirmDialog
+          open
+          title={`Delete ${plural(deleting.length, 'review')}?`}
+          confirm_label={`Delete ${plural(deleting.length, 'review')}`}
+          onConfirm={() => deleteAll(deleting)}
+          onCancel={() => setDeleting(null)}
+        >
+          <p>
+            {threads_lost === 0
+              ? 'This cannot be undone.'
+              : `${plural(threads_lost, 'comment thread')} ${threads_lost === 1 ? 'goes' : 'go'} with ${
+                  deleting.length === 1 ? 'it' : 'them'
+                }. This cannot be undone.`}
+          </p>
+          <ul className={styles.delete_list}>
+            {deleting.map((review) => (
+              <li key={review.id}>
+                {review.title}
+                <span className={styles.delete_list_count}>
+                  {plural(review.threads.length, 'thread')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </ConfirmDialog>
       )}
     </>
   )

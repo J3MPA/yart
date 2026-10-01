@@ -416,13 +416,6 @@ review actually contains would be the way to keep it honest.
   would close that. Worth doing before yart is installed by anyone else, since
   the daemon now reaches every repository it has served.
 
-- Deleting a review is confirmed by a second click inside the overflow menu.
-  That is cheap and reversible up to the second click, but it is thin for an
-  action that discards every comment on a review with no undo. A modal would
-  carry more weight and, more usefully, would have room to say what is about to
-  be lost — the review's title and how many comment threads go with it — which
-  the menu cannot.
-
 - The daemon has no crash recovery, no log file, and exits if its port is taken.
 - `GET /api/reviews/:id/diff` returns every file with no cap. Fine for
   agent-sized changes; a large refactor will feel it.
