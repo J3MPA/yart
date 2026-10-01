@@ -20,6 +20,10 @@ export const POLL_MS = 10_000
 export interface Unseen {
   ids: ReadonlySet<string>
   count: number
+  /** Each unseen review's title, for anything announcing it outside the page. */
+  titles: ReadonlyMap<string, string>
+  /** Whether the list has arrived; until then nothing is unseen for want of reviews. */
+  loaded: boolean
 }
 
 /** Reviews the agent has touched since they were last looked at. */
@@ -45,11 +49,8 @@ export const useUnseenReviews = (): Unseen => {
   }, [data, archived.data, dispatch])
 
   return useMemo(() => {
-    const ids = new Set(
-      reviews
-        .filter((review) => isUnseen(seen, review.id, agentActivity(review)))
-        .map((review) => review.id),
-    )
-    return { ids, count: ids.size }
-  }, [reviews, seen])
+    const unseen = reviews.filter((review) => isUnseen(seen, review.id, agentActivity(review)))
+    const titles = new Map(unseen.map((review) => [review.id, review.title]))
+    return { ids: new Set(titles.keys()), count: titles.size, titles, loaded: data !== undefined }
+  }, [reviews, seen, data])
 }

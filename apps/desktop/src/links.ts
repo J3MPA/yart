@@ -6,6 +6,9 @@ export const SCHEME = 'yart'
  */
 const REVIEW_LINK = new RegExp(`^${SCHEME}://reviews/([A-Za-z0-9-]+)/?(?:[?#].*)?$`)
 
+/** The characters a review id is made of, and all that goes into a path the window loads. */
+export const REVIEW_ID = /^[A-Za-z0-9-]+$/
+
 /**
  * The review a `yart://reviews/<id>` link points at, or null for anything else.
  *
