@@ -367,6 +367,26 @@ their keep here in a way that is easy to underrate when writing them.
 
 ## Syntax highlighting
 
+**Done, first half.** Shiki tokenizes both sides of each open file in full, and
+each row takes the tokens for its line: removed lines from the base, everything
+else from the head. Colours are CSS variables defined in `tokens.css` for both
+schemes, the highlighter and each grammar load only when a review needs them,
+and a file without an extension is read from its `#!` line. A row whose tokens
+do not spell out its text exactly is shown plain. The page's main bundle grows
+by 31 kB, the language list; the rest arrives on first use.
+
+What is left:
+
+- **Highlight as files come into view.** Every open file is fetched and
+  tokenized as the page loads, which on a review of sixty files is sixty
+  requests and sixty tokenizations up front.
+- **Watch the page's size.** Tokens multiply the elements per line. A review of
+  69 files came to 76,781 elements, 33,131 of them tokens, and folding a
+  directory still took about 25 ms to render, as it did before. A review much
+  larger than that is where to look first.
+
+The reasoning it was built on, kept for the record:
+
 Wanted, and not simply a matter of dropping a library in.
 
 The constraint is that highlighting has to survive the per-line structure. Every

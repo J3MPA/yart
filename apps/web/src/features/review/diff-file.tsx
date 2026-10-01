@@ -18,7 +18,9 @@ import { fileAnchorId } from './file-anchors'
 import { EXPAND_STEP, GapBand, type GapEdge } from './gap-band'
 import { useAddThreadMutation, useGetReviewFileQuery } from './review-api'
 import { describeQueryError } from './query-error'
+import { mayHighlight } from './syntax'
 import { outdatedThreadsForPath } from './thread-anchors'
+import { tokensForLine, useFileTokens } from './use-file-tokens'
 import styles from './review.module.css'
 
 export type { ComposeTarget } from './diff-row'
@@ -73,12 +75,14 @@ export const DiffFile = ({
     [file.hunks, file.head_line_count],
   )
 
-  // The whole file is only worth fetching once something has been opened; until
-  // then the hunks are all there is to draw.
+  // The whole file is fetched to colour it, which needs both sides in full, or
+  // once a collapsed run has been opened. A closed file draws nothing to colour.
+  const wants_contents = expanded.size > 0 || mayHighlight(file.path)
   const contents_query = useGetReviewFileQuery(
     { review_id, path: file.path },
-    { skip: expanded.size === 0 },
+    { skip: collapsed || file.is_binary || !wants_contents },
   )
+  const tokens = useFileTokens(file.path, contents_query.data)
   const head_lines = useMemo(() => {
     const content = contents_query.data?.head_content
     return content === undefined || content === null ? null : splitLines(content)
@@ -108,6 +112,7 @@ export const DiffFile = ({
       review_id={review_id}
       file_path={file.path}
       line={line}
+      tokens={tokensForLine(tokens, line)}
       file_blobs={file}
       threads_by_anchor={threads_by_anchor}
       drafting={drafting}

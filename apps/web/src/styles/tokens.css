@@ -30,6 +30,21 @@
   --yart-color-remove-bg: #fbe9e7;
   --yart-color-remove-emphasis: #b3432f;
 
+  /*
+   * Syntax — named as Shiki's CSS-variables theme emits them. Kept to the warm
+   * palette and muted enough to sit on the add and remove backgrounds.
+   */
+  --yart-syntax-foreground: var(--yart-color-text);
+  --yart-syntax-token-comment: #8a8175;
+  --yart-syntax-token-keyword: #9a3b26;
+  --yart-syntax-token-string: #4c7a2c;
+  --yart-syntax-token-string-expression: #4c7a2c;
+  --yart-syntax-token-constant: #8a5a00;
+  --yart-syntax-token-function: #2c6466;
+  --yart-syntax-token-parameter: #7a4f2f;
+  --yart-syntax-token-punctuation: var(--yart-color-text-muted);
+  --yart-syntax-token-link: var(--yart-color-accent);
+
   /* Type */
   --yart-font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --yart-font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
@@ -77,6 +92,14 @@
     --yart-color-add-emphasis: #7cc267;
     --yart-color-remove-bg: #351914;
     --yart-color-remove-emphasis: #e0755d;
+
+    --yart-syntax-token-comment: #8f8576;
+    --yart-syntax-token-keyword: #e38c6b;
+    --yart-syntax-token-string: #a6c97c;
+    --yart-syntax-token-string-expression: #a6c97c;
+    --yart-syntax-token-constant: #e3b45a;
+    --yart-syntax-token-function: #7fc0bd;
+    --yart-syntax-token-parameter: #d9aa82;
 
     --yart-shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
     --yart-shadow-md: 0 4px 12px rgb(0 0 0 / 50%);
