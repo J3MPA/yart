@@ -21,6 +21,7 @@ import { describeQueryError } from './query-error'
 import { mayHighlight } from './syntax'
 import { outdatedThreadsForPath } from './thread-anchors'
 import { tokensForLine, useFileTokens } from './use-file-tokens'
+import { useNearView } from './use-near-view'
 import styles from './review.module.css'
 
 export type { ComposeTarget } from './diff-row'
@@ -75,9 +76,12 @@ export const DiffFile = ({
     [file.hunks, file.head_line_count],
   )
 
-  // The whole file is fetched to colour it, which needs both sides in full, or
-  // once a collapsed run has been opened. A closed file draws nothing to colour.
-  const wants_contents = expanded.size > 0 || mayHighlight(file.path)
+  // The whole file is fetched to colour it, which needs both sides in full, but
+  // only once it is near the viewport: a long review would otherwise fetch and
+  // tokenize every file as the page loads. Opening a collapsed run fetches it
+  // wherever it is. A closed file draws nothing to colour.
+  const near = useNearView(section_ref)
+  const wants_contents = expanded.size > 0 || (near && mayHighlight(file.path))
   const contents_query = useGetReviewFileQuery(
     { review_id, path: file.path },
     { skip: collapsed || file.is_binary || !wants_contents },
