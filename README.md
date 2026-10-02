@@ -21,7 +21,7 @@ AI-generated diffs, with inline comments that loop back to your agent over MCP.
 ## Quick start
 
 ```sh
-# Install the app and its two commands
+# Install the app and its two commands (during the beta, see Installing below)
 curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
 
 # Let Claude Code use it
@@ -138,8 +138,10 @@ sequenceDiagram
 yart runs on macOS, as an app carrying the two commands an agent and a terminal
 need. Installing it needs neither Node, npm nor `sudo`.
 
-> Releases are not public yet. Until they are, yart is run from a clone, as
-> described under [Developing yart](#developing-yart).
+> yart is in beta. Until the first stable release, the command below finds
+> nothing to install: install the newest
+> [pre-release](https://github.com/J3MPA/yart/releases) from its own URL, as
+> shown after it.
 
 ### Installing
 
@@ -149,6 +151,13 @@ curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | s
 
 That puts `yart.app` in `~/Applications` and links `yart` and `yart-mcp` into
 `~/.local/bin`, and says so if that directory is not on your `PATH`.
+
+A pre-release, such as a beta, is installed from its own release rather than
+the latest — the installer attached to each release installs that release:
+
+```sh
+curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.1/install.sh | sh
+```
 
 Install with `curl` rather than by downloading the zip in a browser. A browser
 marks what it downloads as quarantined, and macOS then refuses to open the app
@@ -331,8 +340,8 @@ app's own Node.
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which packages both
 architectures on one Apple Silicon runner and publishes a release with the zips,
 their checksums and the install scripts. A version with a suffix, such as
-`v0.2.0-rc.1`, makes a draft prerelease instead, which is how a change to the
-workflow gets tried without putting anything in front of users.
+`v0.2.0-beta.1`, is published as a pre-release: visible and installable from its
+own URL, but never what "latest" points at.
 
 ### Project layout
 

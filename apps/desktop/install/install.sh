@@ -12,7 +12,17 @@
 # mark it, so the app's free ad-hoc signature is enough for it to open.
 set -eu
 
-release_url=${YART_RELEASE_URL:-https://github.com/J3MPA/yart/releases/latest/download}
+# Filled in by the release workflow with the tag this copy was published under,
+# so that the installer attached to a release installs that release. That is
+# what lets a pre-release be installed at all, since GitHub's "latest" skips
+# them. Left empty, as it is in the repository, it installs the latest release.
+release_tag=
+if [ -n "$release_tag" ]; then
+  default_url="https://github.com/J3MPA/yart/releases/download/$release_tag"
+else
+  default_url=https://github.com/J3MPA/yart/releases/latest/download
+fi
+release_url=${YART_RELEASE_URL:-$default_url}
 app_dir="$HOME/Applications"
 bin_dir="$HOME/.local/bin"
 app="$app_dir/yart.app"

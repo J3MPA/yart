@@ -34,19 +34,25 @@ jobs:
       - name: Package for Intel
         run: pnpm package:desktop --arch x64 --version "${GITHUB_REF_NAME#v}"
 
+      # The installer attached to a release installs that release, rather than
+      # whatever is latest: GitHub's "latest" skips pre-releases, so without
+      # this a beta could not be installed.
+      - name: Point the installer at this release
+        run: |
+          sed -i '' "s/^release_tag=$/release_tag=$GITHUB_REF_NAME/" apps/desktop/install/install.sh
+          grep -q "^release_tag=$GITHUB_REF_NAME$" apps/desktop/install/install.sh
+
       # The install scripts go with the release, so each is the one that matches
-      # what it installs.
-      #
-      # A version with a suffix, such as v0.2.0-rc.1, makes a draft prerelease
-      # that nobody sees until it is published by hand. That is how a change to
-      # this workflow gets tried without putting anything in front of users.
+      # what it installs. A version with a suffix, such as v0.2.0-beta.1, is
+      # published as a pre-release: visible, installable from its own URL, and
+      # never what "latest" points at.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           flags=()
           case "$GITHUB_REF_NAME" in
-            *-*) flags=(--draft --prerelease) ;;
+            *-*) flags=(--prerelease) ;;
           esac
           gh release create "$GITHUB_REF_NAME" "${flags[@]}" --generate-notes \
             apps/desktop/out/yart-darwin-arm64.zip \
