@@ -191,9 +191,10 @@ uninstall, `--purge`, and a `yart` link that was not the app's surviving.
 Not tried: reopening the app after an update when it was running, and an
 install into the real `~/Applications`.
 
-**The repository is private**, and GitHub serves release downloads without
-signing in only for public repositories, so the `curl` command below works for
-nobody until it is made public. That waits on protecting `main`.
+**The repository is public**, with a ruleset on `main` requiring a pull request,
+the `gate` check and the code owner's approval. Pre-releases are published, not
+drafted, and the installer attached to each release installs that release,
+since GitHub's "latest" skips pre-releases.
 
 **Every `yart.app` on a disk claims `yart://`.** macOS registers apps it comes
 across, including copies in the Bin and the build output in `apps/desktop/out`,
