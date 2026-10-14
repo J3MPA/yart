@@ -696,3 +696,72 @@ describe('the Host header', () => {
     expect(hostName('127.0.0.1')).toBe('127.0.0.1')
   })
 })
+
+describe('images on comments', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+
+  const upload = async (review_id: string, data: Buffer) =>
+    post(`/api/reviews/${review_id}/attachments`, { data: data.toString('base64') })
+
+  it('keeps an image, tells its type from the bytes, and sends it back', async () => {
+    const review = await openReview()
+    const response = await upload(review.id, PNG)
+    expect(response.status).toBe(201)
+    const attachment = (await response.json()) as { id: string; media_type: string }
+    expect(attachment.media_type).toBe('image/png')
+
+    const image = await app.request(`/api/reviews/${review.id}/attachments/${attachment.id}`)
+    expect(image.headers.get('content-type')).toBe('image/png')
+    expect(image.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(PNG)
+  })
+
+  it('refuses a file that is not an image', async () => {
+    const review = await openReview()
+    expect((await upload(review.id, Buffer.from('<svg onload="x"/>'))).status).toBe(415)
+  })
+
+  it('puts images on a comment, a reply and a verdict', async () => {
+    const { review, thread_id } = await openReviewWithThread()
+    const { id } = (await (await upload(review.id, PNG)).json()) as { id: string }
+
+    const commented = (await (
+      await post(`/api/reviews/${review.id}/threads/${thread_id}/comments`, {
+        body: 'see this',
+        attachments: [id],
+      })
+    ).json()) as Review
+    expect(commented.threads[0]?.comments[1]?.attachments).toEqual([
+      { id, media_type: 'image/png' },
+    ])
+
+    const submitted = (await (
+      await post(`/api/reviews/${review.id}/submit`, {
+        verdict: 'changes_requested',
+        body: 'it is wrong',
+        attachments: [id],
+        threads: [{ path: 'a.txt', line: 3, body: 'here too', attachments: [id] }],
+      })
+    ).json()) as Review
+    expect(submitted.submissions[0]?.attachments).toEqual([{ id, media_type: 'image/png' }])
+    expect(submitted.threads[1]?.comments[0]?.attachments).toHaveLength(1)
+  })
+
+  it('refuses an image that the review does not have', async () => {
+    const { review, thread_id } = await openReviewWithThread()
+    const response = await post(`/api/reviews/${review.id}/threads/${thread_id}/comments`, {
+      body: 'see this',
+      attachments: ['0'.repeat(64)],
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('removes the images with the review', async () => {
+    const review = await openReview()
+    const { id } = (await (await upload(review.id, PNG)).json()) as { id: string }
+    await app.request(`/api/reviews/${review.id}`, { method: 'DELETE' })
+    await openReview()
+    const other = await openReview()
+    expect((await app.request(`/api/reviews/${other.id}/attachments/${id}`)).status).toBe(404)
+  })
+})

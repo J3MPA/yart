@@ -5,6 +5,7 @@ import {
   hunkSectionHeading,
   planDiffSections,
   splitLines,
+  type Attachment,
   type DiffGap,
   type DiffLine,
   type FileDiff,
@@ -16,6 +17,7 @@ import { DiffRow, type ComposeTarget, type RowTarget } from './diff-row'
 import type { Drafting } from './drafts'
 import { fileAnchorId } from './file-anchors'
 import { EXPAND_STEP, GapBand, type GapEdge } from './gap-band'
+import { attachmentIds } from './attachments'
 import { useAddThreadMutation, useGetReviewFileQuery } from './review-api'
 import { describeQueryError } from './query-error'
 import { mayHighlight } from './syntax'
@@ -109,8 +111,15 @@ export const DiffFile = ({
       return next
     })
 
-  const addThreadAt = (target: RowTarget, body: string) =>
-    void addThread({ review_id, path: file.path, line: target.line, side: target.side, body })
+  const addThreadAt = (target: RowTarget, body: string, attachments: Attachment[]) =>
+    void addThread({
+      review_id,
+      path: file.path,
+      line: target.line,
+      side: target.side,
+      body,
+      attachments: attachmentIds(attachments),
+    })
 
   const row = (line: DiffLine, key: string) => (
     <DiffRow

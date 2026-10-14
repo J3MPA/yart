@@ -492,6 +492,14 @@ the interface.
 The size is important. Grammars and themes are large, and a local tool must
 start quickly. yart loads a grammar only for the languages in a review.
 
+## Inline suggestions
+
+A comment on a line can contain a suggestion: the new text for that line, or
+for a range of lines. The UI shows the suggestion as a small diff in the
+comment. The agent reads the suggestion over MCP and applies it. The person and
+an AI reviewer can both write suggestions. GitHub writes a suggestion as a
+fenced block with the name `suggestion`. yart can use the same format.
+
 ## Smaller things
 
 - The daemon has no recovery after a crash and no log file. It stops if its port

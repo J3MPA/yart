@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Thread } from '@yart/core'
 import { Button } from '@/components/button'
+import { attachmentIds, AttachmentList } from './attachments'
 import { AuthorLabel } from './author-label'
 import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
@@ -51,6 +52,7 @@ export const CommentThread = ({ review_id, thread, drafting }: CommentThreadProp
         <div key={comment.id} className={styles.comment}>
           <AuthorLabel author={comment.author} author_name={comment.author_name} />
           <div className={styles.comment_body}>{comment.body}</div>
+          <AttachmentList review_id={review_id} attachments={comment.attachments} />
         </div>
       ))}
 
@@ -60,17 +62,23 @@ export const CommentThread = ({ review_id, thread, drafting }: CommentThreadProp
 
       {replying ? (
         <CommentForm
+          review_id={review_id}
           placeholder="Reply"
           submit_label="Reply now"
           queue_label={drafting.in_progress ? 'Add to review' : 'Start a review'}
           pending={add_state.isLoading}
           onCancel={() => setReplying(false)}
-          onQueue={(body) => {
-            dispatch(draftAdded({ review_id, draft: newReplyDraft(thread.id, body) }))
+          onQueue={(body, attachments) => {
+            dispatch(draftAdded({ review_id, draft: newReplyDraft(thread.id, body, attachments) }))
             setReplying(false)
           }}
-          onSubmit={(body) => {
-            void addComment({ review_id, thread_id: thread.id, body })
+          onSubmit={(body, attachments) => {
+            void addComment({
+              review_id,
+              thread_id: thread.id,
+              body,
+              attachments: attachmentIds(attachments),
+            })
             setReplying(false)
           }}
         />

@@ -1,10 +1,12 @@
 export type {
   AnchorContext,
   AnchorState,
+  Attachment,
   Comment,
   CommentAuthor,
   DiffSide,
   FileResolution,
+  ImageType,
   LineAnchor,
   LineMap,
   Thread,

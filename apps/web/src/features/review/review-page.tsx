@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { agentActivity, currentSubmission, describeAuthor, submissionAuthor } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
+import { attachmentIds, AttachmentList } from './attachments'
 import { Button } from '@/components/button'
 import { AuthorLabel } from './author-label'
 import { hasAiReview } from './review-history'
@@ -162,26 +163,30 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
             · {relativeTime(submission.created_at)}
           </div>
           {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
+          <AttachmentList review_id={review_id} attachments={submission.attachments} />
 
           {submission.comments.map((comment) => (
             <div key={comment.id} className={styles.verdict_reply}>
               <AuthorLabel author={comment.author} author_name={comment.author_name} />
               <div className={styles.comment_body}>{comment.body}</div>
+              <AttachmentList review_id={review_id} attachments={comment.attachments} />
             </div>
           ))}
 
           {answering ? (
             <div className={styles.verdict_form}>
               <CommentForm
+                review_id={review_id}
                 placeholder="Reply to this verdict"
                 submit_label="Reply"
                 pending={answer_state.isLoading}
                 onCancel={() => setAnswering(false)}
-                onSubmit={(body) => {
+                onSubmit={(body, attachments) => {
                   void addSubmissionComment({
                     review_id,
                     submission_id: submission.id,
                     body,
+                    attachments: attachmentIds(attachments),
                   })
                   setAnswering(false)
                 }}

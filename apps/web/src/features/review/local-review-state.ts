@@ -1,8 +1,10 @@
-import type { DiffSide } from '@yart/core'
+import type { Attachment, DiffSide } from '@yart/core'
 
 interface DraftBase {
   id: string
   body: string
+  /** The images, already on the daemon. Not there on drafts from before images existed. */
+  attachments?: Attachment[]
   created_at: string
 }
 
@@ -98,10 +100,13 @@ export const updateDraft = (
   review_id: string,
   draft_id: string,
   body: string,
+  attachments: Attachment[] = [],
 ): LocalReviews =>
   withLocal(state, review_id, (local) => ({
     ...local,
-    drafts: local.drafts.map((draft) => (draft.id === draft_id ? { ...draft, body } : draft)),
+    drafts: local.drafts.map((draft) =>
+      draft.id === draft_id ? { ...draft, body, attachments } : draft,
+    ),
   }))
 
 export const removeDraft = (

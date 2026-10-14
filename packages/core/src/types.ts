@@ -48,6 +48,18 @@ export type ThreadStatus = 'open' | 'resolved'
  */
 export type CommentAuthor = 'human' | 'agent' | 'reviewer'
 
+/** The image types that a comment can have. A browser shows all of them. */
+export type ImageType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+
+/**
+ * An image on a comment. The daemon keeps the file. The id is the SHA-256 hash
+ * of its bytes, thus the same image has the same id.
+ */
+export interface Attachment {
+  id: string
+  media_type: ImageType
+}
+
 export interface Comment {
   id: string
   author: CommentAuthor
@@ -58,6 +70,8 @@ export interface Comment {
    */
   author_name?: string | null
   body: string
+  /** Not there on a comment with no images. */
+  attachments?: Attachment[]
   /** ISO 8601. */
   created_at: string
 }

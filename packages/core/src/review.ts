@@ -1,4 +1,4 @@
-import type { Comment, Thread } from './types.ts'
+import type { Attachment, Comment, Thread } from './types.ts'
 
 /**
  * The shapes that the daemon sends over the wire.
@@ -45,6 +45,8 @@ export interface ReviewSubmission {
   author_name?: string | null
   /** The summary of the verdict, apart from the line comments. */
   body: string | null
+  /** The images of the summary. Not there when the summary has none. */
+  attachments?: Attachment[]
   /**
    * The replies to the summary, the oldest first.
    *

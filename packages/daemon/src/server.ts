@@ -53,6 +53,7 @@ interface SubmitBody {
   author?: unknown
   author_name?: unknown
   body?: string
+  attachments?: unknown
   threads?: unknown
   replies?: unknown
   expected_head_sha?: unknown
@@ -120,6 +121,15 @@ const isNonEmptyString = (value: unknown): value is string =>
  * A bad tenth comment must stop the submission. It must not come after the
  * daemon accepted nine others.
  */
+/** The ids of the images of a comment. Each id must be a string. */
+const parseAttachmentIds = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || !value.every((id) => typeof id === 'string')) {
+    throw new ReviewError('attachments must be a list of image ids', 400)
+  }
+  return value
+}
+
 const parseDrafts = (body: SubmitBody): Pick<SubmitParams, 'threads' | 'replies'> => {
   const threads = body.threads ?? []
   const replies = body.replies ?? []
@@ -155,6 +165,7 @@ const parseDrafts = (body: SubmitBody): Pick<SubmitParams, 'threads' | 'replies'
         side: draft.side,
         body: draft.body,
         blob_sha: draft.blob_sha,
+        attachments: parseAttachmentIds(draft.attachments),
       }
     }),
     replies: replies.map((entry: unknown) => {
@@ -162,7 +173,11 @@ const parseDrafts = (body: SubmitBody): Pick<SubmitParams, 'threads' | 'replies'
       if (typeof draft.thread_id !== 'string' || !isNonEmptyString(draft.body)) {
         throw new ReviewError('Every drafted reply needs a thread and a body', 400)
       }
-      return { thread_id: draft.thread_id, body: draft.body }
+      return {
+        thread_id: draft.thread_id,
+        body: draft.body,
+        attachments: parseAttachmentIds(draft.attachments),
+      }
     }),
   }
 }
@@ -415,6 +430,7 @@ export const createServer = ({
       body?: string
       author?: unknown
       author_name?: unknown
+      attachments?: unknown
     }>()
 
     if (typeof body.path !== 'string' || typeof body.line !== 'number') {
@@ -429,6 +445,7 @@ export const createServer = ({
       line: body.line,
       side: body.side,
       body: body.body,
+      attachments: parseAttachmentIds(body.attachments),
       ...parseSpeaker(body),
     })
     return context.json(review, 201)
@@ -440,20 +457,17 @@ export const createServer = ({
       body?: string
       author?: unknown
       author_name?: unknown
+      attachments?: unknown
     }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
     }
-    const { author, author_name } = parseSpeaker(body)
 
     return context.json(
-      await service.addComment(
-        context.req.param('id'),
-        context.req.param('thread_id'),
-        body.body,
-        author,
-        author_name,
-      ),
+      await service.addComment(context.req.param('id'), context.req.param('thread_id'), body.body, {
+        ...parseSpeaker(body),
+        attachments: parseAttachmentIds(body.attachments),
+      }),
       201,
     )
   })
@@ -481,19 +495,18 @@ export const createServer = ({
       body?: string
       author?: unknown
       author_name?: unknown
+      attachments?: unknown
     }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
     }
-    const { author, author_name } = parseSpeaker(body)
 
     return context.json(
       await service.addSubmissionComment(
         context.req.param('id'),
         context.req.param('submission_id'),
         body.body,
-        author,
-        author_name,
+        { ...parseSpeaker(body), attachments: parseAttachmentIds(body.attachments) },
       ),
       201,
     )
@@ -531,6 +544,7 @@ export const createServer = ({
       author: speaker.author as SubmissionAuthor,
       author_name: speaker.author_name,
       body: body.body,
+      attachments: parseAttachmentIds(body.attachments),
       ...parseDrafts(body),
       expected_head_sha: body.expected_head_sha,
     })
@@ -542,6 +556,37 @@ export const createServer = ({
       settleApproval(review.id, latest.id)
     }
     return context.json(review)
+  })
+
+  /**
+   * Keeps an image for the comments of a review. The image comes as base64 in
+   * JSON, because each write must be JSON. The daemon tells the type from the
+   * bytes, not from the request.
+   */
+  app.post('/api/reviews/:id/attachments', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
+    const body = await context.req.json<{ data?: unknown }>()
+    if (typeof body.data !== 'string') throw new ReviewError('data must be a base64 image', 400)
+    const attachment = await service.addAttachment(
+      context.req.param('id'),
+      Buffer.from(body.data, 'base64'),
+    )
+    return context.json(attachment, 201)
+  })
+
+  app.get('/api/reviews/:id/attachments/:attachment_id', async (context) => {
+    const service = await repositories.locate(context.req.param('id'))
+    const found = await service.readAttachment(
+      context.req.param('id'),
+      context.req.param('attachment_id'),
+    )
+    if (found === null) throw new ReviewError('This review has no such image', 404)
+    // The id is the hash of the bytes. Thus the same id always gives the same image.
+    return context.body(new Uint8Array(found.data), 200, {
+      'content-type': found.media_type,
+      'cache-control': 'private, max-age=31536000, immutable',
+      'x-content-type-options': 'nosniff',
+    })
   })
 
   app.get('/api/settings', async (context) => context.json(await settings.read()))

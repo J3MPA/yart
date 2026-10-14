@@ -1,4 +1,5 @@
 import { describeAuthor, submissionAuthor, type Review } from '@yart/core'
+import { AttachmentList } from './attachments'
 import { AuthorLabel } from './author-label'
 import { scrollToFile } from './file-anchors'
 import { relativeTime, VERDICT_LABEL } from './format'
@@ -52,6 +53,7 @@ export const ReviewHistoryPanel = ({ review }: ReviewHistoryPanelProps) => {
           {block.submission?.body !== null && block.submission?.body !== undefined && (
             <div className={styles.verdict_body}>{block.submission.body}</div>
           )}
+          <AttachmentList review_id={review.id} attachments={block.submission?.attachments} />
           {block.entries.map(({ comment, path, location }) => (
             <div key={comment.id} className={styles.history_entry}>
               <div className={styles.history_entry_head}>
@@ -67,6 +69,7 @@ export const ReviewHistoryPanel = ({ review }: ReviewHistoryPanelProps) => {
                 )}
               </div>
               <div className={styles.comment_body}>{comment.body}</div>
+              <AttachmentList review_id={review.id} attachments={comment.attachments} />
             </div>
           ))}
         </section>
