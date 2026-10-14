@@ -926,6 +926,10 @@ give the images of the comments after the text. The text gives each comment the
 numbers of its images, for example `[image 1]`. One result gives 10 images at
 most.
 
+**The agent can attach images.** `reply_to_thread`, `reply_to_verdict` and
+`submit_verdict` accept `image_paths`, for example a screenshot of a fix. A
+relative path starts at the repository.
+
 Comments come back as text, not as JSON. A model reads them and decides what to
 edit. A comment next to its code is easier to act on:
 

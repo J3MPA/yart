@@ -1,4 +1,6 @@
+import { writeFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
+import { join } from 'node:path'
 import { serve, type ServerType } from '@hono/node-server'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
@@ -518,5 +520,42 @@ describe('images for the agent', () => {
       // eslint-disable-next-line @typescript-eslint/naming-convention -- MCP wire field
       { type: 'image', data: PNG.toString('base64'), mimeType: 'image/png' },
     ])
+  })
+})
+
+describe('images from the agent', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7])
+
+  it('attaches an image file to an answer', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanComments(review_id, 2, 'the color is wrong')
+    await humanSubmits(review_id, 'changes_requested')
+    const thread_id = threadIdFrom(
+      (await call('await_review', { review_id, timeout_seconds: 5 })).split('Open comments')[1] ??
+        '',
+    )
+    writeFileSync(join(repo.path, 'fix.png'), PNG)
+
+    await call('reply_to_thread', {
+      review_id,
+      thread_id,
+      body: 'Fixed. See the screenshot.',
+      image_paths: ['fix.png'],
+    })
+    expect(await call('get_review', { review_id })).toContain(
+      'agent: Fixed. See the screenshot.  [image 1]',
+    )
+  })
+
+  it('tells when the image file does not exist', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanSubmits(review_id, 'changes_requested')
+    expect(
+      await callExpectingError('reply_to_verdict', {
+        review_id,
+        body: 'Done.',
+        image_paths: ['missing.png'],
+      }),
+    ).toMatch(/No file at/)
   })
 })

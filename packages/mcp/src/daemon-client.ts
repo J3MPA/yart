@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
-import { sep } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { resolve, sep } from 'node:path'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import {
@@ -56,11 +57,22 @@ const resolveDaemonCli = (): string => {
 }
 
 /** One round of an AI reviewer: its verdict and what it says with it. */
+/** The largest image that the daemon accepts, in bytes. */
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
 export interface ReviewerRound {
   verdict: ReviewVerdict
   summary?: string
-  comments?: { path: string; line: number; side?: 'base' | 'head'; body: string }[]
-  replies?: { thread_id: string; body: string }[]
+  /** The ids of the images of the summary. */
+  attachments?: string[]
+  comments?: {
+    path: string
+    line: number
+    side?: 'base' | 'head'
+    body: string
+    attachments?: string[]
+  }[]
+  replies?: { thread_id: string; body: string; attachments?: string[] }[]
   reviewer_name?: string
 }
 
@@ -247,17 +259,54 @@ export class DaemonClient {
     return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/advance`, { head })
   }
 
-  replyToThread(review_id: string, thread_id: string, body: string): Promise<Review> {
+  /**
+   * Sends image files from the disk to a review, and returns their ids. A
+   * relative path starts at the repository of the agent.
+   */
+  async uploadImages(
+    review_id: string,
+    paths: readonly string[] | undefined,
+  ): Promise<string[] | undefined> {
+    if (paths === undefined || paths.length === 0) return undefined
+    const ids: string[] = []
+    for (const path of paths) {
+      const full = resolve(this.repo_path ?? process.cwd(), path)
+      const size = (await stat(full).catch(() => null))?.size
+      if (size === undefined) throw new DaemonError(`No file at ${full}.`, null)
+      if (size > MAX_IMAGE_BYTES) {
+        throw new DaemonError(`${full} is larger than 5 MB. Use a smaller image.`, null)
+      }
+      const data = (await readFile(full)).toString('base64')
+      const { id } = await this.post<{ id: string }>(
+        `/api/reviews/${encodeURIComponent(review_id)}/attachments`,
+        { data },
+      )
+      ids.push(id)
+    }
+    return ids
+  }
+
+  replyToThread(
+    review_id: string,
+    thread_id: string,
+    body: string,
+    attachments?: string[],
+  ): Promise<Review> {
     return this.post<Review>(
       `/api/reviews/${encodeURIComponent(review_id)}/threads/${encodeURIComponent(thread_id)}/comments`,
-      { body, author: 'agent' },
+      { body, author: 'agent', attachments },
     )
   }
 
-  replyToVerdict(review_id: string, submission_id: string, body: string): Promise<Review> {
+  replyToVerdict(
+    review_id: string,
+    submission_id: string,
+    body: string,
+    attachments?: string[],
+  ): Promise<Review> {
     return this.post<Review>(
       `/api/reviews/${encodeURIComponent(review_id)}/submissions/${encodeURIComponent(submission_id)}/comments`,
-      { body, author: 'agent' },
+      { body, author: 'agent', attachments },
     )
   }
 
@@ -274,6 +323,7 @@ export class DaemonClient {
     return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/submit`, {
       verdict: round.verdict,
       body: round.summary,
+      attachments: round.attachments,
       threads: round.comments,
       replies: round.replies,
       author: 'reviewer',
