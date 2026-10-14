@@ -313,7 +313,11 @@ The work that remains, in order:
    keeps the review open for the author agent. The next commit moves the same
    review. The hook is optional, because it blocks the commit while a model
    runs. `--no-verify` skips it. `yart hook install` sets it up.
-4. **A reviewer that comes with yart.** A Claude Code subagent definition with
+4. ~~**A reviewer that comes with yart.**~~ Done: `yart reviewer install` writes
+   `.claude/agents/yart-reviewer.md`, or with `--user` into `~/.claude/agents`.
+   The subagent can only read files and use the reviewer tools, and gives one
+   verdict for each run. Not verified: that Claude Code lists it in `/agents`.
+   The plan was this: a Claude Code subagent definition with
    its own instructions. Thus an agent that must have its work reviewed starts a
    reviewer that it did not brief itself. This agrees with the plugin idea in the
    finding about agents that do not use the tools on their own.

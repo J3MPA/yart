@@ -225,6 +225,15 @@ review list, and go to the **AI reviewer** section:
 yart does not run a model. The agent that starts the reviewer reads these
 settings with the `get_reviewer_settings` tool.
 
+yart includes a reviewer subagent for Claude Code. yart writes its
+instructions, thus the agent whose work is under review does not brief its own
+reviewer. The subagent can only read files and use the reviewer tools, thus it
+cannot change the code. Add it to a project, or with `--user` to all projects:
+
+```sh
+yart reviewer install
+```
+
 To start the loop with a subagent, tell the agent that does the work:
 
 > Make the change. Then start a reviewer subagent to review it with yart, before
@@ -234,8 +243,8 @@ The agent then does these steps:
 
 1. It opens a review with `start_review`.
 2. It reads the reviewer settings with `get_reviewer_settings`.
-3. It starts a subagent on the model from the settings, with the instructions in
-   its brief.
+3. It starts the `yart-reviewer` subagent, or a subagent of its own, on the
+   model from the settings, with the instructions in its brief.
 4. The subagent reads the changes with `get_diff`. It gives a verdict with its
    line comments with `submit_verdict`.
 5. The agent reads the verdict with `await_review`. It answers the comments,
