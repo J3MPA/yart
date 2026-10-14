@@ -32,23 +32,27 @@ export const App = () => {
 
   return (
     <main className={styles.shell}>
-      {on_settings ? (
-        <SettingsPage />
-      ) : review_id === null ? (
-        <>
-          <h1 className={styles.title}>
-            <Logo size={30} />
-            yart
-            <a className={styles.settings_link} href="/settings">
-              Settings
-            </a>
-          </h1>
-          <p className={styles.tagline}>Local, GitHub-style code review for AI-generated diffs.</p>
-          <ReviewList unseen={unseen.ids} />
-        </>
-      ) : (
-        <ReviewPage review_id={review_id} />
-      )}
+      <div className={styles.content}>
+        {on_settings ? (
+          <SettingsPage />
+        ) : review_id === null ? (
+          <>
+            <h1 className={styles.title}>
+              <Logo size={30} />
+              yart
+              <a className={styles.settings_link} href="/settings">
+                Settings
+              </a>
+            </h1>
+            <p className={styles.tagline}>
+              Local, GitHub-style code review for AI-generated diffs.
+            </p>
+            <ReviewList unseen={unseen.ids} />
+          </>
+        ) : (
+          <ReviewPage review_id={review_id} />
+        )}
+      </div>
       {version !== undefined && <footer className={styles.version}>yart {version.version}</footer>}
     </main>
   )
