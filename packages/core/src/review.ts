@@ -1,60 +1,59 @@
 import type { Comment, Thread } from './types.ts'
 
 /**
- * The shapes the daemon sends over the wire.
+ * The shapes that the daemon sends over the wire.
  *
- * They live here, in the package with no I/O, because the browser needs them
- * too: if they lived beside the git and filesystem code that produces them,
- * importing a type would drag `node:fs` into the bundle.
+ * They are in this package, which has no I/O, because the browser also needs
+ * them. If they were next to the git and file system code that makes them, an
+ * import of a type would put `node:fs` into the bundle.
  */
 
 export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied'
 
 export interface ReviewFile {
   status: ChangeStatus
-  /** Path in the head revision, or the deleted path when the file is gone. */
+  /** The path in the head revision, or the old path when the file was deleted. */
   path: string
-  /** Present only for renames and copies. */
+  /** Only for renames and copies. */
   old_path: string | null
-  /** Blob in the base revision; `null` when the file was added. */
+  /** The blob in the base revision, or `null` when the file was added. */
   base_blob_sha: string | null
-  /** Blob in the head revision; `null` when the file was deleted. */
+  /** The blob in the head revision, or `null` when the file was deleted. */
   head_blob_sha: string | null
 }
 
 export type ReviewStatus = 'open' | 'submitted'
 
 /**
- * What a reviewer said when they handed the review back.
+ * What a reviewer said when they gave the review back.
  *
- * Mirrors the three things a pull request review can be, because the agent has
- * to act differently on each: approved means stop, changes requested means fix,
- * commented means read them and use judgement.
+ * These are the three types of a pull request review. The agent must act
+ * differently on each. "approved" means stop. "changes_requested" means make
+ * the fixes. "commented" means read the comments and decide.
  */
 export type ReviewVerdict = 'commented' | 'approved' | 'changes_requested'
 
-/** Who can pass a verdict: the person, or an AI reviewer standing in for them. */
+/** Who can give a verdict: the person, or an AI reviewer in the place of the person. */
 export type SubmissionAuthor = 'human' | 'reviewer'
 
 export interface ReviewSubmission {
   id: string
   verdict: ReviewVerdict
-  /** Absent on verdicts from before reviewers existed, which were all the person's. */
+  /** Not on verdicts from before reviewers existed. All of those belong to the person. */
   author?: SubmissionAuthor
-  /** The AI reviewer's name, as on its comments. */
+  /** The name of the AI reviewer, as on its comments. */
   author_name?: string | null
-  /** Summary written when submitting, separate from any line comments. */
+  /** The summary of the verdict, apart from the line comments. */
   body: string | null
   /**
-   * Replies to the summary, oldest first.
+   * The replies to the summary, the oldest first.
    *
-   * A verdict is the one thing in a review with nothing to say back to it, and
-   * a summary that cannot be answered pushes the conversation out of the tool
-   * and into whatever chat window the agent happens to be in. Not anchored to a
-   * line, so this is a plain list rather than a `Thread`.
+   * Without these, a verdict could get no answer. Then the conversation would go
+   * out of the tool, into the chat window of the agent. A verdict is not
+   * attached to a line. Thus this is a list, not a `Thread`.
    */
   comments: Comment[]
-  /** The head this verdict was passed on; a later head reopens the review. */
+  /** The head of this verdict. A later head opens the review again. */
   head_sha: string
   created_at: string
 }
@@ -62,50 +61,49 @@ export interface ReviewSubmission {
 /**
  * One review over a revision range.
  *
- * `head` advances as the agent responds, which is what makes review a loop
- * rather than a single pass; `base` stays put so the range always describes the
- * whole change under discussion.
+ * `head` moves forward when the agent responds. This makes review a loop, not
+ * one pass. `base` does not move. Thus the range always shows the full change
+ * that the review is about.
  */
 export interface Review {
   id: string
   repo_path: string
   /**
-   * What this review is called.
+   * The name of this review.
    *
-   * Defaults to the head commit's subject, because a revision range is not a
-   * name: `main..HEAD` says nothing once HEAD has moved, and a full hash says
+   * The default is the subject of the head commit. A revision range is not a
+   * good name. `main..HEAD` says nothing after HEAD moves, and a full hash says
    * nothing at all.
    */
   title: string
-  /** Branch at the head revision, when the head is a branch tip. */
+  /** The branch at the head revision, when the head is the tip of a branch. */
   head_branch: string | null
   /**
-   * True when the head is a snapshot of uncommitted work rather than a commit.
+   * True when the head is a snapshot of uncommitted work, not a commit.
    *
-   * Such a review is advanced by taking a new snapshot rather than by naming a
-   * newer revision, because there is no commit to name.
+   * To move such a review, yart makes a new snapshot. It does not name a newer
+   * revision, because there is no commit to name.
    */
   head_is_snapshot: boolean
-  /** The revisions as requested, kept for display; may be names like `main`. */
+  /** The revisions as the request gave them, for display. They can be names such as `main`. */
   base: string
   head: string
-  /** The same revisions resolved to commit shas at the time of each update. */
+  /** The same revisions as commit shas, at the time of each update. */
   base_sha: string
   head_sha: string
   status: ReviewStatus
-  /** Every hand-back, oldest first. The last one is the current verdict. */
+  /** All verdicts, the oldest first. The last one is the current verdict. */
   submissions: ReviewSubmission[]
   files: ReviewFile[]
   threads: Thread[]
-  /** Head shas this review has been through, oldest first. */
+  /** The head shas of all rounds of this review, the oldest first. */
   rounds: string[]
   created_at: string
   updated_at: string
   /**
    * When this review was archived, or null while it is active.
    *
-   * A timestamp rather than a flag so the list can still be ordered once
-   * archived reviews are shown.
+   * This is a time, not a flag. Thus the list can still sort archived reviews.
    */
   archived_at: string | null
 }
@@ -114,15 +112,15 @@ export type DiffLineKind = 'context' | 'added' | 'removed'
 
 export interface DiffLine {
   kind: DiffLineKind
-  /** 1-based line in the base blob, or null for an added line. */
+  /** The line in the base blob, from 1, or null for an added line. */
   base_line: number | null
-  /** 1-based line in the head blob, or null for a removed line. */
+  /** The line in the head blob, from 1, or null for a removed line. */
   head_line: number | null
   text: string
 }
 
 export interface DiffHunk {
-  /** The `@@ ... @@` header, including any trailing section heading git found. */
+  /** The `@@ ... @@` header, with the section heading that git found, if there is one. */
   header: string
   lines: DiffLine[]
 }
@@ -131,17 +129,18 @@ export interface FileDiff extends ReviewFile {
   hunks: DiffHunk[]
   is_binary: boolean
   /**
-   * Lines in the head blob, or null when there is no readable head text.
+   * The count of lines in the head blob, or null when the head has no text to
+   * read.
    *
-   * The hunks describe only what changed, so nothing in them says whether the
-   * file continues past the last one. This is what bounds that final run of
-   * unchanged lines, and the base needs no equivalent: unchanged lines exist on
-   * both sides, so one side's length fixes the other's.
+   * The hunks show only what changed. Thus they do not tell if the file
+   * continues after the last hunk. This count gives the end of the last run of
+   * unchanged lines. The base does not need a count. Unchanged lines exist on the
+   * two sides, thus the length of one side gives the length of the other.
    */
   head_line_count: number | null
 }
 
-/** Both sides of one file in full, for showing text the diff left out. */
+/** The two sides of one file in full, to show the text that the diff does not include. */
 export interface FileContents extends ReviewFile {
   base_content: string | null
   head_content: string | null

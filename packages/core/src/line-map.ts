@@ -2,19 +2,21 @@ import { diffLines } from 'diff'
 
 export interface LineMapOptions {
   /**
-   * Treat lines that differ only in leading/trailing whitespace as unchanged.
+   * Treat two lines as unchanged when only the whitespace at their start or end
+   * is different.
    *
-   * Defaults to `true`: agents reformat constantly, and a reindent that
-   * outdated every thread in the file would make review unusable.
+   * The default is `true`. Agents change the format frequently. If a new indent
+   * made all threads in the file outdated, review would not be possible.
    */
   ignore_whitespace?: boolean
 }
 
 /**
- * jsdiff compares a final line that lacks a newline against one that has it as
- * a change, which would outdate threads on the last line of any file not ending
- * in a newline. Both sides get a terminator so that comparison is like-for-like;
- * `splitLines` discards it again, so numbering is unaffected.
+ * jsdiff sees a last line without a newline and the same line with a newline as
+ * a change. Thus threads on the last line of a file without a final newline
+ * would become outdated. This function gives the two sides a newline, thus they
+ * compare correctly. `splitLines` removes the newline again, thus the line
+ * numbers do not change.
  */
 const withTrailingNewline = (content: string): string => {
   if (content === '' || content.endsWith('\n')) return content
@@ -22,13 +24,14 @@ const withTrailingNewline = (content: string): string => {
 }
 
 /**
- * Maps line numbers from `before` to their counterparts in `after`.
+ * Maps the line numbers in `before` to the same lines in `after`.
  *
- * Only surviving lines appear. A line that was deleted — or modified, which a
- * line diff reports as a deletion plus an insertion — is absent, which is what
- * marks a thread on it as outdated.
+ * Only lines that stay are in the map. A deleted line is not in the map. A
+ * changed line is also not in the map, because a line diff shows a change as a
+ * deletion and an addition. A line that is not in the map makes its thread
+ * outdated.
  *
- * Both sides are 1-based.
+ * The two sides start at line 1.
  */
 export const buildLineMap = (
   before: string,

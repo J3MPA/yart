@@ -1,10 +1,10 @@
 /**
- * Splits content into lines.
+ * Divides content into lines.
  *
- * A trailing newline terminates the last line rather than starting an empty
- * one, so `"a\nb\n"` and `"a\nb"` both yield two lines. Without this, every
- * file ending in a newline would gain a phantom final line that anchors could
- * point at.
+ * A newline at the end closes the last line. It does not start an empty line.
+ * Thus `"a\nb\n"` and `"a\nb"` both give two lines. Without this rule, each
+ * file that ends with a newline would get an empty last line, and anchors could
+ * point to it.
  */
 export const splitLines = (content: string): string[] => {
   if (content === '') return []

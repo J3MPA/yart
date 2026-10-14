@@ -1,9 +1,9 @@
 import type { AnchorState, FileResolution, LineAnchor, Thread } from './types.ts'
 
 /**
- * Anchor state is derived from where a thread sits now versus where it started,
- * never accumulated across rounds — so a line that moves away and back reads as
- * `current` again, and a bug in one round cannot poison later ones.
+ * Calculates the anchor state from where a thread is now and where it started.
+ * The state never adds up across rounds. Thus a line that moves away and back is
+ * `current` again. An error in one round cannot cause errors in later rounds.
  */
 export const deriveAnchorState = (origin: LineAnchor, anchor: LineAnchor | null): AnchorState => {
   if (anchor === null) return 'outdated'
@@ -20,14 +20,14 @@ const moveTo = (thread: Thread, anchor: LineAnchor): Thread => {
 }
 
 /**
- * Moves a thread's anchor onto a later revision of its file.
+ * Moves the anchor of a thread to a later revision of its file.
  *
- * Pure lookup: the caller supplies the line mapping, so this stays independent
- * of how the diff was computed.
+ * This function only looks up lines. The caller gives the line map. Thus the
+ * function does not depend on how the diff was made.
  *
- * Outdating is permanent — a thread whose line has already been lost is
- * returned untouched rather than speculatively re-matched, since any such match
- * would be a guess.
+ * An outdated thread stays outdated. When the line of a thread is already gone,
+ * this function returns the thread with no change. It does not try to find a
+ * new match, because each match would be a guess.
  */
 export const reanchorThread = (thread: Thread, resolution: FileResolution): Thread => {
   const { anchor } = thread
@@ -51,11 +51,13 @@ export const reanchorThread = (thread: Thread, resolution: FileResolution): Thre
 }
 
 /**
- * Re-anchors many threads at once, keyed by the blob each is anchored to.
+ * Attaches many threads again at the same time. The key is the blob of each
+ * anchor.
  *
- * Threads whose blob is absent from `resolutions` are passed through untouched:
- * the caller decides what an unknown blob means, since silently outdating them
- * would destroy comments over what may be a lookup bug.
+ * A thread whose blob is not in `resolutions` comes back with no change. The
+ * caller decides what an unknown blob means. To make such threads outdated with
+ * no warning would destroy comments, and the cause could be an error in the
+ * lookup.
  */
 export const reanchorThreads = (
   threads: readonly Thread[],

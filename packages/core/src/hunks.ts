@@ -1,6 +1,6 @@
 import type { DiffHunk, DiffLine } from './review.ts'
 
-/** The two line ranges a `@@ ... @@` header names, one per side. */
+/** The two line ranges that a `@@ ... @@` header names, one for each side. */
 export interface HunkRange {
   base_start: number
   base_count: number
@@ -11,11 +11,12 @@ export interface HunkRange {
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
 /**
- * Reads the line ranges out of a hunk header, or null if it is not one.
+ * Reads the line ranges from a hunk header. Returns null if the text is not a
+ * hunk header.
  *
- * A count of zero marks a side the hunk adds nothing to, and the start then
- * names the line the change sits *after* rather than the first line it covers.
- * An omitted count means one line, which is git's shorthand.
+ * A count of zero marks a side where the hunk adds nothing. The start then
+ * names the line *before* the change, not the first line of the change. When
+ * the count is missing, it is one line. This is a short form of git.
  */
 export const parseHunkHeader = (header: string): HunkRange | null => {
   const match = HUNK_HEADER.exec(header)
@@ -28,42 +29,42 @@ export const parseHunkHeader = (header: string): HunkRange | null => {
   }
 }
 
-/** The first line a hunk actually covers on each side. */
+/** The first line of a hunk on each side. */
 export const hunkFirstLines = (range: HunkRange): { base: number; head: number } => ({
   base: range.base_count === 0 ? range.base_start + 1 : range.base_start,
   head: range.head_count === 0 ? range.head_start + 1 : range.head_start,
 })
 
-/** The line after the last one a hunk covers on each side. */
+/** The line after the last line of a hunk on each side. */
 export const hunkNextLines = (range: HunkRange): { base: number; head: number } => {
   const first = hunkFirstLines(range)
   return { base: first.base + range.base_count, head: first.head + range.head_count }
 }
 
-/** A run of unchanged lines the diff left out, described on both sides. */
+/** A run of unchanged lines that the diff did not include, on the two sides. */
 export interface DiffGap {
   /** 1-based first line of the run in the base blob. */
   base_start: number
   /** 1-based first line of the run in the head blob. */
   head_start: number
-  /** How many lines the run hides. Always at least one. */
+  /** How many lines the run hides. It is always one or more. */
   length: number
 }
 
-/** A file's diff in reading order: the hunks git produced and the gaps between them. */
+/** The diff of a file in the order to read it: the hunks from git and the gaps between them. */
 export type DiffSection =
   { kind: 'gap'; gap: DiffGap } | { kind: 'hunk'; hunk: DiffHunk; index: number }
 
 /**
- * Lays a file's hunks out with the unchanged runs that separate them.
+ * Puts the hunks of a file in order, with the unchanged runs between them.
  *
- * git only describes what changed, so everything between two hunks — and
- * everything after the last one — is absent from the diff entirely. The gaps
- * are recovered by walking both sides in step: the lines a hunk does not cover
- * are unchanged by definition, and unchanged lines advance both sides equally.
+ * git shows only what changed. All lines between two hunks, and all lines after
+ * the last hunk, are not in the diff. This function finds the gaps from the two
+ * sides together. A line that is not in a hunk did not change. An unchanged line
+ * moves the two sides forward by the same count.
  *
- * `head_line_count` is what bounds the final gap; without it there is no way to
- * know whether anything follows the last hunk, so a null leaves it off.
+ * `head_line_count` gives the end of the last gap. Without it, nothing tells if
+ * lines follow the last hunk. Thus a null gives no last gap.
  */
 export const planDiffSections = (
   hunks: readonly DiffHunk[],
@@ -99,11 +100,11 @@ export const planDiffSections = (
   return sections
 }
 
-/** Drops the `@@ ... @@` numbers, leaving the enclosing context git found, if any. */
+/** Removes the `@@ ... @@` numbers. The context that git found stays, if there is one. */
 export const hunkSectionHeading = (header: string): string =>
   header.replace(/^@@ [^@]* @@/, '').trim()
 
-/** The part of a run that starts `offset` lines in and continues for `length`. */
+/** The part of a run that starts `offset` lines in, for `length` lines. */
 export const gapSlice = (gap: DiffGap, offset: number, length: number): DiffGap => ({
   base_start: gap.base_start + offset,
   head_start: gap.head_start + offset,
@@ -111,10 +112,10 @@ export const gapSlice = (gap: DiffGap, offset: number, length: number): DiffGap 
 })
 
 /**
- * A run's hidden lines, as the context rows the diff would have held.
+ * The hidden lines of a run, as the context rows that the diff would show.
  *
- * Read off the head, because a run is unchanged by definition and so both
- * sides carry the same text — while only the head is still on disk.
+ * The lines come from the head. A run did not change, thus the two sides have
+ * the same text. Only the head is still on the disk.
  */
 export const gapLines = (gap: DiffGap, head_lines: readonly string[]): DiffLine[] =>
   Array.from({ length: gap.length }, (_unused, index) => ({

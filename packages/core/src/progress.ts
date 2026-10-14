@@ -2,11 +2,10 @@ import type { Thread } from './types.ts'
 import type { Review, ReviewSubmission } from './review.ts'
 
 /**
- * The verdict passed on the review's current head, if this round has been
- * handed back.
+ * The verdict on the current head of the review, if this round has a verdict.
  *
- * Scoped to the current head on purpose: once the agent advances the review,
- * an earlier approval no longer describes what is on screen.
+ * Only the current head counts, on purpose. After the agent moves the review,
+ * an older approval does not describe what is on the screen.
  */
 export const currentSubmission = (review: Review): ReviewSubmission | null => {
   for (let index = review.submissions.length - 1; index >= 0; index -= 1) {
@@ -16,17 +15,17 @@ export const currentSubmission = (review: Review): ReviewSubmission | null => {
   return null
 }
 
-/** The most recent verdict, whichever head it was passed on. */
+/** The latest verdict, on any head. */
 export const latestSubmission = (review: Review): ReviewSubmission | null =>
   review.submissions[review.submissions.length - 1] ?? null
 
 /**
- * Whether the agent has responded to a thread since the human last wrote on it.
+ * Tells if the agent answered a thread after the person last wrote in it.
  *
- * Resolving counts: an agent that marks a thread done has said what it has to
- * say about it. Otherwise this turns on who spoke last, because a human
- * replying to the agent's answer puts the thread back in the agent's court —
- * and a count that did not notice would report work as finished twice.
+ * A resolved thread counts. An agent that marks a thread as done has said all
+ * that it has to say. In other cases, the last author decides. When the person
+ * replies to the answer of the agent, the thread goes back to the agent. A count
+ * that ignored this would show the same work as done two times.
  */
 export const threadIsAnswered = (thread: Thread): boolean => {
   if (thread.status === 'resolved') return true
@@ -35,11 +34,11 @@ export const threadIsAnswered = (thread: Thread): boolean => {
 }
 
 /**
- * How far the agent has got with a review that was handed back.
+ * How far the agent is with a review that has a verdict.
  *
- * - `idle` — nothing has happened since the verdict
- * - `in_progress` — answers or changes have appeared, but threads are still waiting
- * - `ready` — nothing is waiting on the agent; worth looking again
+ * - `idle`: nothing happened after the verdict.
+ * - `in_progress`: answers or changes came, but some threads still wait.
+ * - `ready`: no thread waits on the agent. Look at the review again.
  */
 export type ProgressState = 'idle' | 'in_progress' | 'ready'
 
@@ -47,24 +46,24 @@ export interface ReviewProgress {
   state: ProgressState
   answered_threads: number
   awaiting_threads: number
-  /** Whether the head has moved since the verdict was passed. */
+  /** Tells if the head moved after the verdict. */
   code_changed: boolean
-  /** Whether the agent has written back under the verdict itself. */
+  /** Tells if the agent wrote a reply to the verdict itself. */
   summary_answered: boolean
 }
 
 /**
- * What has happened to a review since it was submitted, or null if it never was.
+ * What happened to a review after its verdict. Returns null if it has no
+ * verdict.
  *
- * The distinction worth drawing is between *something* happening and
- * *everything* having happened: the first says the agent has picked the review
- * up, the second says there is a point in opening it again. Anything less
- * specific and the signal has to be checked by hand, which is the work it was
- * supposed to save.
+ * The important difference is between *some* work and *all* work. Some work
+ * tells that the agent started on the review. All work tells that it is time to
+ * open the review again. A less specific signal needs a check by hand, and the
+ * signal must prevent that work.
  *
- * `ready` deliberately does not require the code to have changed. An agent that
- * answers every comment by explaining why it disagrees has finished its turn
- * just as much as one that rewrote the file, and both need a human to look.
+ * `ready` does not need a change in the code, on purpose. An agent can answer
+ * each comment and explain why it disagrees. That agent is also done, as is an
+ * agent that changed the file. Both need a person to look.
  */
 export const reviewProgress = (review: Review): ReviewProgress | null => {
   const submission = latestSubmission(review)
