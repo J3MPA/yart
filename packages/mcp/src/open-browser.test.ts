@@ -1,13 +1,21 @@
 /* eslint-disable @typescript-eslint/naming-convention -- an environment
    variable's name is the operating system's shape, not this project's. */
 import { describe, expect, it } from 'vitest'
-import { appLink, browserOpeningEnabled } from './open-browser.ts'
+import { appLink, browserOpeningEnabled, launcherEnv } from './open-browser.ts'
 
 describe('appLink', () => {
   it('points the desktop app at the same review', () => {
     expect(appLink('http://localhost:7777/reviews/9e0d8502-fa83')).toBe(
       'yart://reviews/9e0d8502-fa83',
     )
+  })
+})
+
+describe('launcherEnv', () => {
+  it('removes the variable that makes the desktop app start as plain Node', () => {
+    expect(launcherEnv({ ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin' })).toEqual({
+      PATH: '/usr/bin',
+    })
   })
 })
 
