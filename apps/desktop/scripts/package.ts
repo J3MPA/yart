@@ -90,11 +90,14 @@ const main = async () => {
   await bundle('apps/desktop/src/main.ts', 'apps/desktop/dist/main.mjs', ['electron'])
   await cp(join(DESKTOP, 'src', 'preload.cjs'), join(STAGING, 'apps/desktop/dist/preload.cjs'))
 
-  // The daemon gives the version of the file next to it. Thus it is the version of the app.
-  await writeFile(
-    join(STAGING, 'packages', 'daemon', 'package.json'),
-    `${JSON.stringify({ name: '@yart/daemon', version }, null, 2)}\n`,
-  )
+  // The daemon and the MCP server give the version of the file next to them.
+  // Thus it is the version of the app.
+  for (const name of ['daemon', 'mcp']) {
+    await writeFile(
+      join(STAGING, 'packages', name, 'package.json'),
+      `${JSON.stringify({ name: `@yart/${name}`, version }, null, 2)}\n`,
+    )
+  }
   await writeFile(
     join(STAGING, 'package.json'),
     `${JSON.stringify(

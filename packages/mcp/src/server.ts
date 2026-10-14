@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { latestSubmission, reviewerRounds, submissionAuthor, type Settings } from '@yart/core'
-import type { Review } from '@yart/daemon'
+import { VERSION, type Review } from '@yart/daemon'
 import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-client.ts'
 import { browserOpeningEnabled, openReview } from './open-browser.ts'
 import {
@@ -99,7 +99,7 @@ export interface McpServerOptions extends DaemonClientOptions {
 
 export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
-  const server = new McpServer({ name: 'yart', version: '0.0.0' })
+  const server = new McpServer({ name: 'yart', version: VERSION })
 
   const port = options.port ?? DEFAULT_PORT
   const openBrowser = options.openBrowser ?? ((url: string) => openReview(url, port))

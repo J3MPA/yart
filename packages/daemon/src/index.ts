@@ -21,3 +21,4 @@ export {
   type CreateReviewParams,
 } from './review.ts'
 export { createServer, type ServerOptions } from './server.ts'
+export { VERSION } from './version.ts'
