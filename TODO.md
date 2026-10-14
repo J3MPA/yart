@@ -294,9 +294,11 @@ The work that remains, in order:
    person to the process that starts the reviewer. Only a launcher that accepts
    an effort uses it. The subagents of Claude Code accept a model, but not an
    effort.
-2. **The final review of the person.** The page shows the AI conversation round
-   by round. It shows the approval of the AI as a step before the verdict of the
-   person.
+2. ~~**The final review of the person.**~~ Done. When an AI reviewer gave a
+   verdict, a "Review history" panel shows the conversation verdict by verdict.
+   The comments of a reviewer go with the verdict that they came with. The
+   replies of the agent go with the verdict that they answer. The approval of
+   the AI is one step, and the verdict of the person comes after it.
 3. **The commit hook.** `yart hook pre-commit` reviews the staged changes.
    `git write-tree` makes a tree from them, and a review can already use a tree.
    The hook runs a reviewer from a command that the person sets. On approval, it

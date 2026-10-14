@@ -254,8 +254,11 @@ That session waits for the author with `await_author` between rounds. It
 continues when the author moves the review or replies to a comment. A reply alone can
 mean that the author disagrees, and that also needs an answer.
 
-When the review comes to you, the comments of the reviewer show its name, for
-example "reviewer claude-reviewer". The answers of the agent show "agent". A
+When the review comes to you, a **Review history** panel at the top shows the
+exchange round by round. Each round starts with the verdict of the reviewer and
+its summary. Then come its comments and the answers of the agent, each with its
+`file:line`. Click a location to go to that file in the diff. The comments of
+the reviewer show its name, for example "reviewer claude-reviewer". The answers of the agent show "agent". A
 verdict of the reviewer shows "by reviewer". Your verdict is the last verdict.
 An approval of the reviewer does not count as yours. It does not start the
 clean-up that you set in Settings.
