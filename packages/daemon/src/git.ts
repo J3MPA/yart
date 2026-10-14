@@ -282,7 +282,13 @@ export const branchAt = async (repo_path: string, rev: string): Promise<string |
       .split('\n')
       .map((name) => name.trim())
       .filter((name) => name !== '')
-    return names.length === 1 ? (names[0] as string) : null
+    if (names.length === 1) return names[0] as string
+    // A new branch points at the same commit as the branch that it came from.
+    // The branch that is checked out is then the one that the person works on.
+    const current = (
+      await runGit(repo_path, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => '')
+    ).trim()
+    return names.includes(current) ? current : null
   } catch {
     return null
   }
