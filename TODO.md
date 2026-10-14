@@ -494,12 +494,6 @@ start quickly. yart loads a grammar only for the languages in a review.
 
 ## Smaller things
 
-- The daemon examines nothing about who asks. JSON on each write stops a web page
-  that tries to make it act. But a page can change the address of its own host
-  name to `127.0.0.1`. Then it can make requests from the same origin and read the
-  answers, also file contents. A check that the `Host` header is `localhost` or
-  `127.0.0.1` would stop this. Do this soon, because other people now install
-  yart, and the daemon can get to all repositories that it served.
 - The daemon has no recovery after a crash and no log file. It stops if its port
   is in use.
 - `GET /api/reviews/:id/diff` returns all files, with no limit. This is

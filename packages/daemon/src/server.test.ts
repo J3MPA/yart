@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import type { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Review } from './types.ts'
-import { createServer } from './server.ts'
+import { createServer, hostName } from './server.ts'
 import { TestRepo } from './test-repo.ts'
 
 const FOUR_LINES = 'alpha\nbeta\ngamma\ndelta\n'
@@ -646,5 +646,32 @@ describe('reviewer settings', () => {
 
   it('refuses an effort that is not one', async () => {
     expect((await choose({ reviewer_effort: 'maximum' })).status).toBe(400)
+  })
+})
+
+describe('the Host header', () => {
+  const withHost = (host: string) => app.request('/api/reviews', { headers: { host } })
+
+  it('answers requests to the names of this computer', async () => {
+    expect((await withHost('localhost:7777')).status).toBe(200)
+    expect((await withHost('127.0.0.1:7777')).status).toBe(200)
+    expect((await withHost('[::1]:7777')).status).toBe(200)
+    expect((await withHost('LOCALHOST')).status).toBe(200)
+  })
+
+  it('refuses a request that a browser sent to a different name', async () => {
+    const response = await withHost('evil.example:7777')
+    expect(response.status).toBe(403)
+    expect(((await response.json()) as { error: string }).error).toMatch(/evil\.example/)
+  })
+
+  it('refuses a name that only starts like this computer', async () => {
+    expect((await withHost('localhost.evil.example')).status).toBe(403)
+  })
+
+  it('reads the name without the port', () => {
+    expect(hostName('Example.com:80')).toBe('example.com')
+    expect(hostName('[::1]:7777')).toBe('[::1]')
+    expect(hostName('127.0.0.1')).toBe('127.0.0.1')
   })
 })
