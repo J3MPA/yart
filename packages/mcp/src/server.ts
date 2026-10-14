@@ -17,6 +17,16 @@ import {
 
 const DEFAULT_WAIT_SECONDS = 300
 
+/** The parameter that attaches image files to a comment. */
+const imagePaths = () =>
+  z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Image files to attach, for example screenshots that show your fix. Use PNG, JPEG, ' +
+        'WebP or GIF, 5 MB at most for each file. A relative path starts at the repository.',
+    )
+
 /** The most images that one result gives. Each image goes into the context of the agent. */
 const MAX_IMAGES = 10
 
@@ -26,6 +36,8 @@ const INSTRUCTIONS = [
   '- When the person asks to review changes, call start_review. Do not ask how they want to review.',
   '- After start_review, call await_review at once. Do not wait for the person to tell you.',
   '- When yart opens the review for the person, do not send the review URL.',
+  '- When you fix a problem that the person can see, such as a UI change, attach a ' +
+    'screenshot of the fix with image_paths.',
   '- To review the work of a different agent, use the reviewer tools: get_reviewer_settings, ' +
     'get_diff, submit_verdict and await_author.',
 ].join('\n')
@@ -341,11 +353,13 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         review_id: z.string(),
         thread_id: z.string().describe('The id in brackets before each comment.'),
         body: z.string().describe('The text of the answer.'),
+        image_paths: imagePaths(),
       },
     }),
-    async ({ review_id, thread_id, body }) =>
+    async ({ review_id, thread_id, body, image_paths }) =>
       guard(async () => {
-        await daemon.replyToThread(review_id, thread_id, body)
+        const attachments = await daemon.uploadImages(review_id, image_paths)
+        await daemon.replyToThread(review_id, thread_id, body, attachments)
         return text(`You answered ${thread_id}.`)
       }),
   )
@@ -369,9 +383,10 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             'The id in brackets next to the verdict. The default is the newest verdict, ' +
               'which is the verdict that you got last.',
           ),
+        image_paths: imagePaths(),
       },
     }),
-    async ({ review_id, body, submission_id }) =>
+    async ({ review_id, body, submission_id, image_paths }) =>
       guard(async () => {
         let target = submission_id
         if (target === undefined) {
@@ -382,7 +397,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           }
           target = submission.id
         }
-        await daemon.replyToVerdict(review_id, target, body)
+        const attachments = await daemon.uploadImages(review_id, image_paths)
+        await daemon.replyToVerdict(review_id, target, body, attachments)
         return text(`You answered the verdict on ${review_id}.`)
       }),
   )
@@ -503,6 +519,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           .string()
           .optional()
           .describe('The summary of the verdict, in one or two sentences.'),
+        image_paths: imagePaths(),
         comments: z
           .array(
             z.object({
@@ -515,12 +532,13 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                   '"base" for a removed line. "head" for all other lines. The default is "head".',
                 ),
               body: z.string(),
+              image_paths: imagePaths(),
             }),
           )
           .optional()
           .describe('New comments on lines. Use the line numbers that get_diff shows.'),
         replies: z
-          .array(z.object({ thread_id: z.string(), body: z.string() }))
+          .array(z.object({ thread_id: z.string(), body: z.string(), image_paths: imagePaths() }))
           .optional()
           .describe('Answers to comments that exist. Use the id in brackets before each comment.'),
         reviewer_name: z
@@ -529,13 +547,30 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           .describe('A short name for your comments, for example "claude-reviewer".'),
       },
     }),
-    async ({ review_id, verdict, summary, comments, replies, reviewer_name }) =>
+    async ({ review_id, verdict, summary, image_paths, comments, replies, reviewer_name }) =>
       guard(async () => {
         const review = await daemon.submitAsReviewer(review_id, {
           verdict,
           summary,
-          comments,
-          replies,
+          attachments: await daemon.uploadImages(review_id, image_paths),
+          comments:
+            comments === undefined
+              ? undefined
+              : await Promise.all(
+                  comments.map(async ({ image_paths: paths, ...comment }) => ({
+                    ...comment,
+                    attachments: await daemon.uploadImages(review_id, paths),
+                  })),
+                ),
+          replies:
+            replies === undefined
+              ? undefined
+              : await Promise.all(
+                  replies.map(async ({ image_paths: paths, ...reply }) => ({
+                    ...reply,
+                    attachments: await daemon.uploadImages(review_id, paths),
+                  })),
+                ),
           reviewer_name,
         })
         const { ai_review_rounds } = await daemon.getSettings()
