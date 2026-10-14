@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,6 +18,7 @@ import { GitError, readBlob } from './git.ts'
 import { Repositories } from './repositories.ts'
 import { ReviewError, type SubmitParams } from './review.ts'
 import { SettingsStore } from './settings.ts'
+import { VERSION } from './version.ts'
 
 export interface ServerOptions {
   /** The repository for a request that does not name one, or null for none. */
@@ -37,13 +37,6 @@ export interface ServerOptions {
  * archived or deleted.
  */
 const APPROVAL_GRACE_MS = 60_000
-
-/** Read one time at the start. A daemon that runs does not change its version. */
-const VERSION = (
-  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
-    version: string
-  }
-).version
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
 

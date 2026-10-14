@@ -7,6 +7,7 @@ import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
 import { defaultStateDir } from './repositories.ts'
 import { createServer } from './server.ts'
+import { VERSION } from './version.ts'
 
 const DEFAULT_PORT = 7777
 
@@ -123,8 +124,14 @@ export const main = async (argv: readonly string[]): Promise<void> => {
       port: { type: 'string', short: 'p' },
       repo: { type: 'string', short: 'r' },
       help: { type: 'boolean', short: 'h' },
+      version: { type: 'boolean', short: 'v' },
     },
   })
+
+  if (values.version === true) {
+    process.stdout.write(`yart ${VERSION}\n`)
+    return
+  }
 
   if (values.help === true) {
     process.stdout.write(
@@ -136,6 +143,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         `  -p, --port <port>  Port to listen on (default: ${DEFAULT_PORT})`,
         '  -r, --repo <path>  Repository for requests that name none (default: the current one)',
+        '  -v, --version      Show the version',
         '  -h, --help         Show this message',
         '',
         'Serves reviews for any repository a request names. Set YART_HOME to keep',
