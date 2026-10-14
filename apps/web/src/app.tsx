@@ -2,6 +2,7 @@ import { Logo } from '@/components/logo'
 import { useUnseenReviews } from '@/features/review/use-unseen'
 import { useUnseenSignal } from '@/features/review/use-unseen-signal'
 import { useDesktopSignal } from '@/features/review/use-desktop-signal'
+import { useGetVersionQuery } from '@/features/review/review-api'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
 import { SettingsPage } from '@/features/settings/settings-page'
@@ -27,6 +28,7 @@ export const App = () => {
   const unseen = useUnseenReviews()
   useUnseenSignal(unseen.count)
   useDesktopSignal(unseen)
+  const { data: version } = useGetVersionQuery()
 
   return (
     <main className={styles.shell}>
@@ -47,6 +49,7 @@ export const App = () => {
       ) : (
         <ReviewPage review_id={review_id} />
       )}
+      {version !== undefined && <footer className={styles.version}>yart {version.version}</footer>}
     </main>
   )
 }

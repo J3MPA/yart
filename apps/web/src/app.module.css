@@ -1,5 +1,5 @@
 .shell {
-  max-width: 72rem;
+  max-width: 84rem;
   margin: 0 auto;
   padding: var(--yart-space-8) var(--yart-space-4);
 }
@@ -28,4 +28,11 @@
 
 .settings_link:hover {
   color: var(--yart-color-text);
+}
+
+.version {
+  margin-top: var(--yart-space-8);
+  font-size: var(--yart-text-sm);
+  color: var(--yart-color-text-muted);
+  text-align: center;
 }
