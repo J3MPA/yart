@@ -8,26 +8,26 @@ import type { ChangeStatus, LineMap } from '@yart/core'
 const execFileAsync = promisify(execFile)
 
 /**
- * Git reports an absent blob — one side of an add or delete — as all zeroes.
- * Matched by shape rather than by a fixed width so the check holds whatever
- * hash length the repository uses.
+ * git shows a missing blob as all zeroes. This occurs on one side of an addition
+ * or a deletion. The check looks at the shape, not at a fixed width. Thus it
+ * works for each hash length that a repository uses.
  */
 const NULL_BLOB = /^0+$/
 
-/** Output can be large for a wide range; 64 MB is well past any real diff. */
+/** The output can be large for a wide range. 64 MB is much more than any real diff. */
 const MAX_BUFFER = 64 * 1024 * 1024
 
 export type { ChangeStatus } from '@yart/core'
 
 export interface ChangedFile {
   status: ChangeStatus
-  /** Path in the head revision, or the deleted path when the file is gone. */
+  /** The path in the head revision, or the old path when the file was deleted. */
   path: string
-  /** Present only for renames and copies. */
+  /** Only for renames and copies. */
   old_path: string | null
-  /** Blob in the base revision; `null` when the file was added. */
+  /** The blob in the base revision, or `null` when the file was added. */
   base_blob_sha: string | null
-  /** Blob in the head revision; `null` when the file was deleted. */
+  /** The blob in the head revision, or `null` when the file was deleted. */
   head_blob_sha: string | null
 }
 
@@ -56,21 +56,21 @@ export const runGit = async (repo_path: string, args: readonly string[]): Promis
   }
 }
 
-/** The kind of object a revision names. */
+/** The type of object that a revision names. */
 export const objectType = async (repo_path: string, sha: string): Promise<string> =>
   (await runGit(repo_path, ['cat-file', '-t', sha])).trim()
 
 /**
- * Resolves a revision to the sha of a commit or a tree.
+ * Finds the sha of the commit or the tree that a revision names.
  *
- * Commits are tried first so that branches and tags peel to the commit they
- * point at rather than to a tag object. A bare tree is accepted too, because
- * `git diff` compares trees perfectly well and a snapshot of uncommitted work
- * is a tree with no commit to name it.
+ * This function tries a commit first. Thus a branch or a tag gives the commit
+ * that it points to, not a tag object. It also accepts a bare tree. `git diff`
+ * compares trees correctly, and a snapshot of uncommitted work is a tree with
+ * no commit.
  *
- * git reports an unresolvable revision as "Needed a single revision", which
- * does not say which one; the name is put back into the message because the
- * caller may be an agent that has to correct it.
+ * For a revision that it cannot find, git says "Needed a single revision". This
+ * does not say which revision. Thus the message gets the name again, because
+ * the caller can be an agent that must correct it.
  */
 export const resolveRev = async (repo_path: string, rev: string): Promise<string> => {
   const as_commit = await runGit(repo_path, ['rev-parse', '--verify', `${rev}^{commit}`]).catch(
@@ -94,21 +94,20 @@ export const resolveRev = async (repo_path: string, rev: string): Promise<string
   return sha
 }
 
-/** Whether anything differs from HEAD, including files git is not tracking. */
+/** Tells if anything is different from HEAD, also files that git does not track. */
 export const isWorkingTreeDirty = async (repo_path: string): Promise<boolean> =>
   (await runGit(repo_path, ['status', '--porcelain'])).trim() !== ''
 
 /**
- * Writes the working tree — uncommitted edits and untracked files alike — into
- * a tree object, and returns its hash.
+ * Writes the working tree into a tree object, and returns its hash. This
+ * includes uncommitted edits and untracked files.
  *
- * Built through a throwaway index so the caller's staging area is left exactly
- * as it was; `git add` would otherwise stage everything on their behalf.
+ * It uses a temporary index. Thus the staging area of the caller does not
+ * change. Without it, `git add` would stage all files for the caller.
  *
- * The point of committing the content to git's object store rather than reading
- * files is that every blob then has a real hash, which is what a comment
- * anchors to. A snapshot is also immutable, so comments stay put while the
- * files underneath keep changing.
+ * The content goes into the object store of git. Thus each blob has a real
+ * hash, and a comment is attached to that hash. A snapshot also never changes.
+ * Thus comments stay in place while the files under them change.
  */
 export const snapshotWorkingTree = async (repo_path: string): Promise<string> => {
   const index_path = join(await mkdtemp(join(tmpdir(), 'yart-index-')), 'index')
@@ -128,16 +127,15 @@ export const snapshotWorkingTree = async (repo_path: string): Promise<string> =>
   }
 }
 
-/** Namespace for refs that keep a review's snapshots from being collected. */
+/** The namespace of the refs that keep the snapshots of a review from garbage collection. */
 const reviewRef = (review_id: string) => `refs/yart/reviews/${review_id}`
 
 /**
  * Keeps a snapshot reachable.
  *
- * A tree written by `write-tree` is unreferenced, so garbage collection is free
- * to reap it and the blobs under it — which would leave comments anchored to
- * hashes that no longer resolve. A ref makes it reachable until the review is
- * deleted.
+ * No ref points to a tree from `write-tree`. Thus garbage collection can remove
+ * it and its blobs. Then comments would point to hashes that do not exist. A
+ * ref keeps the tree until the review is deleted.
  */
 export const pinSnapshot = async (
   repo_path: string,
@@ -151,29 +149,29 @@ export const unpinSnapshot = async (repo_path: string, review_id: string): Promi
   try {
     await runGit(repo_path, ['update-ref', '-d', reviewRef(review_id)])
   } catch {
-    // Already gone, which is the state we wanted.
+    // The ref is already gone. That is the state that we want.
   }
 }
 
 /**
- * Absolute path to the repository's shared git directory.
+ * The full path to the shared git directory of the repository.
  *
- * In a linked worktree `.git` is a file pointing elsewhere, so joining a path
- * onto it fails; and this resolves to the same directory from every worktree of
- * a repository, which is what makes reviews one list rather than one per
- * worktree.
+ * In a linked worktree, `.git` is a file that points to a different place. A
+ * path under it fails. This function gives the same directory from each
+ * worktree of a repository. Thus the reviews are one list, not one list for
+ * each worktree.
  *
- * The result is resolved against `repo_path` because git reports it relative
- * from the main worktree and absolute from a linked one, and canonicalised so
- * that reaching the same repository by different paths — through a symlink such
- * as macOS's /var, or from a worktree — yields the same directory string.
+ * The result is relative to `repo_path`, because git gives a relative path from
+ * the main worktree and a full path from a linked worktree. The function also
+ * makes the path canonical. Thus different paths to the same repository give
+ * the same text. Examples are a symlink, such as /var on macOS, or a worktree.
  */
 export const findGitCommonDir = async (repo_path: string): Promise<string> => {
   const out = await runGit(repo_path, ['rev-parse', '--git-common-dir'])
   return realpath(resolve(repo_path, out.trim()))
 }
 
-/** Absolute path to the repository root containing `cwd`. */
+/** The full path to the root of the repository that contains `cwd`. */
 export const findRepoRoot = async (cwd: string): Promise<string> => {
   const out = await runGit(cwd, ['rev-parse', '--show-toplevel'])
   return out.trim()
@@ -201,9 +199,9 @@ const blobOrNull = (sha: string): string | null => {
 /**
  * Lists what changed between two revisions, with the blob on each side.
  *
- * Uses `--raw -z` because it reports blob hashes directly: resolving them from
- * paths afterwards would be one process per file and would lose the identity of
- * a file that moved.
+ * It uses `--raw -z`, because that gives the blob hashes directly. To find them
+ * from the paths later would need one process for each file. It would also lose
+ * the identity of a file that moved.
  */
 export const listChangedFiles = async (
   repo_path: string,
@@ -214,8 +212,8 @@ export const listChangedFiles = async (
     'diff',
     '--raw',
     '-z',
-    // `--raw` abbreviates hashes to seven characters by default, which is not
-    // enough to address a blob reliably.
+    // By default, `--raw` makes hashes seven characters long. That is not
+    // sufficient to identify a blob reliably.
     '--abbrev=40',
     '--find-renames',
     '--no-color',
@@ -265,7 +263,7 @@ export const listChangedFiles = async (
   return files
 }
 
-/** Subject line of a commit, or null when the revision is not a commit. */
+/** The subject line of a commit, or null when the revision is not a commit. */
 export const commitSubject = async (repo_path: string, rev: string): Promise<string | null> => {
   try {
     const out = await runGit(repo_path, ['log', '-1', '--format=%s', rev])
@@ -276,7 +274,7 @@ export const commitSubject = async (repo_path: string, rev: string): Promise<str
   }
 }
 
-/** Branch whose tip is this revision, if exactly one is. */
+/** The branch whose tip is this revision, if exactly one branch is. */
 export const branchAt = async (repo_path: string, rev: string): Promise<string | null> => {
   try {
     const out = await runGit(repo_path, ['branch', '--points-at', rev, '--format=%(refname:short)'])
@@ -290,12 +288,12 @@ export const branchAt = async (repo_path: string, rev: string): Promise<string |
   }
 }
 
-/** Reads a blob's contents by hash. */
+/** Reads the content of a blob by its hash. */
 export const readBlob = async (repo_path: string, blob_sha: string): Promise<string> => {
   return runGit(repo_path, ['cat-file', 'blob', blob_sha])
 }
 
-/** Counts lines the way `splitLines` does, treating a trailing newline as a terminator. */
+/** Counts lines as `splitLines` does. A newline at the end closes the last line. */
 const countLines = (content: string): number => {
   if (content === '') return 0
   const trimmed = content.endsWith('\n') ? content.slice(0, -1) : content
@@ -327,15 +325,15 @@ export const parseHunkHeaders = (diff_output: string): Hunk[] => {
 }
 
 /**
- * Turns hunk headers into a line map.
+ * Makes a line map from hunk headers.
  *
- * Only the headers are needed: everything outside a hunk is unchanged and maps
- * across with a running offset, and everything inside one is replaced and maps
- * nowhere. That is why the diff is requested with zero context.
+ * Only the headers are necessary. A line outside a hunk did not change, and maps
+ * across with an offset. A line inside a hunk changed, and maps to no line. For
+ * this reason, the request asks for the diff with no context.
  *
- * A count of zero marks a pure insertion or deletion, where the start names the
- * line the change sits *after* rather than the first line it covers — so that
- * line is still unchanged and must be carried across.
+ * A count of zero marks an addition only, or a deletion only. The start then
+ * names the line *before* the change, not the first line of the change. That
+ * line did not change, thus it must map across.
  */
 export const lineMapFromHunks = (hunks: readonly Hunk[], old_total: number): LineMap => {
   const map = new Map<number, number>()
@@ -363,16 +361,16 @@ export const lineMapFromHunks = (hunks: readonly Hunk[], old_total: number): Lin
 }
 
 export interface GitLineMapOptions {
-  /** Mirrors the text-diff default: a reindent should not outdate every thread. */
+  /** The same default as the text diff: a new indent must not make all threads outdated. */
   ignore_whitespace?: boolean
 }
 
 /**
- * Builds a line map between two blobs using git itself.
+ * Makes a line map between two blobs with git itself.
  *
- * Preferred over diffing the text in process: git is faster, and asking the
- * same tool that produced the shas to compare them avoids two implementations
- * disagreeing about what changed.
+ * This is better than a text diff in the process. git is faster. Also, the tool
+ * that made the shas compares them. Thus two different implementations cannot
+ * disagree about what changed.
  */
 export const buildLineMapFromGit = async (
   repo_path: string,

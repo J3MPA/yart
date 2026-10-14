@@ -20,8 +20,9 @@ const isApprovalAction = (value: unknown): value is ApprovalAction =>
   typeof value === 'string' && APPROVAL_ACTIONS.has(value)
 
 /**
- * Optional free text: trimmed, with empty meaning unset, or undefined when the
- * value is not text of an acceptable length at all.
+ * Optional free text, without spaces at the start and the end. Empty text means
+ * that the setting is not set. Returns undefined when the value is not text, or
+ * is too long.
  */
 const optionalText = (value: unknown, max_length: number): string | null | undefined => {
   if (value === null) return null
@@ -32,8 +33,8 @@ const optionalText = (value: unknown, max_length: number): string | null | undef
 }
 
 /**
- * Reads settings from what was stored, leaving anything missing or invalid at
- * its default rather than refusing to start over one bad value.
+ * Reads the settings from the stored values. A missing or incorrect value gets
+ * its default. One bad value does not stop the daemon.
  */
 const fromStored = (stored: Record<string, unknown>): Settings => {
   const model = optionalText(stored.reviewer_model, MAX_REVIEWER_MODEL_LENGTH)
@@ -55,21 +56,21 @@ const fromStored = (stored: Record<string, unknown>): Settings => {
 }
 
 /**
- * Where the daemon's settings are kept.
+ * Where the settings of the daemon are kept.
  *
- * Kept by the daemon rather than in a browser, so that they apply the same in
- * the app, in any browser, and when no window is open at all.
+ * The daemon keeps them, not a browser. Thus they apply in the same way in the
+ * app, in each browser, and when no window is open.
  */
 export class SettingsStore {
   private readonly path: string | null
-  /** The settings while there is no file, which is what a test wants. */
+  /** The settings when there is no file. Tests use this. */
   private in_memory: Settings = DEFAULT_SETTINGS
 
   constructor(state_dir: string | null) {
     this.path = state_dir === null ? null : join(state_dir, 'settings.json')
   }
 
-  /** The settings, with anything missing or unreadable left at its default. */
+  /** The settings. A missing value, or a value that cannot be read, gets its default. */
   async read(): Promise<Settings> {
     if (this.path === null) return this.in_memory
     try {
@@ -79,7 +80,7 @@ export class SettingsStore {
     }
   }
 
-  /** Changes the settings named, refusing any value that is not one. */
+  /** Changes the named settings. Refuses each value that is not correct. */
   async update(changes: Record<string, unknown>): Promise<Settings> {
     const next = { ...(await this.read()) }
     if (changes.on_approve !== undefined) {
@@ -134,8 +135,8 @@ export class SettingsStore {
       this.in_memory = next
       return next
     }
-    // Through a temporary file, so that a crash mid-write cannot leave the
-    // settings half there.
+    // Write through a temporary file. Thus a crash during the write cannot leave
+    // half of the settings.
     await mkdir(join(this.path, '..'), { recursive: true })
     const temporary = `${this.path}.${process.pid}.tmp`
     await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, 'utf8')

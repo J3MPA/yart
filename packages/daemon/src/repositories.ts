@@ -5,10 +5,10 @@ import { findGitCommonDir, findRepoRoot, GitError } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
 
 /**
- * Where a daemon keeps what it knows beyond any one repository.
+ * Where a daemon keeps the information that is not about one repository.
  *
- * `YART_HOME` wins so that a second installation — a development checkout
- * beside an installed yart — can keep its own.
+ * `YART_HOME` wins. Thus a second installation can keep its own information.
+ * An example is a development checkout next to an installed yart.
  */
 export const defaultStateDir = (): string => process.env.YART_HOME ?? join(homedir(), '.yart')
 
@@ -18,36 +18,36 @@ interface RegistryFile {
 
 export interface RepositoriesOptions {
   /**
-   * Used for a request that does not say which repository it is for, or null
-   * to require every request to say — as a daemon the desktop app starts must,
-   * belonging to no repository in particular.
+   * The repository for a request that does not name one. Null makes each
+   * request name its repository. A daemon that the desktop app starts must use
+   * null, because it belongs to no repository.
    */
   default_repo: string | null
   /**
-   * Where the repositories seen are remembered across restarts, or null to
-   * remember them only for this process — which is what a test wants, so that
-   * running the suite never writes into the home directory of whoever runs it.
+   * Where the daemon records the repositories that it served, for the next
+   * start. Null keeps them only for this process. Tests use null. Thus the tests
+   * never write into the home directory of the person who runs them.
    */
   state_dir: string | null
 }
 
 /**
- * Every repository this daemon has served, one review service each.
+ * All repositories that this daemon served, with one review service for each.
  *
- * A daemon used to be fixed to the repository it was started in, and every
- * client reused whichever daemon was listening — so a review asked for in one
- * repository while another's daemon was running reviewed the wrong working
- * tree, silently. Now a request names its repository and is routed to it.
+ * Before, a daemon served only the repository that it started in. Each client
+ * used the daemon that answered on the port. Thus a review in one repository,
+ * while the daemon of a different repository ran, reviewed the wrong working
+ * tree with no warning. Now each request names its repository, and goes to it.
  *
- * Services are keyed by the shared git directory rather than by path, so that
- * the worktrees of one repository share one service and one list of reviews,
- * as they already share one store.
+ * The key of each service is the shared git directory, not the path. Thus the
+ * worktrees of one repository share one service and one list of reviews. They
+ * already share one store.
  */
 export class Repositories {
   private readonly default_repo: string | null
   private readonly registry_path: string | null
   private readonly services = new Map<string, ReviewService>()
-  /** Which service holds a review, learned on first lookup; reviews never move. */
+  /** The service of each review, found on the first lookup. Reviews never move. */
   private readonly owners = new Map<string, ReviewService>()
   private known: Set<string> | null = null
 
@@ -62,7 +62,7 @@ export class Repositories {
       const parsed = JSON.parse(await readFile(this.registry_path, 'utf8')) as RegistryFile
       return new Set(Array.isArray(parsed.repositories) ? parsed.repositories : [])
     } catch {
-      // Missing or unreadable: start empty rather than refuse to serve.
+      // The file is missing or cannot be read. Start with an empty list. Do not stop.
       return new Set()
     }
   }
@@ -76,11 +76,12 @@ export class Repositories {
   }
 
   /**
-   * Adds a repository to the file, merged with what is on disk.
+   * Adds a repository to the file, together with the list on the disk.
    *
-   * Merged rather than overwritten because another daemon — a development one
-   * on another port — may share the directory, and written to a temporary
-   * file first so that a crash mid-write cannot leave the list half there.
+   * It merges the two lists and does not write over the file. A different
+   * daemon, such as a development daemon on a different port, can share the
+   * directory. It writes to a temporary file first. Thus a crash during the
+   * write cannot leave half of the list.
    */
   private async remember(repo_root: string): Promise<void> {
     const known = await this.knownRepositories()
@@ -107,9 +108,9 @@ export class Repositories {
   }
 
   /**
-   * The service for the repository containing a path, and that repository's
-   * root — the root of the worktree asked about, which is what a review of
-   * uncommitted work has to snapshot.
+   * The service for the repository that contains a path, and the root of that
+   * repository. The root is the root of the worktree in the request. A review of
+   * uncommitted work must make a snapshot of that worktree.
    */
   async resolve(path: string | undefined): Promise<{ service: ReviewService; repo_root: string }> {
     const asked = path ?? this.default_repo
@@ -127,10 +128,10 @@ export class Repositories {
   }
 
   /**
-   * A service for every repository still there to serve.
+   * A service for each repository that still exists.
    *
-   * One that has gone — deleted, or on a disk that is not mounted — is left out
-   * of this answer but kept in the file, since it may come back.
+   * A repository that is gone is not in this answer. It can be deleted, or on a
+   * disk that is not mounted. It stays in the file, because it can come back.
    */
   async all(): Promise<ReviewService[]> {
     const services = new Set<ReviewService>()
@@ -144,7 +145,7 @@ export class Repositories {
     return [...services]
   }
 
-  /** The service holding a review, whichever repository it is in. */
+  /** The service that holds a review, in any repository. */
   async locate(review_id: string): Promise<ReviewService> {
     const cached = this.owners.get(review_id)
     if (cached !== undefined) return cached

@@ -2,15 +2,15 @@ import { parseHunkHeader, splitLines } from '@yart/core'
 import type { DiffHunk, FileDiff, ReviewFile } from '@yart/core'
 import { runGit, readBlob } from './git.ts'
 
-/** Lines of unchanged context git includes either side of a change. */
+/** The lines of unchanged context that git adds on each side of a change. */
 export const DEFAULT_CONTEXT_LINES = 3
 
 /**
- * Parses git's unified diff into hunks with a line number on each side.
+ * Reads the unified diff of git into hunks, with a line number on each side.
  *
- * Both numbers are carried per line because a comment anchors to one side, and
- * the renderer needs to know which gutter a given row belongs to without
- * recomputing offsets.
+ * Each line has the two numbers, because a comment is attached to one side. The
+ * renderer must know the gutter of each row, and must not calculate offsets
+ * again.
  */
 export const parseUnifiedDiff = (diff_output: string): DiffHunk[] => {
   const hunks: DiffHunk[] = []
@@ -29,7 +29,7 @@ export const parseUnifiedDiff = (diff_output: string): DiffHunk[] => {
     }
     if (current === null) continue
 
-    // "\ No newline at end of file" annotates the line above rather than being one.
+    // "\ No newline at end of file" is a note about the line above. It is not a line.
     if (raw.startsWith('\\')) continue
 
     const marker = raw[0]
@@ -46,13 +46,13 @@ export const parseUnifiedDiff = (diff_output: string): DiffHunk[] => {
       current.lines.push({ kind: 'added', base_line: null, head_line, text })
       head_line += 1
     }
-    // Anything else is a header line git emitted before the first hunk.
+    // All other lines are header lines that git gives before the first hunk.
   }
 
   return hunks
 }
 
-/** Every line of a file that has no counterpart on the other side. */
+/** All lines of a file that has no file on the other side. */
 const wholeFileHunk = (content: string, kind: 'added' | 'removed'): DiffHunk[] => {
   const lines = splitLines(content)
   if (lines.length === 0) return []
@@ -74,10 +74,10 @@ export interface FileDiffOptions {
 }
 
 /**
- * Produces the diff for one file of a review.
+ * Makes the diff for one file of a review.
  *
- * Added and deleted files are built directly from the single blob that exists,
- * because `git diff` compares two blobs and there is no second one to name.
+ * For an added file or a deleted file, this function uses the one blob that
+ * exists. `git diff` compares two blobs, and there is no second blob.
  */
 export const buildFileDiff = async (
   repo_path: string,
@@ -122,10 +122,10 @@ export const buildFileDiff = async (
     return { ...file, hunks: [], is_binary: true, head_line_count: null }
   }
 
-  // Read only once the file is known to be text, and only after the diff: a
-  // binary blob would be pulled into memory as a string for a length nothing
-  // can use. git reports only what changed, so the file's length is the one
-  // thing the diff cannot say about the run of lines after the last hunk.
+  // Read the file only after the diff, and only when it is text. A binary blob
+  // would go into memory as a string, for a length that nothing can use. git
+  // shows only what changed. Thus the length of the file is the one thing that
+  // the diff cannot tell about the lines after the last hunk.
   const head_content = await readBlob(repo_path, file.head_blob_sha)
 
   return {

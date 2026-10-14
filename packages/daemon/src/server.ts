@@ -21,24 +21,24 @@ import { ReviewError, type SubmitParams } from './review.ts'
 import { SettingsStore } from './settings.ts'
 
 export interface ServerOptions {
-  /** The repository a request is for when it does not say, or null for none. */
+  /** The repository for a request that does not name one, or null for none. */
   repo_path: string | null
-  /** Where the repositories seen are remembered; null keeps them in memory. */
+  /** Where the daemon records the repositories that it served. Null keeps them in memory. */
   state_dir?: string | null
-  /** Built web UI to serve. Defaults to this workspace's `apps/web/dist`. */
+  /** The built web UI to serve. The default is `apps/web/dist` of this workspace. */
   ui_dir?: string
-  /** How long after an approval the settings' action is taken. */
+  /** How long after an approval the daemon does the action of the settings. */
   approval_grace_ms?: number
 }
 
 /**
- * Long enough for an agent waiting in `await_review` to read the approval
- * before the review is archived or deleted from under it, which it polls for
- * every few seconds.
+ * An agent that waits in `await_review` polls every few seconds. This time is
+ * long enough for that agent to read the approval before the review is
+ * archived or deleted.
  */
 const APPROVAL_GRACE_MS = 60_000
 
-/** Read once at start: a running daemon does not change version. */
+/** Read one time at the start. A daemon that runs does not change its version. */
 const VERSION = (
   JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
     version: string
@@ -48,8 +48,8 @@ const VERSION = (
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
 
 /**
- * Where this daemon's code lives, so a client can tell a daemon from its own
- * checkout apart from one belonging to another checkout or an installed yart.
+ * Where the code of this daemon is. Thus a client can tell a daemon from its own
+ * checkout apart from a daemon of a different checkout or of an installed yart.
  */
 const CODE_DIR = fileURLToPath(new URL('..', import.meta.url))
 
@@ -65,7 +65,7 @@ interface SubmitBody {
 
 const AUTHORS: ReadonlySet<string> = new Set<CommentAuthor>(['human', 'agent', 'reviewer'])
 
-/** Long enough for any reviewer's name, short enough to sit beside a comment. */
+/** Long enough for the name of each reviewer, and short enough to show next to a comment. */
 const MAX_AUTHOR_NAME = 64
 
 interface Speaker {
@@ -74,9 +74,9 @@ interface Speaker {
 }
 
 /**
- * Who a request speaks for, checked rather than trusted: the author decides
- * how a comment is shown and counted. A name is only for an AI reviewer, since
- * the person and the agent are each one party.
+ * Who a request speaks for. The daemon examines this and does not trust it,
+ * because the author decides how a comment shows and counts. Only an AI reviewer
+ * has a name. The person and the agent are each one party.
  */
 const parseSpeaker = (
   body: { author?: unknown; author_name?: unknown },
@@ -101,18 +101,19 @@ const parseSpeaker = (
   return { author: 'reviewer', author_name }
 }
 
-/** Only the person or an AI reviewer passes a verdict; the agent under review does not. */
+/** Only the person or an AI reviewer gives a verdict. The agent under review does not. */
 const SUBMITTERS: ReadonlySet<string> = new Set(['human', 'reviewer'])
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== ''
 
 /**
- * Checks the drafted comments of a pending review before any of them is used.
+ * Examines the draft comments of a pending review before the daemon uses any of
+ * them.
  *
- * All of them are checked up front, because the service writes them in one go:
- * a malformed tenth comment should reject the submission, not arrive after
- * nine others were accepted.
+ * It examines all of them first, because the service writes them in one write.
+ * A bad tenth comment must stop the submission. It must not come after the
+ * daemon accepted nine others.
  */
 const parseDrafts = (body: SubmitBody): Pick<SubmitParams, 'threads' | 'replies'> => {
   const threads = body.threads ?? []
@@ -183,10 +184,11 @@ const NOT_BUILT =
   'The web UI has not been built. Run <code>pnpm build</code>, then reload.'
 
 /**
- * Resolves a request path inside `ui_dir`, or null when it escapes.
+ * Finds the file for a request path in `ui_dir`. Returns null when the path goes
+ * outside it.
  *
- * The daemon serves files from disk, so a path containing `..` must not be able
- * to reach outside the build directory.
+ * The daemon serves files from the disk. Thus a path with `..` must not get to
+ * files outside the build directory.
  */
 const resolveAsset = (ui_dir: string, request_path: string): string | null => {
   const relative = normalize(decodeURIComponent(request_path)).replace(/^[/\\]+/, '')
@@ -201,8 +203,8 @@ interface ErrorBody {
 
 const statusFor = (cause: unknown): number => {
   if (cause instanceof ReviewError) return cause.status
-  // A git failure here means a revision or path the caller named does not
-  // exist, which is their mistake rather than the daemon's.
+  // A git failure here means that a revision or a path from the caller does not
+  // exist. The caller made the mistake, not the daemon.
   if (cause instanceof GitError) return 400
   return 500
 }
@@ -222,10 +224,10 @@ export const createServer = ({
   const app = new Hono()
 
   /**
-   * Archives or deletes a review a while after it was approved, as the settings
-   * say. Checked again when the time comes rather than decided now: the setting
-   * may have changed, and a review reopened or approved again since is left to
-   * the newer verdict.
+   * Archives or deletes a review some time after its approval, as the settings
+   * tell. The daemon examines this again when the time comes. It does not decide
+   * now. The setting can change. A review that was opened again, or approved
+   * again, gets the newer verdict.
    */
   const settleApproval = (review_id: string, submission_id: string) => {
     const timer = setTimeout(() => {
@@ -239,10 +241,10 @@ export const createServer = ({
         if (on_approve === 'delete') await service.remove(review_id)
         else if (review.archived_at === null) await service.setArchived(review_id, true)
       })().catch(() => {
-        // Already deleted by hand, most likely; there is nothing left to settle.
+        // Most possibly, someone deleted the review by hand. Nothing remains to do.
       })
     }, approval_grace_ms)
-    // A pending clean-up is no reason to keep the process alive.
+    // A clean-up that waits is not a reason to keep the process alive.
     timer.unref()
   }
 
@@ -253,15 +255,15 @@ export const createServer = ({
   })
 
   /**
-   * Refuses a write that a web page could have sent.
+   * Refuses a write that a web page could send.
    *
-   * Browsers let a page on any site send a "simple" cross-origin POST — one
-   * whose content type is plain text or a form — without asking first, and
-   * the page cannot read the answer but the daemon still acts on it. Since the
-   * daemon acts on any repository a request names, that would let any site
-   * write reviews into any repository whose path it could guess. Requiring JSON
-   * makes the request one a browser must ask permission for, and the daemon
-   * never grants it: it sends no CORS headers at all.
+   * A page on any site can send a "simple" POST across origins, with plain text
+   * or a form as its content type. The browser does not ask first. The page
+   * cannot read the answer, but the daemon would still do the action. The daemon
+   * acts on each repository that a request names. Thus any site could write
+   * reviews into each repository whose path it could guess. With JSON required,
+   * the browser must ask for permission first. The daemon never gives it,
+   * because it sends no CORS headers.
    */
   app.use('/api/*', async (context, next) => {
     const method = context.req.method
@@ -277,9 +279,9 @@ export const createServer = ({
     await next()
   })
 
-  // The version lets a client notice a daemon older than itself, which after an
-  // update is the one still running; a daemon from before this field existed
-  // also predates serving more than one repository.
+  // The version lets a client see a daemon that is older than the client. After
+  // an update, the old daemon still runs. A daemon from before this field
+  // existed also served only one repository.
   app.get('/health', (context) =>
     context.json({ ok: true, repo_path, version: VERSION, code_dir: CODE_DIR }),
   )
@@ -289,7 +291,7 @@ export const createServer = ({
     const lists = await Promise.all(
       (await repositories.all()).map((service) => service.list({ archived })),
     )
-    // Newest first across every repository, as each list already is within one.
+    // The newest first, across all repositories, as each list already is.
     return context.json(lists.flat().sort((a, b) => b.created_at.localeCompare(a.created_at)))
   })
 
@@ -313,8 +315,8 @@ export const createServer = ({
       throw new ReviewError('repo_path must be a path', 400)
     }
     const { service, repo_root } = await repositories.resolve(body.repo_path)
-    // Defaults to uncommitted work against HEAD, which is what an agent that has
-    // just finished editing wants and cannot express as a revision range.
+    // The default is uncommitted work against HEAD. An agent that just finished
+    // its edits wants this, and cannot give it as a revision range.
     const review = await service.create({
       repo_path: repo_root,
       base: body.base === undefined || body.base === '' ? 'HEAD' : body.base,
@@ -336,8 +338,8 @@ export const createServer = ({
   })
 
   /**
-   * Both sides of a file, for rendering. Path arrives as a query parameter
-   * rather than a path segment so that nested paths need no encoding.
+   * The two sides of a file, to show them. The path comes as a query parameter,
+   * not as a path segment. Thus nested paths do not need an encoding.
    */
   app.get('/api/reviews/:id/file', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
@@ -356,7 +358,7 @@ export const createServer = ({
     return context.json<FileContents>({ ...file, base_content, head_content })
   })
 
-  /** Every file's hunks, built by git so the rendering matches what anchors use. */
+  /** The hunks of each file. git makes them, thus the display agrees with the anchors. */
   app.get('/api/reviews/:id/diff', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
     const review = await service.get(context.req.param('id'))
@@ -431,7 +433,7 @@ export const createServer = ({
     )
   })
 
-  /** A reply under a verdict, which unlike a line comment has no thread. */
+  /** A reply to a verdict. A verdict, unlike a line comment, has no thread. */
   app.post('/api/reviews/:id/submissions/:submission_id/comments', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{
@@ -458,8 +460,8 @@ export const createServer = ({
 
   app.post('/api/reviews/:id/submit', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
-    // Annotated rather than asserted: a missing body is a valid submission, so
-    // the empty object has to widen to the parameter type without a cast.
+    // A type annotation, not an assertion. A submission without a body is
+    // correct. Thus the empty object must widen to the parameter type with no cast.
     const body: SubmitBody = await context.req.json<SubmitBody>().catch(() => ({}))
 
     if (body.verdict !== undefined && !VERDICTS.has(body.verdict)) {
@@ -472,8 +474,8 @@ export const createServer = ({
 
     const speaker = parseSpeaker(body, SUBMITTERS)
     if (speaker.author === 'reviewer') {
-      // Checked here rather than left to the reviewer, which is one of the two
-      // parties that may not want to stop.
+      // The daemon examines this. It does not leave it to the reviewer, because
+      // the reviewer is one of the two parties that possibly do not want to stop.
       const { ai_review_rounds } = await settings.read()
       if (reviewerRounds(await service.get(context.req.param('id'))) >= ai_review_rounds) {
         throw new ReviewError(
@@ -491,8 +493,9 @@ export const createServer = ({
       ...parseDrafts(body),
       expected_head_sha: body.expected_head_sha,
     })
-    // Only the person's approval finishes a review: an AI reviewer's hands it to
-    // them, so it must not be archived or deleted before they have looked.
+    // Only the approval of the person completes a review. The approval of an AI
+    // reviewer gives the review to the person. Thus the daemon must not archive or
+    // delete it before the person looks.
     const latest = latestSubmission(review)
     if (latest?.verdict === 'approved' && submissionAuthor(latest) === 'human') {
       settleApproval(review.id, latest.id)
@@ -517,11 +520,11 @@ export const createServer = ({
   })
 
   /**
-   * The web UI, last so every API route wins.
+   * The web UI. It is last, thus each API route wins.
    *
-   * Unknown paths fall back to index.html rather than 404ing, because the UI
-   * routes client-side: a deep link like /reviews/<id> is a real page there and
-   * nothing on disk.
+   * For an unknown path, the daemon sends index.html, not a 404. The UI does its
+   * routes in the browser. A link such as /reviews/<id> is a real page there,
+   * but it is not a file on the disk.
    */
   app.get('/*', async (context) => {
     const asset = resolveAsset(ui_dir, new URL(context.req.url).pathname)

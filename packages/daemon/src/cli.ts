@@ -8,17 +8,18 @@ import { createServer } from './server.ts'
 const DEFAULT_PORT = 7777
 
 /**
- * The daemon reads any file in any repository it has served, so it must not be
- * reachable from other machines. Left unset, Node listens on every interface.
- * Clients keep calling it `localhost`, which the browser's per-origin seen
- * state and drafts are keyed on, and which resolves here as well.
+ * The daemon can read all files in all repositories that it served. Thus other
+ * computers must not connect to it. Without a value, Node listens on all
+ * interfaces. Clients still use `localhost`, which also goes to this address.
+ * The seen state and the drafts in the browser use that origin as their key.
  */
 const LOOPBACK = '127.0.0.1'
 
 /**
- * A repository named with `--repo` has to be one. Otherwise the one the daemon
- * was started in is the default, and started outside any — as the desktop app
- * starts it — there is none, and every request has to name its own.
+ * A path that `--repo` names must be a repository. Without `--repo`, the
+ * repository that the daemon started in is the default. A daemon that started
+ * outside a repository has no default, and each request must name its
+ * repository. The desktop app starts the daemon in this way.
  */
 const defaultRepo = async (named: string | undefined): Promise<string | null> => {
   if (named !== undefined) return findRepoRoot(named)
