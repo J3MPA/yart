@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  branchAt,
   buildLineMapFromGit,
   findRepoRoot,
   GitError,
@@ -21,6 +22,25 @@ beforeEach(() => {
 
 afterEach(() => {
   repo.dispose()
+})
+
+describe('branchAt', () => {
+  it('names the branch that is checked out when two branches point at the commit', async () => {
+    repo.write('a.txt', FOUR_LINES)
+    repo.commit('base')
+    repo.git('checkout', '-q', '-b', 'feat/new')
+    expect(await branchAt(repo.path, 'HEAD')).toBe('feat/new')
+  })
+
+  it('names no branch when two other branches point at the commit', async () => {
+    repo.write('a.txt', FOUR_LINES)
+    const base = repo.commit('base')
+    repo.git('branch', 'one')
+    repo.git('branch', 'two')
+    repo.write('a.txt', 'alpha\n')
+    repo.commit('next')
+    expect(await branchAt(repo.path, base)).toBe(null)
+  })
 })
 
 describe('parseHunkHeaders', () => {

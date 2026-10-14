@@ -33,17 +33,10 @@ const STATUS_CLASS: Record<StatusTone, string> = {
   ready: styles.badge_ready as string,
 }
 
-/**
- * The line under the title: where the review is, what it covers, and when it
- * came.
- *
- * The repository comes first only when the list has more than one repository.
- * In a list of the reviews of one project, it would show the same word on each
- * row.
- */
-const describe = (review: Review, show_repository: boolean): string =>
+/** The line under the title: where the review is, what it covers, and when it came. */
+const describe = (review: Review): string =>
   [
-    show_repository ? repositoryName(review.repo_path) : null,
+    repositoryName(review.repo_path),
     review.head_branch,
     describeRange(review),
     `${review.files.length} file${review.files.length === 1 ? '' : 's'}`,
@@ -56,7 +49,6 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
 
 interface ReviewRowProps {
   review: Review
-  show_repository: boolean
   unseen: boolean
   archived: boolean
   selected: boolean
@@ -67,7 +59,6 @@ interface ReviewRowProps {
 
 const ReviewRow = ({
   review,
-  show_repository,
   unseen,
   archived,
   selected,
@@ -94,7 +85,7 @@ const ReviewRow = ({
           )}
           {review.title}
         </div>
-        <div className={styles.list_meta}>{describe(review, show_repository)}</div>
+        <div className={styles.list_meta}>{describe(review)}</div>
       </a>
 
       {/* A snapshot needs no badge of its own: the range in the meta line
@@ -153,7 +144,6 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
 
   const reviews = useMemo(() => data ?? [], [data])
   const ids = useMemo(() => reviews.map((review) => review.id), [reviews])
-  const show_repository = new Set(reviews.map((review) => review.repo_path)).size > 1
   const state = selectionState(selection, ids)
   const selected = reviews.filter((review) => selection.has(review.id))
 
@@ -246,7 +236,6 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
               <ReviewRow
                 key={review.id}
                 review={review}
-                show_repository={show_repository}
                 unseen={unseen.has(review.id)}
                 archived={archived}
                 selected={selection.has(review.id)}
