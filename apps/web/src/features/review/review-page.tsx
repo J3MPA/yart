@@ -3,6 +3,8 @@ import { agentActivity, currentSubmission, describeAuthor, submissionAuthor } fr
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
 import { AuthorLabel } from './author-label'
+import { hasAiReview } from './review-history'
+import { ReviewHistoryPanel } from './review-history-panel'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { DiffFile } from './diff-file'
@@ -194,6 +196,8 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           )}
         </div>
       )}
+
+      {hasAiReview(review) && <ReviewHistoryPanel review={review} />}
 
       {submitting && (
         <SubmitPanel

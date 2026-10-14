@@ -985,3 +985,55 @@
   flex: none;
   color: var(--yart-color-text-muted);
 }
+
+/* The history of a review with an AI reviewer, verdict by verdict. */
+.history {
+  margin-top: var(--yart-space-4);
+  padding: var(--yart-space-3) var(--yart-space-4);
+  background-color: var(--yart-color-surface);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-md);
+}
+
+.history_summary {
+  font-size: var(--yart-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.history_block {
+  margin-top: var(--yart-space-3);
+  padding-left: var(--yart-space-3);
+  border-left: 3px solid var(--yart-color-border-strong);
+}
+
+/* The steps of the AI reviewer use its color, as its comments do. Your own
+   verdict keeps the neutral border. */
+.history_block_reviewer {
+  border-left-color: var(--yart-color-accent);
+}
+
+.history_entry {
+  margin-top: var(--yart-space-2);
+}
+
+.history_entry_head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--yart-space-2);
+}
+
+.history_location {
+  padding: 0;
+  font-family: var(--yart-font-mono);
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.history_location:hover {
+  color: var(--yart-color-text);
+  text-decoration: underline;
+}
