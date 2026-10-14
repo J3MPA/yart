@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   createThread,
   reanchorThread,
+  type Attachment,
   type Comment,
   type CommentAuthor,
   type DiffSide,
@@ -22,6 +23,8 @@ import {
   unpinSnapshot,
   type ChangedFile,
 } from './git.ts'
+import { AttachmentStore } from './attachments.ts'
+import { ReviewError } from './review-error.ts'
 import { placeholderTitle, ReviewStore } from './store.ts'
 import type {
   Review,
@@ -31,15 +34,7 @@ import type {
   SubmissionAuthor,
 } from './types.ts'
 
-export class ReviewError extends Error {
-  readonly status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'ReviewError'
-    this.status = status
-  }
-}
+export { ReviewError }
 
 const nowIso = (): string => {
   return new Date().toISOString()
@@ -112,6 +107,8 @@ export interface DraftThread {
   line: number
   side?: DiffSide
   body: string
+  /** The ids of images that the review already has. */
+  attachments?: readonly string[]
   /**
    * The blob of the line number, when the writer of the draft knows it.
    *
@@ -127,6 +124,7 @@ export interface DraftThread {
 export interface DraftReply {
   thread_id: string
   body: string
+  attachments?: readonly string[]
 }
 
 export interface SubmitParams {
@@ -135,6 +133,8 @@ export interface SubmitParams {
   author?: SubmissionAuthor
   author_name?: string | null
   body?: string | null
+  /** The images of the summary. */
+  attachments?: readonly string[]
   threads?: readonly DraftThread[]
   replies?: readonly DraftReply[]
   /**
@@ -154,28 +154,50 @@ export interface AddThreadParams {
   body: string
   author?: CommentAuthor
   author_name?: string | null
+  attachments?: readonly string[]
 }
 
-/** A comment. It has the name of a reviewer only when there is a name. */
+/** Who writes a comment, and the ids of its images. */
+export interface CommentOptions {
+  author?: CommentAuthor
+  author_name?: string | null
+  attachments?: readonly string[]
+}
+
+/** A comment. It has the name of a reviewer and images only when there are some. */
 const newComment = (
   body: string,
   author: CommentAuthor,
   author_name: string | null = null,
+  attachments: readonly Attachment[] = [],
 ): Comment => ({
   id: randomUUID(),
   author,
   ...(author_name === null ? {} : { author_name }),
   body,
+  ...(attachments.length === 0 ? {} : { attachments: [...attachments] }),
   created_at: nowIso(),
 })
 
 export class ReviewService {
   private readonly repo_path: string
   private readonly store: ReviewStore
+  private readonly attachments: AttachmentStore
 
   constructor(repo_path: string) {
     this.repo_path = repo_path
     this.store = new ReviewStore(repo_path)
+    this.attachments = new AttachmentStore(repo_path)
+  }
+
+  /** Keeps an image for the comments of a review. */
+  async addAttachment(id: string, data: Uint8Array): Promise<Attachment> {
+    await this.get(id)
+    return this.attachments.save(id, data)
+  }
+
+  async readAttachment(id: string, attachment_id: string) {
+    return this.attachments.read(id, attachment_id)
   }
 
   async create({
@@ -271,7 +293,15 @@ export class ReviewService {
 
   /** Finds the line of a comment in the review, and keeps its context. */
   private async buildThread(review: Review, params: AddThreadParams): Promise<Thread> {
-    const { path, line, side = 'head', body, author = 'human', author_name = null } = params
+    const {
+      path,
+      line,
+      side = 'head',
+      body,
+      author = 'human',
+      author_name = null,
+      attachments: attachment_ids,
+    } = params
 
     const file = review.files.find((candidate) => candidate.path === path)
     if (file === undefined) {
@@ -284,7 +314,8 @@ export class ReviewService {
     }
 
     const content = await readBlob(review.repo_path, blob_sha)
-    const comment = newComment(body, author, author_name)
+    const attachments = await this.attachments.resolve(review.id, attachment_ids)
+    const comment = newComment(body, author, author_name, attachments)
 
     try {
       return createThread({
@@ -319,10 +350,10 @@ export class ReviewService {
     id: string,
     thread_id: string,
     body: string,
-    author: CommentAuthor = 'human',
-    author_name: string | null = null,
+    { author = 'human', author_name = null, attachments }: CommentOptions = {},
   ): Promise<Review> {
-    const comment = newComment(body, author, author_name)
+    const resolved = await this.attachments.resolve(id, attachments)
+    const comment = newComment(body, author, author_name, resolved)
     return this.withThread(id, thread_id, (thread) => ({
       ...thread,
       comments: [...thread.comments, comment],
@@ -344,14 +375,14 @@ export class ReviewService {
     id: string,
     submission_id: string,
     body: string,
-    author: CommentAuthor = 'human',
-    author_name: string | null = null,
+    { author = 'human', author_name = null, attachments }: CommentOptions = {},
   ): Promise<Review> {
     const review = await this.get(id)
     const index = review.submissions.findIndex((submission) => submission.id === submission_id)
     if (index === -1) throw new ReviewError(`No submission with id ${submission_id}`, 404)
 
-    const comment = newComment(body, author, author_name)
+    const resolved = await this.attachments.resolve(id, attachments)
+    const comment = newComment(body, author, author_name, resolved)
     const submissions = [...review.submissions]
     const submission = submissions[index] as ReviewSubmission
     submissions[index] = { ...submission, comments: [...submission.comments, comment] }
@@ -373,6 +404,7 @@ export class ReviewService {
       author = 'human',
       author_name = null,
       body = null,
+      attachments: attachment_ids,
       threads: drafts = [],
       replies = [],
       expected_head_sha,
@@ -407,16 +439,19 @@ export class ReviewService {
       const index = threads.findIndex((thread) => thread.id === reply.thread_id)
       if (index === -1) throw new ReviewError(`No thread with id ${reply.thread_id}`, 404)
       const thread = threads[index] as Thread
-      const comment = newComment(reply.body, author, author_name)
+      const attachments = await this.attachments.resolve(id, reply.attachments)
+      const comment = newComment(reply.body, author, author_name, attachments)
       threads[index] = { ...thread, comments: [...thread.comments, comment] }
     }
 
+    const summary_attachments = await this.attachments.resolve(id, attachment_ids)
     const submission: ReviewSubmission = {
       id: randomUUID(),
       verdict,
       author,
       ...(author_name === null ? {} : { author_name }),
       body: body === null || body.trim() === '' ? null : body.trim(),
+      ...(summary_attachments.length === 0 ? {} : { attachments: summary_attachments }),
       comments: [],
       head_sha: review.head_sha,
       created_at: nowIso(),
@@ -537,6 +572,7 @@ export class ReviewService {
     const review = await this.store.load(id)
     if (review !== null) await unpinSnapshot(review.repo_path, id)
     await this.store.remove(id)
+    await this.attachments.removeAll(id)
   }
 
   /** Tells if the store of this repository keeps a review. */

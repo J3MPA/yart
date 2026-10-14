@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/button'
 import { useAppDispatch } from '@/store/hooks'
+import { AttachmentList } from './attachments'
 import { CommentForm } from './comment-form'
 import type { Draft } from './local-review-state'
 import { draftDropped, draftEdited } from './local-review-slice'
@@ -19,10 +20,12 @@ export const DraftComment = ({ review_id, draft }: DraftCommentProps) => {
   if (editing) {
     return (
       <CommentForm
+        review_id={review_id}
         initial_body={draft.body}
+        initial_attachments={draft.attachments}
         submit_label="Save"
-        onSubmit={(body) => {
-          dispatch(draftEdited({ review_id, draft_id: draft.id, body }))
+        onSubmit={(body, attachments) => {
+          dispatch(draftEdited({ review_id, draft_id: draft.id, body, attachments }))
           setEditing(false)
         }}
         onCancel={() => setEditing(false)}
@@ -46,6 +49,7 @@ export const DraftComment = ({ review_id, draft }: DraftCommentProps) => {
         </Button>
       </div>
       <div className={styles.comment_body}>{draft.body}</div>
+      <AttachmentList review_id={review_id} attachments={draft.attachments} />
     </div>
   )
 }

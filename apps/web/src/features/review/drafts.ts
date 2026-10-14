@@ -1,4 +1,4 @@
-import type { DiffSide, ReviewFile } from '@yart/core'
+import type { Attachment, DiffSide, ReviewFile } from '@yart/core'
 import type { Draft, ReplyDraft, ThreadDraft } from './local-review-state'
 import { anchorKey } from './thread-anchors'
 
@@ -66,19 +66,26 @@ const now = (): string => new Date().toISOString()
 export const newThreadDraft = (
   target: { path: string; side: DiffSide; line: number; blob_sha: string },
   body: string,
+  attachments: Attachment[] = [],
 ): ThreadDraft => ({
   id: crypto.randomUUID(),
   kind: 'thread',
   ...target,
   body,
+  attachments,
   created_at: now(),
 })
 
-export const newReplyDraft = (thread_id: string, body: string): ReplyDraft => ({
+export const newReplyDraft = (
+  thread_id: string,
+  body: string,
+  attachments: Attachment[] = [],
+): ReplyDraft => ({
   id: crypto.randomUUID(),
   kind: 'reply',
   thread_id,
   body,
+  attachments,
   created_at: now(),
 })
 

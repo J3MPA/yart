@@ -3,6 +3,7 @@
    (`getReview` -> `useGetReviewQuery`), and the rest are its config fields. */
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import type {
+  Attachment,
   DiffSide,
   FileContents,
   FileDiff,
@@ -18,20 +19,31 @@ export interface AddThreadArgs {
   line: number
   side: DiffSide
   body: string
+  /** The ids of uploaded images. */
+  attachments?: string[]
 }
 
 export interface AddCommentArgs {
   review_id: string
   thread_id: string
   body: string
+  attachments?: string[]
 }
 
 export interface SubmitReviewArgs {
   review_id: string
   verdict: ReviewVerdict
   body?: string
-  threads?: { path: string; side: DiffSide; line: number; body: string; blob_sha: string }[]
-  replies?: { thread_id: string; body: string }[]
+  attachments?: string[]
+  threads?: {
+    path: string
+    side: DiffSide
+    line: number
+    body: string
+    blob_sha: string
+    attachments?: string[]
+  }[]
+  replies?: { thread_id: string; body: string; attachments?: string[] }[]
   /** The head on the screen at the submit. The daemon refuses if the head moved. */
   expected_head_sha?: string
 }
@@ -40,7 +52,12 @@ export interface AddSubmissionCommentArgs {
   review_id: string
   submission_id: string
   body: string
+  attachments?: string[]
 }
+
+/** Where the daemon serves an image of a review. */
+export const attachmentUrl = (review_id: string, attachment_id: string): string =>
+  `/api/reviews/${review_id}/attachments/${attachment_id}`
 
 export interface SetThreadStatusArgs {
   review_id: string
@@ -116,10 +133,10 @@ export const reviewApi = createApi({
       invalidatesTags: ['Review'],
     }),
     addComment: builder.mutation<Review, AddCommentArgs>({
-      query: ({ review_id, thread_id, body }) => ({
+      query: ({ review_id, thread_id, ...body }) => ({
         url: `/reviews/${review_id}/threads/${thread_id}/comments`,
         method: 'POST',
-        body: { body },
+        body,
       }),
       invalidatesTags: ['Review'],
     }),
@@ -132,12 +149,19 @@ export const reviewApi = createApi({
       invalidatesTags: ['Review'],
     }),
     addSubmissionComment: builder.mutation<Review, AddSubmissionCommentArgs>({
-      query: ({ review_id, submission_id, body }) => ({
+      query: ({ review_id, submission_id, ...body }) => ({
         url: `/reviews/${review_id}/submissions/${submission_id}/comments`,
         method: 'POST',
-        body: { body },
+        body,
       }),
       invalidatesTags: ['Review', 'ReviewList'],
+    }),
+    uploadAttachment: builder.mutation<Attachment, { review_id: string; data: string }>({
+      query: ({ review_id, data }) => ({
+        url: `/reviews/${review_id}/attachments`,
+        method: 'POST',
+        body: { data },
+      }),
     }),
     submitReview: builder.mutation<Review, SubmitReviewArgs>({
       query: ({ review_id, ...body }) => ({
@@ -165,4 +189,5 @@ export const {
   useAddSubmissionCommentMutation,
   useSetThreadStatusMutation,
   useSubmitReviewMutation,
+  useUploadAttachmentMutation,
 } = reviewApi

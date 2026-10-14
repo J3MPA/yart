@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { Review, ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
 import { useAppDispatch } from '@/store/hooks'
+import { AttachButton, attachmentIds, AttachmentList, useImageAttachments } from './attachments'
+import attachment_styles from './attachments.module.css'
 import { describeDraft, isStale, type FileBlobs } from './drafts'
 import type { Draft, ReplyDraft, ThreadDraft } from './local-review-state'
 import { draftDropped, draftsSent } from './local-review-slice'
@@ -37,6 +39,7 @@ export const SubmitPanel = ({
   const dispatch = useAppDispatch()
   const [submitReview, submit_state] = useSubmitReviewMutation()
   const [error, setError] = useState<string | null>(null)
+  const images = useImageAttachments(review.id)
 
   const stale = drafts.filter((draft) => isStale(draft, files))
   const threads = drafts.filter(
@@ -51,30 +54,37 @@ export const SubmitPanel = ({
         review_id: review.id,
         verdict,
         body: summary,
-        threads: threads.map(({ path, side, line, body, blob_sha }) => ({
+        attachments: attachmentIds(images.attachments),
+        threads: threads.map(({ path, side, line, body, blob_sha, attachments }) => ({
           path,
           side,
           line,
           body,
           blob_sha,
+          attachments: attachmentIds(attachments),
         })),
-        replies: replies.map(({ thread_id, body }) => ({ thread_id, body })),
+        replies: replies.map(({ thread_id, body, attachments }) => ({
+          thread_id,
+          body,
+          attachments: attachmentIds(attachments),
+        })),
         expected_head_sha: review.head_sha,
       }).unwrap()
       // Only after the daemon has them. A draft clears when it is sent, never when
       // the send starts. Otherwise a failed submit would lose what you wrote.
       dispatch(draftsSent(review.id))
       onSummaryChange('')
+      images.clear()
       onDone()
     } catch (cause) {
       setError(describeQueryError(cause as QueryError).message)
     }
   }
 
-  const blocked = stale.length > 0 || submit_state.isLoading
+  const blocked = stale.length > 0 || submit_state.isLoading || images.uploading
 
   return (
-    <div className={styles.submit_panel}>
+    <div className={styles.submit_panel} onDrop={images.onDrop} onDragOver={images.onDragOver}>
       <div className={styles.submit_heading}>Finish your review</div>
 
       {drafts.length > 0 && (
@@ -118,7 +128,14 @@ export const SubmitPanel = ({
         aria-label="Review summary"
         autoFocus
         onChange={(event) => onSummaryChange(event.target.value)}
+        onPaste={images.onPaste}
       />
+      <AttachmentList
+        review_id={review.id}
+        attachments={images.attachments}
+        onRemove={images.remove}
+      />
+      {images.error !== null && <p className={attachment_styles.error}>{images.error}</p>}
 
       {error !== null && <p className={styles.submit_error}>{error}</p>}
 
@@ -132,6 +149,8 @@ export const SubmitPanel = ({
         <Button disabled={blocked} onClick={() => void submit('changes_requested')}>
           Request changes
         </Button>
+        <span className={styles.spacer} />
+        <AttachButton onFiles={(files) => void images.add(files)} />
       </div>
     </div>
   )

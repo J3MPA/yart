@@ -1,4 +1,5 @@
-import type { DiffLine, DiffSide, Thread } from '@yart/core'
+import type { Attachment, DiffLine, DiffSide, Thread } from '@yart/core'
+
 import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { CommentThread } from './comment-thread'
@@ -35,7 +36,7 @@ export interface DiffRowProps {
   composing: ComposeTarget | null
   adding: boolean
   onComposingChange: (composing: ComposeTarget | null) => void
-  onAddThread: (target: RowTarget, body: string) => void
+  onAddThread: (target: RowTarget, body: string, attachments: Attachment[]) => void
 }
 
 const MARKER: Record<DiffLine['kind'], string> = {
@@ -182,11 +183,12 @@ export const DiffRow = ({
           ))}
           {is_composing && target !== null && (
             <CommentForm
+              review_id={review_id}
               pending={adding}
               submit_label="Comment now"
               queue_label={drafting.in_progress ? 'Add to review' : 'Start a review'}
               onCancel={() => onComposingChange(null)}
-              onQueue={(body) => {
+              onQueue={(body, attachments) => {
                 const blob_sha =
                   target.side === 'head' ? file_blobs.head_blob_sha : file_blobs.base_blob_sha
                 // A row offers only a side that exists. Thus this guard is for a
@@ -198,13 +200,14 @@ export const DiffRow = ({
                     draft: newThreadDraft(
                       { path: file_path, side: target.side, line: target.line, blob_sha },
                       body,
+                      attachments,
                     ),
                   }),
                 )
                 onComposingChange(null)
               }}
-              onSubmit={(body) => {
-                onAddThread(target, body)
+              onSubmit={(body, attachments) => {
+                onAddThread(target, body, attachments)
                 onComposingChange(null)
               }}
             />

@@ -130,7 +130,7 @@ describe('comments and status', () => {
     const with_thread = await service.addThread(review.id, { path: 'a.txt', line: 2, body: 'why?' })
     const thread_id = with_thread.threads[0]?.id as string
 
-    const replied = await service.addComment(review.id, thread_id, 'because', 'agent')
+    const replied = await service.addComment(review.id, thread_id, 'because', { author: 'agent' })
     expect(replied.threads[0]?.comments).toHaveLength(2)
     expect(replied.threads[0]?.comments[1]).toMatchObject({ author: 'agent', body: 'because' })
   })
@@ -217,7 +217,7 @@ describe('submitting a pending review', () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
     const with_thread = await service.addThread(review.id, { path: 'a.txt', line: 2, body: 'why?' })
     const thread_id = with_thread.threads[0]?.id as string
-    await service.addComment(review.id, thread_id, 'because', 'agent')
+    await service.addComment(review.id, thread_id, 'because', { author: 'agent' })
 
     const submitted = await service.submit(review.id, {
       replies: [{ thread_id, body: 'fair enough' }],
@@ -310,7 +310,7 @@ describe('addSubmissionComment', () => {
       review.id,
       submission_id,
       'Already done in the previous turn.',
-      'agent',
+      { author: 'agent' },
     )
 
     expect(replied.submissions[0]?.comments).toMatchObject([
@@ -327,7 +327,7 @@ describe('addSubmissionComment', () => {
       review.id,
       twice.submissions[1]?.id as string,
       'Thanks.',
-      'agent',
+      { author: 'agent' },
     )
 
     expect(replied.submissions[0]?.comments).toEqual([])

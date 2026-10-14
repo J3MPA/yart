@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
+import type { Attachment } from '@yart/core'
 import { readStored } from './browser-storage'
 import {
   addDraft,
@@ -35,10 +36,15 @@ const local_review_slice = createSlice({
     },
     draftEdited(
       state,
-      action: PayloadAction<{ review_id: string; draft_id: string; body: string }>,
+      action: PayloadAction<{
+        review_id: string
+        draft_id: string
+        body: string
+        attachments?: Attachment[]
+      }>,
     ) {
-      const { review_id, draft_id, body } = action.payload
-      return updateDraft(state, review_id, draft_id, body)
+      const { review_id, draft_id, body, attachments } = action.payload
+      return updateDraft(state, review_id, draft_id, body, attachments)
     },
     draftDropped(state, action: PayloadAction<{ review_id: string; draft_id: string }>) {
       return removeDraft(state, action.payload.review_id, action.payload.draft_id)

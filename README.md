@@ -196,6 +196,9 @@ A new review opens in the yart window. Do these steps:
 2. Mark each file as reviewed when you finish it.
 3. Submit the review.
 
+To show a problem, paste or drop an image into a comment box, or use **Attach
+image**. Each image can be 5 MB at most, in PNG, JPEG, WebP or GIF.
+
 The agent reads your comments and answers them. It then moves the review to its
 fixes, and each comment follows its line. The window shows the reviews of all
 repositories that yart served.
