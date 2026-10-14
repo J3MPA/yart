@@ -447,6 +447,7 @@ describe('an AI reviewer', () => {
     })
     expect(rendered).toContain('Verdict: CHANGES REQUESTED by reviewer claude-reviewer')
     expect(rendered).toContain('Round 1 of 3.')
+    expect(rendered).toContain(`yart await ${id} --author --port ${port}`)
     expect(rendered).toContain('await_author')
   })
 

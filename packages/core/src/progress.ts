@@ -1,4 +1,5 @@
 import type { Thread } from './types.ts'
+import { submissionAuthor } from './authors.ts'
 import type { Review, ReviewSubmission } from './review.ts'
 
 /**
@@ -18,6 +19,23 @@ export const currentSubmission = (review: Review): ReviewSubmission | null => {
 /** The latest verdict, on any head. */
 export const latestSubmission = (review: Review): ReviewSubmission | null =>
   review.submissions[review.submissions.length - 1] ?? null
+
+/**
+ * Tells if the agent under review did something after the last verdict of an AI
+ * reviewer. It can move the review to new work, or write in it. Both give the
+ * turn to the reviewer. A reply alone can mean that the author disagrees, and
+ * that also needs an answer.
+ */
+export const authorHasAnswered = (review: Review): boolean => {
+  const verdict = latestSubmission(review)
+  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
+  if (review.head_sha !== verdict.head_sha) return true
+  const spoken = [
+    ...review.threads.flatMap((thread) => thread.comments),
+    ...verdict.comments,
+  ].filter((comment) => comment.author === 'agent')
+  return spoken.some((comment) => comment.created_at > verdict.created_at)
+}
 
 /**
  * Tells if the agent answered a thread after the person last wrote in it.

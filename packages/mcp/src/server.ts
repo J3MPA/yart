@@ -591,7 +591,10 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             ? 'You approved it. Thus it goes to the person now. Your work is complete.'
             : used >= ai_review_rounds
               ? 'That was your last round. Stop now. The person completes the review.'
-              : 'Call await_author to wait for the answer of the author. Then read get_diff again.'
+              : 'Wait for the answer of the author. If you can run a shell command in the ' +
+                'background, run ' +
+                `\`yart await ${review_id} --author${port === DEFAULT_PORT ? '' : ` --port ${port}`}\`` +
+                ' in the background. Else call await_author. Then read get_diff again.'
         return text(
           [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
         )

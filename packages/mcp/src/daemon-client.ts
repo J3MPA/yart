@@ -4,13 +4,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
-import {
-  latestSubmission,
-  submissionAuthor,
-  type FileDiff,
-  type ReviewVerdict,
-  type Settings,
-} from '@yart/core'
+import { authorHasAnswered, type FileDiff, type ReviewVerdict, type Settings } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 export const DEFAULT_PORT = 7777
@@ -74,23 +68,6 @@ export interface ReviewerRound {
   }[]
   replies?: { thread_id: string; body: string; attachments?: string[] }[]
   reviewer_name?: string
-}
-
-/**
- * Tells if the agent under review did something after the last verdict of an AI
- * reviewer. It can move the review to new work, or write in it. Both give the
- * turn to the reviewer. A reply alone can mean that the author disagrees, and
- * that also needs an answer.
- */
-export const authorHasAnswered = (review: Review): boolean => {
-  const verdict = latestSubmission(review)
-  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
-  if (review.head_sha !== verdict.head_sha) return true
-  const spoken = [
-    ...review.threads.flatMap((thread) => thread.comments),
-    ...verdict.comments,
-  ].filter((comment) => comment.author === 'agent')
-  return spoken.some((comment) => comment.created_at > verdict.created_at)
 }
 
 export class DaemonClient {

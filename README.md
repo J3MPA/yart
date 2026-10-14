@@ -639,7 +639,9 @@ foreground.
 the review has a verdict, then prints it and stops with exit code 0. With
 `--timeout <minutes>`, it stops with exit code 2 when the time is over. An agent
 that can run a shell command in the background uses it in place of
-`await_review`. Thus the turn of the agent stays free while you review.
+`await_review`. Thus the turn of the agent stays free while you review. With
+`--author`, an AI reviewer waits until the author answers its verdict, in place
+of `await_author`.
 
 **Writes must be JSON.** A web page on any site can send a "simple" POST across
 origins to `localhost`. The browser does not ask first. The page cannot read
