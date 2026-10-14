@@ -1,5 +1,6 @@
 import type { ApprovalAction } from '@yart/core'
 import { useGetSettingsQuery, useUpdateSettingsMutation } from '@/features/review/review-api'
+import { ReviewerSettings } from './reviewer-settings'
 import styles from './settings.module.css'
 
 const CHOICES: readonly { value: ApprovalAction; label: string; detail: string }[] = [
@@ -57,10 +58,13 @@ export const SettingsPage = () => {
           <p className={styles.note}>
             It happens a minute after the approval, so that an agent waiting on the review reads the
             verdict first, and not at all if the review is reopened in that minute. Reviews approved
-            before this was chosen are left as they are.
+            before this was chosen are left as they are. An AI reviewer’s approval does not count:
+            it hands the review to you.
           </p>
         </fieldset>
       )}
+
+      {settings !== undefined && <ReviewerSettings settings={settings} />}
     </>
   )
 }

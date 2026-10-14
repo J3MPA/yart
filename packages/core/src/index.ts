@@ -25,7 +25,7 @@ export type {
   ReviewVerdict,
   SubmissionAuthor,
 } from './review.ts'
-export { describeAuthor, submissionAuthor } from './authors.ts'
+export { describeAuthor, reviewerRounds, submissionAuthor } from './authors.ts'
 
 export {
   gapLines,
@@ -53,4 +53,16 @@ export { buildLineMap, type LineMapOptions } from './line-map.ts'
 export { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'
 export { createThread, type CreateThreadParams } from './thread.ts'
 export { deriveAnchorState, reanchorThread, reanchorThreads } from './reanchor.ts'
-export { DEFAULT_SETTINGS, type ApprovalAction, type Settings } from './settings.ts'
+export {
+  DEFAULT_SETTINGS,
+  isAiReviewRounds,
+  isReviewerEffort,
+  MAX_AI_REVIEW_ROUNDS,
+  MAX_REVIEWER_INSTRUCTIONS_LENGTH,
+  MAX_REVIEWER_MODEL_LENGTH,
+  MIN_AI_REVIEW_ROUNDS,
+  REVIEWER_EFFORTS,
+  type ApprovalAction,
+  type ReviewerEffort,
+  type Settings,
+} from './settings.ts'

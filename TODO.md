@@ -262,11 +262,14 @@ and verdicts count as activity, so the person notices an AI review moving.
 
 What is left, in order:
 
-1. **The reviewer's tools.** MCP tools for the reviewing side: comment on a line,
-   pass a verdict, and wait for the author to answer and advance. The author's
-   loop needs nothing new, since it waits for a verdict whoever passes it. A round
-   limit, three by default and set on the Settings page, ends a loop where two
-   agents will not agree, and hands the review to the person.
+1. ~~**The reviewer's tools.**~~ Done: `get_diff`, `submit_verdict` and
+   `await_author`, which returns when the author advances or replies, since a
+   reply alone may be the author disagreeing. A round limit, three by default and
+   set on the Settings page, is enforced by the daemon, and both agents are told
+   when it is reached. `get_reviewer_settings` passes on the person's preferred
+   model, effort and instructions to whatever starts the reviewer. Effort only
+   reaches a reviewer whose launcher takes one: Claude Code's subagents take a
+   model but no effort.
 2. **The person's final review.** The page shows the AI conversation round by
    round, and the AI's approval as a step before the person's verdict.
 3. **The commit hook.** `yart hook pre-commit` reviews the staged changes —

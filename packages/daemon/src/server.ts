@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import {
   latestSubmission,
+  reviewerRounds,
   submissionAuthor,
   type CommentAuthor,
   type SubmissionAuthor,
@@ -470,6 +471,18 @@ export const createServer = ({
     }
 
     const speaker = parseSpeaker(body, SUBMITTERS)
+    if (speaker.author === 'reviewer') {
+      // Checked here rather than left to the reviewer, which is one of the two
+      // parties that may not want to stop.
+      const { ai_review_rounds } = await settings.read()
+      if (reviewerRounds(await service.get(context.req.param('id'))) >= ai_review_rounds) {
+        throw new ReviewError(
+          `An AI reviewer has passed all ${ai_review_rounds} of its verdicts on this review. ` +
+            'It is the person’s to finish now.',
+          409,
+        )
+      }
+    }
     const review = await service.submit(context.req.param('id'), {
       verdict: body.verdict,
       author: speaker.author as SubmissionAuthor,

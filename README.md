@@ -202,6 +202,20 @@ applies in the app and in any browser alike.
 Reviews can also be archived or deleted in bulk: tick them in the list and use
 the actions above it.
 
+### Having an AI review first
+
+An AI agent can review the work before you do. Ask the agent that made the
+change to have it reviewed — by a subagent, or by a second session you open —
+and the two go back and forth: the reviewer comments and passes a verdict, the
+author answers and fixes, and the reviewer looks again. When the reviewer
+approves, or has used its rounds, the review is yours, with the whole exchange
+in front of you. Its approval is not yours: it does not count for cleaning up.
+
+The **AI reviewer** section of Settings says how a reviewer should run: how
+many verdicts it may pass on one review (three by default), and the model,
+effort and instructions to start it with. yart runs no model itself; whatever
+starts the reviewer reads these.
+
 ### Notifications and the dock badge
 
 When the agent answers on a review, yart raises a notification and its dock icon
@@ -692,6 +706,15 @@ MCP server dies with its client and a review has to outlive that.
 | `reply_to_verdict` | Answer the summary left with the verdict                    |
 | `resolve_thread`   | Mark a comment addressed                                    |
 | `advance_review`   | Re-anchor every comment onto new commits                    |
+
+An AI reviewer has tools of its own, for reviewing work it did not write:
+
+| Tool                    | What the reviewer does with it                               |
+| ----------------------- | ------------------------------------------------------------ |
+| `get_reviewer_settings` | Read the model, effort, instructions and rounds to run with  |
+| `get_diff`              | Read the changes, with base and head line numbers            |
+| `submit_verdict`        | Pass a verdict with its line comments and replies, in one go |
+| `await_author`          | Block until the author advances or answers                   |
 
 **A new review opens in the yart app**, or in your browser when the app is not
 installed — only for the daemon on 7777, since a link names a review but not

@@ -1,10 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { latestSubmission } from '@yart/core'
+import { latestSubmission, reviewerRounds, submissionAuthor, type Settings } from '@yart/core'
+import type { Review } from '@yart/daemon'
 import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-client.ts'
 import { browserOpeningEnabled, openReview } from './open-browser.ts'
 import {
   openThreads,
+  renderDiff,
   renderReview,
   renderReviewLine,
   renderReviewWithThreads,
@@ -35,6 +37,35 @@ const toolConfig = <Schema>(config: {
 /* eslint-enable @typescript-eslint/naming-convention */
 
 const text = (body: string): ToolResult => ({ content: [{ type: 'text', text: body }] })
+
+/**
+ * What the agent under review should know about a verdict an AI reviewer
+ * passed: that the person has not seen the work yet, and when the reviewer has
+ * no rounds left, that the next move is the person's rather than another fix.
+ */
+const reviewerNote = (review: Review, settings: Settings): string | null => {
+  const verdict = latestSubmission(review)
+  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return null
+  if (verdict.verdict === 'approved') {
+    return 'An AI reviewer approved this; the person has not looked yet. Tell them it is ready for their review.'
+  }
+  if (reviewerRounds(review) >= settings.ai_review_rounds) {
+    return (
+      'The AI reviewer has used its last round. Make no further changes for it: ' +
+      'tell the person the review is theirs to finish, and what is still open.'
+    )
+  }
+  return null
+}
+
+const describeSettings = (settings: Settings): string =>
+  [
+    'Reviewer settings:',
+    `  model:        ${settings.reviewer_model ?? 'not set: use your own choice'}`,
+    `  effort:       ${settings.reviewer_effort ?? 'not set'}`,
+    `  rounds:       ${settings.ai_review_rounds} verdicts per review`,
+    `  instructions: ${settings.reviewer_instructions ?? 'none'}`,
+  ].join('\n')
 
 const failure = (body: string): ToolResult => ({
   content: [{ type: 'text', text: body }],
@@ -178,7 +209,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         }
 
         const open = openThreads(submitted)
-        const verdict = renderVerdict(submitted)
+        const note = reviewerNote(submitted, await daemon.getSettings())
+        const verdict =
+          note === null ? renderVerdict(submitted) : `${renderVerdict(submitted)}\n\n${note}`
 
         if (open.length === 0) {
           return text(
@@ -339,6 +372,164 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             renderReviewWithThreads(review, daemon.reviewUrl(review.id)),
             '',
             'Ask the human to look again, then call await_review.',
+          ].join('\n'),
+        )
+      }),
+  )
+
+  // The reviewing side. One MCP server serves both, so these say plainly that
+  // they are for reviewing someone else's work: an agent asked to have its own
+  // change reviewed must not pass a verdict on it.
+
+  server.registerTool(
+    'get_reviewer_settings',
+    toolConfig({
+      title: 'Read how an AI reviewer should run',
+      description:
+        'Read how the person wants an AI reviewer run: the model and effort to start it on, ' +
+        'what it should look for, and how many verdicts it gets per review. Call this before ' +
+        'starting a reviewer — a subagent or another session — for a review, start it on that ' +
+        'model and effort where the tool starting it allows, and include the instructions in ' +
+        'its brief.',
+      input_schema: {},
+    }),
+    async () =>
+      guard(async () =>
+        text(
+          [
+            describeSettings(await daemon.getSettings()),
+            '',
+            'The reviewer works with get_diff, submit_verdict and await_author, and must not be ' +
+              'the agent whose work is under review.',
+          ].join('\n'),
+        ),
+      ),
+  )
+
+  server.registerTool(
+    'get_diff',
+    toolConfig({
+      title: 'Read the changes under review',
+      description:
+        'For an AI reviewer of someone else’s work: read a review’s changes as a diff, with ' +
+        'base and head line numbers on every line to aim comments at. Read it before each ' +
+        'submit_verdict, since the author may have advanced the review since.',
+      input_schema: { review_id: z.string().describe('The review to read.') },
+    }),
+    async ({ review_id }) =>
+      guard(async () => {
+        const [review, files] = await Promise.all([
+          daemon.getReview(review_id),
+          daemon.getDiff(review_id),
+        ])
+        return text(renderDiff(files, review))
+      }),
+  )
+
+  server.registerTool(
+    'submit_verdict',
+    toolConfig({
+      title: 'Pass a verdict as an AI reviewer',
+      description:
+        'For an AI reviewer only, never for reviewing your own work. Pass a verdict on a review ' +
+        'with your line comments and replies to existing comments, all in one go. approved: ' +
+        'nothing needs changing. changes_requested: the author must fix what you commented on. ' +
+        'commented: remarks that do not block. The review then waits for the author; follow ' +
+        'with await_author unless you approved.',
+      input_schema: {
+        review_id: z.string(),
+        verdict: z.enum(['approved', 'changes_requested', 'commented']),
+        summary: z.string().optional().describe('The verdict as a whole, in a sentence or two.'),
+        comments: z
+          .array(
+            z.object({
+              path: z.string(),
+              line: z.number().int().positive(),
+              side: z
+                .enum(['base', 'head'])
+                .optional()
+                .describe('"base" for a removed line, "head" (the default) for any other.'),
+              body: z.string(),
+            }),
+          )
+          .optional()
+          .describe('New comments on lines, numbered as get_diff shows them.'),
+        replies: z
+          .array(z.object({ thread_id: z.string(), body: z.string() }))
+          .optional()
+          .describe('Answers to existing comments, by the id in brackets before each.'),
+        reviewer_name: z
+          .string()
+          .optional()
+          .describe('A short name to comment under, such as "claude-reviewer".'),
+      },
+    }),
+    async ({ review_id, verdict, summary, comments, replies, reviewer_name }) =>
+      guard(async () => {
+        const review = await daemon.submitAsReviewer(review_id, {
+          verdict,
+          summary,
+          comments,
+          replies,
+          reviewer_name,
+        })
+        const { ai_review_rounds } = await daemon.getSettings()
+        const used = reviewerRounds(review)
+        const next =
+          verdict === 'approved'
+            ? 'You approved it, so it goes to the person now. Your part is done.'
+            : used >= ai_review_rounds
+              ? 'That was your last round. Stop here: the person finishes the review.'
+              : 'Call await_author to wait for the author to answer or advance, then read get_diff again.'
+        return text(
+          [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
+        )
+      }),
+  )
+
+  server.registerTool(
+    'await_author',
+    toolConfig({
+      title: 'Wait for the author to answer',
+      description:
+        'For an AI reviewer: block until the author has answered your last verdict — advanced ' +
+        'the review onto new work, or replied to a comment. Returns what is open if the wait ' +
+        'times out, so a timeout is not a failure: call it again to keep waiting.',
+      input_schema: {
+        review_id: z.string(),
+        timeout_seconds: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_WAIT_SECONDS)
+          .optional()
+          .describe(`How long to wait before returning. Defaults to ${DEFAULT_WAIT_SECONDS}.`),
+      },
+    }),
+    async ({ review_id, timeout_seconds }) =>
+      guard(async () => {
+        const current = await daemon.getReview(review_id)
+        const verdict = latestSubmission(current)
+        if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
+          return failure(
+            'There is no verdict of yours on this review to answer. Read it with get_diff and ' +
+              'pass one with submit_verdict first.',
+          )
+        }
+        const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
+        const answered = await daemon.waitForAuthor(review_id, seconds * 1000)
+        if (answered === null) {
+          return text(
+            `The author has not answered after ${seconds}s. Call await_author again to keep waiting.`,
+          )
+        }
+        return text(
+          [
+            renderReviewWithThreads(answered, daemon.reviewUrl(answered.id)),
+            '',
+            'The author has answered. Read the changes with get_diff, check their replies above, ' +
+              'resolve the comments they fixed with resolve_thread, and pass your next verdict ' +
+              'with submit_verdict.',
           ].join('\n'),
         )
       }),

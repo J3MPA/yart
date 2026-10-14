@@ -1,4 +1,4 @@
-import type { ReviewSubmission, SubmissionAuthor } from './review.ts'
+import type { Review, ReviewSubmission, SubmissionAuthor } from './review.ts'
 import type { Comment } from './types.ts'
 
 /** Who passed a verdict, reading one from before reviewers existed as the person's. */
@@ -16,3 +16,7 @@ export const describeAuthor = (
   if (author !== 'reviewer') return author
   return author_name === null || author_name === undefined ? 'reviewer' : `reviewer ${author_name}`
 }
+
+/** How many verdicts AI reviewers have passed on a review. */
+export const reviewerRounds = (review: Review): number =>
+  review.submissions.filter((submission) => submissionAuthor(submission) === 'reviewer').length

@@ -3,6 +3,13 @@ import { realpathSync } from 'node:fs'
 import { sep } from 'node:path'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
+import {
+  latestSubmission,
+  submissionAuthor,
+  type FileDiff,
+  type ReviewVerdict,
+  type Settings,
+} from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 export const DEFAULT_PORT = 7777
@@ -45,6 +52,32 @@ export interface DaemonClientOptions {
 const resolveDaemonCli = (): string => {
   const requireFromHere = createRequire(import.meta.url)
   return requireFromHere.resolve('@yart/daemon/cli')
+}
+
+/** One round of an AI reviewer's: its verdict and what it says with it. */
+export interface ReviewerRound {
+  verdict: ReviewVerdict
+  summary?: string
+  comments?: { path: string; line: number; side?: 'base' | 'head'; body: string }[]
+  replies?: { thread_id: string; body: string }[]
+  reviewer_name?: string
+}
+
+/**
+ * Whether the agent under review has done anything since an AI reviewer's last
+ * verdict: advanced the review onto new work, or said something in it. Either
+ * is the reviewer's turn — a reply alone may be the author disagreeing rather
+ * than fixing, and that needs answering too.
+ */
+export const authorHasAnswered = (review: Review): boolean => {
+  const verdict = latestSubmission(review)
+  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
+  if (review.head_sha !== verdict.head_sha) return true
+  const spoken = [
+    ...review.threads.flatMap((thread) => thread.comments),
+    ...verdict.comments,
+  ].filter((comment) => comment.author === 'agent')
+  return spoken.some((comment) => comment.created_at > verdict.created_at)
 }
 
 export class DaemonClient {
@@ -209,6 +242,26 @@ export class DaemonClient {
     )
   }
 
+  getDiff(review_id: string): Promise<FileDiff[]> {
+    return this.request<FileDiff[]>(`/api/reviews/${encodeURIComponent(review_id)}/diff`)
+  }
+
+  getSettings(): Promise<Settings> {
+    return this.request<Settings>('/api/settings')
+  }
+
+  /** Passes a verdict as an AI reviewer, with the comments and replies of its round. */
+  submitAsReviewer(review_id: string, round: ReviewerRound): Promise<Review> {
+    return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/submit`, {
+      verdict: round.verdict,
+      body: round.summary,
+      threads: round.comments,
+      replies: round.replies,
+      author: 'reviewer',
+      author_name: round.reviewer_name,
+    })
+  }
+
   setThreadStatus(
     review_id: string,
     thread_id: string,
@@ -226,6 +279,20 @@ export class DaemonClient {
    * Polling rather than a held-open connection: the daemon keeps no waiter
    * state, and a dropped poll costs one second rather than a lost wakeup.
    */
+  async waitForAuthor(
+    review_id: string,
+    timeout_ms: number,
+    poll_ms = 1000,
+  ): Promise<Review | null> {
+    const deadline = Date.now() + timeout_ms
+    for (;;) {
+      const review = await this.getReview(review_id)
+      if (authorHasAnswered(review)) return review
+      if (Date.now() >= deadline) return null
+      await delay(Math.min(poll_ms, Math.max(0, deadline - Date.now())))
+    }
+  }
+
   async waitForSubmission(
     review_id: string,
     timeout_ms: number,
