@@ -6,6 +6,7 @@ import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-c
 import { browserOpeningEnabled, openReview } from './open-browser.ts'
 import {
   openThreads,
+  ImageNumbers,
   renderDiff,
   renderReview,
   renderReviewLine,
@@ -15,6 +16,9 @@ import {
 } from './render.ts'
 
 const DEFAULT_WAIT_SECONDS = 300
+
+/** The most images that one result gives. Each image goes into the context of the agent. */
+const MAX_IMAGES = 10
 
 /** The rules that the MCP client gives to the agent with the tools. */
 const INSTRUCTIONS = [
@@ -28,7 +32,9 @@ const INSTRUCTIONS = [
 const MAX_WAIT_SECONDS = 1800
 
 /* eslint-disable @typescript-eslint/naming-convention -- MCP wire field names */
-type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean }
+type ContentBlock =
+  { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+type ToolResult = { content: ContentBlock[]; isError?: boolean }
 
 /**
  * Makes a tool config, with the `inputSchema` spelling of the protocol in one
@@ -118,6 +124,34 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   // An agent repeats a URL in the chat, and the person does not need it there.
   const shownUrl = (review_id: string): string | null =>
     opening_enabled ? null : daemon.reviewUrl(review_id)
+
+  /**
+   * The text, then each image that the text numbered. The agent sees the images
+   * of the person, not only the words.
+   */
+  const withImages = async (
+    review_id: string,
+    body: string,
+    images: ImageNumbers,
+  ): Promise<ToolResult> => {
+    const content: ContentBlock[] = [{ type: 'text', text: body }]
+    for (const [index, attachment] of images.attachments.slice(0, MAX_IMAGES).entries()) {
+      const data = await daemon.getAttachment(review_id, attachment.id).catch(() => null)
+      if (data === null) continue
+      content.push(
+        { type: 'text', text: `Image ${index + 1}:` },
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- MCP wire field
+        { type: 'image', data, mimeType: attachment.media_type },
+      )
+    }
+    if (images.attachments.length > MAX_IMAGES) {
+      content.push({
+        type: 'text',
+        text: `The result shows ${MAX_IMAGES} of ${images.attachments.length} images.`,
+      })
+    }
+    return { content }
+  }
 
   server.registerTool(
     'start_review',
@@ -215,39 +249,47 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
 
         if (submitted === null) {
           const pending = await daemon.getReview(review_id)
-          return text(
+          const pending_images = new ImageNumbers()
+          return withImages(
+            review_id,
             [
               `The person did not submit the review in ${seconds} seconds. Call await_review again to wait more.`,
               '',
-              renderThreads(openThreads(pending), 'Comments so far'),
+              renderThreads(openThreads(pending), 'Comments so far', pending_images),
             ].join('\n'),
+            pending_images,
           )
         }
 
         const open = openThreads(submitted)
         const note = reviewerNote(submitted, await daemon.getSettings())
-        const verdict =
-          note === null ? renderVerdict(submitted) : `${renderVerdict(submitted)}\n\n${note}`
+        const images = new ImageNumbers()
+        const rendered = renderVerdict(submitted, images)
+        const verdict = note === null ? rendered : `${rendered}\n\n${note}`
 
         if (open.length === 0) {
-          return text(
+          return withImages(
+            review_id,
             [
               verdict,
               '',
               'No open comments.',
               'To answer the summary, use reply_to_verdict. Thus the answer goes into the review.',
             ].join('\n'),
+            images,
           )
         }
-        return text(
+        return withImages(
+          review_id,
           [
             verdict,
             '',
-            renderThreads(open, 'Open comments'),
+            renderThreads(open, 'Open comments', images),
             '',
             'Fix these comments. Then call advance_review, to move the comments onto your changes.',
             'To answer a comment, use reply_to_thread. To answer the verdict, use reply_to_verdict.',
           ].join('\n'),
+          images,
         )
       }),
   )
@@ -264,7 +306,12 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     async ({ review_id }) =>
       guard(async () => {
         const review = await daemon.getReview(review_id)
-        return text(renderReviewWithThreads(review, shownUrl(review.id)))
+        const images = new ImageNumbers()
+        return withImages(
+          review_id,
+          renderReviewWithThreads(review, shownUrl(review.id), images),
+          images,
+        )
       }),
   )
 
@@ -543,14 +590,17 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             `The author did not answer in ${seconds} seconds. Call await_author again to wait more.`,
           )
         }
-        return text(
+        const images = new ImageNumbers()
+        return withImages(
+          review_id,
           [
-            renderReviewWithThreads(answered, shownUrl(answered.id)),
+            renderReviewWithThreads(answered, shownUrl(answered.id), images),
             '',
             'The author answered. Do these steps: read the changes with get_diff, and read the ' +
               'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
               'verdict with submit_verdict.',
           ].join('\n'),
+          images,
         )
       }),
   )

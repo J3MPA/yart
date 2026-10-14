@@ -213,6 +213,18 @@ export class DaemonClient {
     })
   }
 
+  /** An image of a review, as base64. */
+  async getAttachment(review_id: string, attachment_id: string): Promise<string> {
+    await this.ensureRunning()
+    const response = await fetch(
+      `${this.base_url}/api/reviews/${encodeURIComponent(review_id)}/attachments/${encodeURIComponent(attachment_id)}`,
+    )
+    if (!response.ok) {
+      throw new DaemonError(`The yart daemon has no image ${attachment_id}.`, response.status)
+    }
+    return Buffer.from(await response.arrayBuffer()).toString('base64')
+  }
+
   reviewUrl(review_id: string): string {
     return `${this.base_url}/reviews/${review_id}`
   }

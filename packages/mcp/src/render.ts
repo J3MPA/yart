@@ -1,5 +1,5 @@
 import { currentSubmission, describeAuthor, submissionAuthor } from '@yart/core'
-import type { DiffLine, FileDiff, ReviewVerdict, Thread } from '@yart/core'
+import type { Attachment, DiffLine, FileDiff, ReviewVerdict, Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 /**
@@ -9,6 +9,31 @@ import type { Review } from '@yart/daemon'
  * much easier to act on than a line number in a JSON object. The text includes
  * the thread ids, because a reply and a resolve need them.
  */
+
+/**
+ * Numbers the images of one tool result, in the order that the text shows them.
+ * The text gives each comment the numbers of its images, and the images follow
+ * the text with the same numbers.
+ */
+export class ImageNumbers {
+  private readonly order: Attachment[] = []
+
+  /** The label for the images of one comment, or an empty string when it has none. */
+  label(attachments: readonly Attachment[] | undefined): string {
+    if (attachments === undefined || attachments.length === 0) return ''
+    const numbers = attachments.map((attachment) => {
+      const index = this.order.findIndex((known) => known.id === attachment.id)
+      if (index !== -1) return index + 1
+      this.order.push(attachment)
+      return this.order.length
+    })
+    return `  [${numbers.map((number) => `image ${number}`).join(', ')}]`
+  }
+
+  get attachments(): readonly Attachment[] {
+    return this.order
+  }
+}
 
 const indent = (lines: readonly string[], prefix: string): string =>
   lines.map((line) => `${prefix}${line}`).join('\n')
@@ -34,9 +59,11 @@ const renderLocation = (thread: Thread): string => {
   return `${thread.anchor.path}:${thread.anchor.line}${moved}`
 }
 
-export const renderThread = (thread: Thread): string => {
+export const renderThread = (thread: Thread, images = new ImageNumbers()): string => {
   const comments = thread.comments.map(
-    (comment) => `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}`,
+    (comment) =>
+      `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}` +
+      images.label(comment.attachments),
   )
   const status = thread.status === 'resolved' ? ' [resolved]' : ''
   return [
@@ -46,9 +73,17 @@ export const renderThread = (thread: Thread): string => {
   ].join('\n')
 }
 
-export const renderThreads = (threads: readonly Thread[], heading: string): string => {
+export const renderThreads = (
+  threads: readonly Thread[],
+  heading: string,
+  images = new ImageNumbers(),
+): string => {
   if (threads.length === 0) return `${heading}: none.`
-  return [`${heading} (${threads.length}):`, '', threads.map(renderThread).join('\n\n')].join('\n')
+  return [
+    `${heading} (${threads.length}):`,
+    '',
+    threads.map((thread) => renderThread(thread, images)).join('\n\n'),
+  ].join('\n')
 }
 
 const VERDICT_LABEL: Record<ReviewVerdict, string> = {
@@ -65,13 +100,21 @@ export { currentSubmission } from '@yart/core'
  * The text shows the id, because the summary can get a reply. `reply_to_verdict`
  * needs the id when the review had more than one round.
  */
-export const renderVerdict = (review: Review): string => {
+export const renderVerdict = (review: Review, images = new ImageNumbers()): string => {
   const submission = currentSubmission(review)
   if (submission === null) return 'No verdict yet.'
 
-  const summary = submission.body === null ? '' : `\n\n  ${submission.body}`
+  const summary_images = images.label(submission.attachments)
+  const summary =
+    submission.body === null
+      ? summary_images === ''
+        ? ''
+        : `\n\n${summary_images}`
+      : `\n\n  ${submission.body}${summary_images}`
   const replies = submission.comments.map(
-    (comment) => `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}`,
+    (comment) =>
+      `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}` +
+      images.label(comment.attachments),
   )
   const conversation = replies.length === 0 ? '' : `\n\n${replies.join('\n')}`
   // Say clearly when an AI reviewer gave the verdict. The agent must know that the
@@ -128,15 +171,19 @@ export const renderReviewLine = (review: Review): string => {
   ].join('\n')
 }
 
-export const renderReviewWithThreads = (review: Review, url: string | null): string => {
+export const renderReviewWithThreads = (
+  review: Review,
+  url: string | null,
+  images = new ImageNumbers(),
+): string => {
   // The verdict and its replies also belong here. An agent that examines the
   // progress must see its conversation, not only the counts.
-  const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review)]
+  const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review, images)]
   return [
     renderReview(review, url),
     ...verdict,
     '',
-    renderThreads(openThreads(review), 'Open comments'),
+    renderThreads(openThreads(review), 'Open comments', images),
   ].join('\n')
 }
 
