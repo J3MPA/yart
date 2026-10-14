@@ -233,7 +233,9 @@ yart up
 
 Installs the latest release over the current one, stopping and restarting yart
 around it. Agent sessions already running keep the old `yart-mcp` until they
-restart.
+restart. `yart up --pre` updates to the newest release with pre-releases
+included, which during the beta is the only kind there is. `yart --help` lists
+these commands with the daemon's own options.
 
 ### Uninstalling
 
