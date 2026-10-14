@@ -53,6 +53,24 @@ describe('agentActivity', () => {
     expect(agentActivity(answered)).toBeGreaterThan(agentActivity(quiet))
   })
 
+  it('moves when an AI reviewer comments', () => {
+    const before = agentActivity(review({ threads: [thread(['agent'])] }))
+    const after = agentActivity(review({ threads: [thread(['agent', 'reviewer'])] }))
+    expect(after).toBeGreaterThan(before)
+  })
+
+  it('moves when an AI reviewer passes a verdict, but not when the person does', () => {
+    const none = review({ submissions: [] })
+    const by_person = review({
+      submissions: [{ comments: [] }],
+    } as unknown as Partial<Review>)
+    const by_reviewer = review({
+      submissions: [{ author: 'reviewer', comments: [] }],
+    } as unknown as Partial<Review>)
+    expect(agentActivity(by_person)).toBe(agentActivity(none))
+    expect(agentActivity(by_reviewer)).toBeGreaterThan(agentActivity(none))
+  })
+
   it('moves when the review is advanced onto new work', () => {
     const before = agentActivity(review({ rounds: ['a'] }))
     const after = agentActivity(review({ rounds: ['a', 'b'] }))

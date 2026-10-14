@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Thread } from '@yart/core'
 import { Button } from '@/components/button'
+import { AuthorLabel } from './author-label'
 import { useAppDispatch } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { DraftComment } from './draft-comment'
@@ -48,7 +49,7 @@ export const CommentThread = ({ review_id, thread, drafting }: CommentThreadProp
 
       {thread.comments.map((comment) => (
         <div key={comment.id} className={styles.comment}>
-          <div className={styles.comment_author}>{comment.author}</div>
+          <AuthorLabel author={comment.author} author_name={comment.author_name} />
           <div className={styles.comment_body}>{comment.body}</div>
         </div>
       ))}

@@ -503,3 +503,79 @@ describe('settling an approved review', () => {
     expect((await slow.request(`/api/reviews/${review.id}`)).status).toBe(200)
   })
 })
+
+describe('an AI reviewer', () => {
+  const send = (path: string, body: unknown) => post(path, body)
+
+  it('comments under its name', async () => {
+    const review = await openReview()
+    const response = await send(`/api/reviews/${review.id}/threads`, {
+      path: 'a.txt',
+      line: 2,
+      body: 'this name is unclear',
+      author: 'reviewer',
+      author_name: 'claude-reviewer',
+    })
+    const comment = ((await response.json()) as Review).threads[0]?.comments[0]
+    expect(comment?.author).toBe('reviewer')
+    expect(comment?.author_name).toBe('claude-reviewer')
+  })
+
+  it('refuses an author that is not one, and a name for anyone but a reviewer', async () => {
+    const review = await openReview()
+    const unknown = await send(`/api/reviews/${review.id}/threads`, {
+      path: 'a.txt',
+      line: 2,
+      body: 'x',
+      author: 'robot',
+    })
+    expect(unknown.status).toBe(400)
+    const named_human = await send(`/api/reviews/${review.id}/threads`, {
+      path: 'a.txt',
+      line: 2,
+      body: 'x',
+      author: 'human',
+      author_name: 'me',
+    })
+    expect(named_human.status).toBe(400)
+  })
+
+  it('passes a verdict as itself, with the comments it held', async () => {
+    const review = await openReview()
+    const response = await send(`/api/reviews/${review.id}/submit`, {
+      verdict: 'changes_requested',
+      author: 'reviewer',
+      author_name: 'claude-reviewer',
+      threads: [{ path: 'a.txt', line: 2, body: 'rename this' }],
+    })
+    const submitted = (await response.json()) as Review
+    const verdict = submitted.submissions.at(-1)
+    expect(verdict?.author).toBe('reviewer')
+    expect(verdict?.author_name).toBe('claude-reviewer')
+    expect(submitted.threads[0]?.comments[0]?.author).toBe('reviewer')
+  })
+
+  it('leaves the verdict to the person or a reviewer, not the agent under review', async () => {
+    const review = await openReview()
+    const response = await send(`/api/reviews/${review.id}/submit`, { author: 'agent' })
+    expect(response.status).toBe(400)
+  })
+
+  it('does not finish a review by approving it: only the person’s approval is cleaned up', async () => {
+    const settling = createServer({ repo_path: repo.path, approval_grace_ms: 0 })
+    const request = (path: string, method: string, body?: unknown) =>
+      settling.request(path, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    await request('/api/settings', 'PATCH', { on_approve: 'delete' })
+    const opened = (await (await request('/api/reviews', 'POST', { base })).json()) as Review
+    await request(`/api/reviews/${opened.id}/submit`, 'POST', {
+      verdict: 'approved',
+      author: 'reviewer',
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect((await settling.request(`/api/reviews/${opened.id}`)).status).toBe(200)
+  })
+})

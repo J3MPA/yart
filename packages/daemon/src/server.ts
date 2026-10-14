@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { Hono } from 'hono'
 import {
   latestSubmission,
+  submissionAuthor,
   type CommentAuthor,
+  type SubmissionAuthor,
   type DiffSide,
   type FileContents,
   type ReviewVerdict,
@@ -52,11 +54,54 @@ const CODE_DIR = fileURLToPath(new URL('..', import.meta.url))
 
 interface SubmitBody {
   verdict?: ReviewVerdict
+  author?: unknown
+  author_name?: unknown
   body?: string
   threads?: unknown
   replies?: unknown
   expected_head_sha?: unknown
 }
+
+const AUTHORS: ReadonlySet<string> = new Set<CommentAuthor>(['human', 'agent', 'reviewer'])
+
+/** Long enough for any reviewer's name, short enough to sit beside a comment. */
+const MAX_AUTHOR_NAME = 64
+
+interface Speaker {
+  author: CommentAuthor
+  author_name: string | null
+}
+
+/**
+ * Who a request speaks for, checked rather than trusted: the author decides
+ * how a comment is shown and counted. A name is only for an AI reviewer, since
+ * the person and the agent are each one party.
+ */
+const parseSpeaker = (
+  body: { author?: unknown; author_name?: unknown },
+  allowed: ReadonlySet<string> = AUTHORS,
+): Speaker => {
+  const author = body.author ?? 'human'
+  if (typeof author !== 'string' || !allowed.has(author)) {
+    throw new ReviewError(`author must be one of ${[...allowed].join(', ')}`, 400)
+  }
+  const raw_name = body.author_name ?? null
+  if (raw_name === null) return { author: author as CommentAuthor, author_name: null }
+  if (author !== 'reviewer') {
+    throw new ReviewError('author_name is only for an AI reviewer', 400)
+  }
+  if (typeof raw_name !== 'string' || raw_name.trim() === '') {
+    throw new ReviewError('author_name must be a name', 400)
+  }
+  const author_name = raw_name.trim()
+  if (author_name.length > MAX_AUTHOR_NAME) {
+    throw new ReviewError(`author_name must be at most ${MAX_AUTHOR_NAME} characters`, 400)
+  }
+  return { author: 'reviewer', author_name }
+}
+
+/** Only the person or an AI reviewer passes a verdict; the agent under review does not. */
+const SUBMITTERS: ReadonlySet<string> = new Set(['human', 'reviewer'])
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== ''
@@ -324,7 +369,8 @@ export const createServer = ({
       line?: number
       side?: DiffSide
       body?: string
-      author?: CommentAuthor
+      author?: unknown
+      author_name?: unknown
     }>()
 
     if (typeof body.path !== 'string' || typeof body.line !== 'number') {
@@ -339,24 +385,30 @@ export const createServer = ({
       line: body.line,
       side: body.side,
       body: body.body,
-      author: body.author,
+      ...parseSpeaker(body),
     })
     return context.json(review, 201)
   })
 
   app.post('/api/reviews/:id/threads/:thread_id/comments', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
-    const body = await context.req.json<{ body?: string; author?: CommentAuthor }>()
+    const body = await context.req.json<{
+      body?: string
+      author?: unknown
+      author_name?: unknown
+    }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
     }
+    const { author, author_name } = parseSpeaker(body)
 
     return context.json(
       await service.addComment(
         context.req.param('id'),
         context.req.param('thread_id'),
         body.body,
-        body.author,
+        author,
+        author_name,
       ),
       201,
     )
@@ -381,17 +433,23 @@ export const createServer = ({
   /** A reply under a verdict, which unlike a line comment has no thread. */
   app.post('/api/reviews/:id/submissions/:submission_id/comments', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
-    const body = await context.req.json<{ body?: string; author?: CommentAuthor }>()
+    const body = await context.req.json<{
+      body?: string
+      author?: unknown
+      author_name?: unknown
+    }>()
     if (typeof body.body !== 'string' || body.body.trim() === '') {
       throw new ReviewError('A comment body is required', 400)
     }
+    const { author, author_name } = parseSpeaker(body)
 
     return context.json(
       await service.addSubmissionComment(
         context.req.param('id'),
         context.req.param('submission_id'),
         body.body,
-        body.author,
+        author,
+        author_name,
       ),
       201,
     )
@@ -411,14 +469,21 @@ export const createServer = ({
       throw new ReviewError('expected_head_sha must be a string', 400)
     }
 
+    const speaker = parseSpeaker(body, SUBMITTERS)
     const review = await service.submit(context.req.param('id'), {
       verdict: body.verdict,
+      author: speaker.author as SubmissionAuthor,
+      author_name: speaker.author_name,
       body: body.body,
       ...parseDrafts(body),
       expected_head_sha: body.expected_head_sha,
     })
+    // Only the person's approval finishes a review: an AI reviewer's hands it to
+    // them, so it must not be archived or deleted before they have looked.
     const latest = latestSubmission(review)
-    if (latest?.verdict === 'approved') settleApproval(review.id, latest.id)
+    if (latest?.verdict === 'approved' && submissionAuthor(latest) === 'human') {
+      settleApproval(review.id, latest.id)
+    }
     return context.json(review)
   })
 

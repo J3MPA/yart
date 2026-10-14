@@ -23,7 +23,9 @@ export type {
   ReviewStatus,
   ReviewSubmission,
   ReviewVerdict,
+  SubmissionAuthor,
 } from './review.ts'
+export { describeAuthor, submissionAuthor } from './authors.ts'
 
 export {
   gapLines,

@@ -1,7 +1,12 @@
 import type { Review } from './review.ts'
+import type { CommentAuthor } from './types.ts'
+
+/** Authors whose activity is news to the person: the agent and any AI reviewer. */
+const isAi = (author: CommentAuthor): boolean => author !== 'human'
 
 /**
- * How much the agent has said and done on a review, as a single number.
+ * How much the agent, and any AI reviewer, has said and done on a review, as a
+ * single number.
  *
  * Used to tell "there is something here you have not seen" from "this is how
  * you left it". A timestamp would be the obvious thing to compare, but
@@ -20,13 +25,15 @@ export const agentActivity = (review: Review): number => {
     // to count on its own or that turn would pass unnoticed.
     if (thread.status === 'resolved') count += 1
     for (const comment of thread.comments) {
-      if (comment.author === 'agent') count += 1
+      if (isAi(comment.author)) count += 1
     }
   }
 
   for (const submission of review.submissions) {
+    // A reviewer's verdict is news; the person's own is not.
+    if (submission.author === 'reviewer') count += 1
     for (const comment of submission.comments) {
-      if (comment.author === 'agent') count += 1
+      if (isAi(comment.author)) count += 1
     }
   }
 

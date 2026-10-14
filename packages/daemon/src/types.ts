@@ -9,4 +9,5 @@ export type {
   ReviewStatus,
   ReviewSubmission,
   ReviewVerdict,
+  SubmissionAuthor,
 } from '@yart/core'

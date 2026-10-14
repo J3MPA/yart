@@ -245,6 +245,47 @@ which would sit on top of this rather than replace it: a plugin could register
 the MCP server pointing at the installed `yart-mcp`, and carry the slash command
 and the review-on-stop hook from the finding below.
 
+## AI reviewers
+
+Requested: an AI agent should be able to review code too. Write the code, have an
+AI review it, let the two agents go back and forth, and finally review the result
+yourself, with the AI's comments and the answers to them in front of you. Some
+also want a commit hook to start that loop, so that a commit only completes once
+it passes AI review.
+
+**Done: the reviewer role.** A comment can be written by `human`, `agent` or
+`reviewer`, an AI reviewer with an optional `author_name`, and a verdict records
+whether the person or a reviewer passed it. The daemon checks authors, a reviewer
+can pass a verdict with the comments it held, the agent under review cannot, and
+only the person's approval triggers the clean-up setting. A reviewer's comments
+and verdicts count as activity, so the person notices an AI review moving.
+
+What is left, in order:
+
+1. **The reviewer's tools.** MCP tools for the reviewing side: comment on a line,
+   pass a verdict, and wait for the author to answer and advance. The author's
+   loop needs nothing new, since it waits for a verdict whoever passes it. A round
+   limit, three by default and set on the Settings page, ends a loop where two
+   agents will not agree, and hands the review to the person.
+2. **The person's final review.** The page shows the AI conversation round by
+   round, and the AI's approval as a step before the person's verdict.
+3. **The commit hook.** `yart hook pre-commit` reviews the staged changes —
+   `git write-tree` makes them a tree, which a review can already be opened over —
+   runs a reviewer from a command the person configures, and lets the commit
+   through on approval or cancels it on changes requested, leaving the review open
+   for the author agent. The next commit advances the same review. Opt in, since
+   it blocks the commit for a model run; `--no-verify` skips it. `yart hook
+install` sets it up.
+4. **A reviewer that ships with yart.** A Claude Code subagent definition with its
+   own instructions, so that an agent asked to have its work reviewed spawns a
+   reviewer it did not brief itself. It fits the plugin idea under the finding on
+   agents not reaching for the tools.
+
+How a reviewer is run is up to the person: a subagent the author agent spawns, a
+second session they open, or the hook. All use the same tools. None needs an MCP
+server to push to an agent, which Claude Code does not offer: each side waits in a
+tool call while the other works, and the hook learns the verdict by waiting for it.
+
 ## 2. Diff any two arbitrary points
 
 A review can now be opened over any commit or tree, including a bare tree hash,
