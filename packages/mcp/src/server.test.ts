@@ -483,3 +483,40 @@ describe('an AI reviewer', () => {
     )
   })
 })
+
+describe('images for the agent', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9])
+
+  const daemonPost = async (path: string, body: unknown) =>
+    (await fetch(`http://localhost:${port}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((response) => response.json())) as { id: string }
+
+  it('gives the agent the images of the person, with the numbers from the text', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    const { id } = await daemonPost(`/api/reviews/${review_id}/attachments`, {
+      data: PNG.toString('base64'),
+    })
+    await daemonPost(`/api/reviews/${review_id}/submit`, {
+      verdict: 'changes_requested',
+      body: 'The button is wrong.',
+      attachments: [id],
+      threads: [{ path: 'a.txt', line: 2, body: 'and here', attachments: [id] }],
+    })
+
+    const result = await client.callTool({
+      name: 'await_review',
+      arguments: { review_id, timeout_seconds: 5 },
+    })
+    const blocks = result.content as { type: string; text?: string; data?: string }[]
+    const body = blocks[0]?.text ?? ''
+    expect(body).toContain('The button is wrong.  [image 1]')
+    expect(body).toContain('human: and here  [image 1]')
+    expect(blocks.filter((block) => block.type === 'image')).toEqual([
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- MCP wire field
+      { type: 'image', data: PNG.toString('base64'), mimeType: 'image/png' },
+    ])
+  })
+})

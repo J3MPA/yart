@@ -1,7 +1,7 @@
 import { createThread, type Comment, type Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 import { describe, expect, it } from 'vitest'
-import { openThreads, renderThread, renderThreads, renderVerdict } from './render.ts'
+import { ImageNumbers, openThreads, renderThread, renderThreads, renderVerdict } from './render.ts'
 
 const COMMENT: Comment = {
   id: 'c1',
@@ -120,5 +120,17 @@ describe('an AI reviewer', () => {
       ],
     } as unknown as Review
     expect(renderVerdict(review)).toContain('Verdict: APPROVED by reviewer claude-reviewer')
+  })
+})
+
+describe('ImageNumbers', () => {
+  it('numbers each image one time, in the order of the text', () => {
+    const images = new ImageNumbers()
+    const a = { id: 'a', media_type: 'image/png' as const }
+    const b = { id: 'b', media_type: 'image/gif' as const }
+    expect(images.label([a])).toBe('  [image 1]')
+    expect(images.label([b, a])).toBe('  [image 2, image 1]')
+    expect(images.label(undefined)).toBe('')
+    expect(images.attachments).toEqual([a, b])
   })
 })

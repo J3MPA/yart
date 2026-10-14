@@ -921,6 +921,11 @@ empty review opens nothing, because there is nothing to read. Set
 `YART_NO_BROWSER=1` where a window is not correct. For example: a container, a
 remote shell, or a second screen.
 
+**The agent sees your images.** `await_review`, `get_review` and `await_author`
+give the images of the comments after the text. The text gives each comment the
+numbers of its images, for example `[image 1]`. One result gives 10 images at
+most.
+
 Comments come back as text, not as JSON. A model reads them and decides what to
 edit. A comment next to its code is easier to act on:
 
