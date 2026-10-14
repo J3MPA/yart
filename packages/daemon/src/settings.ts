@@ -5,6 +5,7 @@ import {
   isAiReviewRounds,
   isReviewerEffort,
   MAX_AI_REVIEW_ROUNDS,
+  MAX_REVIEWER_COMMAND_LENGTH,
   MAX_REVIEWER_INSTRUCTIONS_LENGTH,
   MAX_REVIEWER_MODEL_LENGTH,
   MIN_AI_REVIEW_ROUNDS,
@@ -39,6 +40,7 @@ const optionalText = (value: unknown, max_length: number): string | null | undef
 const fromStored = (stored: Record<string, unknown>): Settings => {
   const model = optionalText(stored.reviewer_model, MAX_REVIEWER_MODEL_LENGTH)
   const instructions = optionalText(stored.reviewer_instructions, MAX_REVIEWER_INSTRUCTIONS_LENGTH)
+  const command = optionalText(stored.reviewer_command, MAX_REVIEWER_COMMAND_LENGTH)
   return {
     on_approve: isApprovalAction(stored.on_approve)
       ? stored.on_approve
@@ -52,6 +54,7 @@ const fromStored = (stored: Record<string, unknown>): Settings => {
       : DEFAULT_SETTINGS.reviewer_effort,
     reviewer_instructions:
       instructions === undefined ? DEFAULT_SETTINGS.reviewer_instructions : instructions,
+    reviewer_command: command === undefined ? DEFAULT_SETTINGS.reviewer_command : command,
   }
 }
 
@@ -129,6 +132,16 @@ export class SettingsStore {
         )
       }
       next.reviewer_instructions = instructions
+    }
+    if (changes.reviewer_command !== undefined) {
+      const command = optionalText(changes.reviewer_command, MAX_REVIEWER_COMMAND_LENGTH)
+      if (command === undefined) {
+        throw new ReviewError(
+          `reviewer_command must be a command of at most ${MAX_REVIEWER_COMMAND_LENGTH} characters, or null`,
+          400,
+        )
+      }
+      next.reviewer_command = command
     }
 
     if (this.path === null) {

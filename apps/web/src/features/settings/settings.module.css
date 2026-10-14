@@ -135,3 +135,7 @@
   outline: 2px solid var(--yart-color-accent);
   outline-offset: 1px;
 }
+
+.code_input {
+  font-family: var(--yart-font-mono);
+}

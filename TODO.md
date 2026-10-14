@@ -299,7 +299,14 @@ The work that remains, in order:
    The comments of a reviewer go with the verdict that they came with. The
    replies of the agent go with the verdict that they answer. The approval of
    the AI is one step, and the verdict of the person comes after it.
-3. **The commit hook.** `yart hook pre-commit` reviews the staged changes.
+3. ~~**The commit hook.**~~ Done. `yart hook install`, `uninstall` and
+   `pre-commit`, with the command in the settings, as the README tells. We tried
+   it with real commits: a request for changes stopped the commit, the next
+   commit moved the same review and the approval let it continue, and
+   `--no-verify` skipped it. Not done: the snapshot tree of a stopped commit is
+   not pinned with a ref. After the fix, nothing refers to its blobs, and
+   garbage collection can remove them after two weeks. The plan was this:
+   `yart hook pre-commit` reviews the staged changes.
    `git write-tree` makes a tree from them, and a review can already use a tree.
    The hook runs a reviewer from a command that the person sets. On approval, it
    lets the commit continue. On a request for changes, it stops the commit and

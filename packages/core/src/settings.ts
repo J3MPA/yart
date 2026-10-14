@@ -21,12 +21,20 @@ export interface Settings {
   reviewer_effort: ReviewerEffort | null
   /** What the person wants a reviewer to look for. yart adds it to the instructions. */
   reviewer_instructions: string | null
+  /**
+   * The shell command that the commit hook runs to start a reviewer, or null.
+   * When it is null, the hook does nothing. The command gets the review and the
+   * reviewer settings in environment variables, not in its text. Thus a value
+   * with quotes cannot break the command.
+   */
+  reviewer_command: string | null
 }
 
 export const MIN_AI_REVIEW_ROUNDS = 1
 export const MAX_AI_REVIEW_ROUNDS = 10
 export const MAX_REVIEWER_MODEL_LENGTH = 100
 export const MAX_REVIEWER_INSTRUCTIONS_LENGTH = 4000
+export const MAX_REVIEWER_COMMAND_LENGTH = 2000
 export const REVIEWER_EFFORTS: readonly ReviewerEffort[] = ['low', 'medium', 'high']
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewer_model: null,
   reviewer_effort: null,
   reviewer_instructions: null,
+  reviewer_command: null,
 }
 
 export const isAiReviewRounds = (value: unknown): value is number =>
