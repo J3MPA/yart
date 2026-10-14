@@ -71,6 +71,21 @@ describe('health', () => {
     expect(body.code_dir).toBe(fileURLToPath(new URL('..', import.meta.url)))
   })
 
+  it('stops on request only when it can stop', async () => {
+    const post = (target: Hono) =>
+      target.request('/api/shutdown', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+    expect((await post(app)).status).toBe(404)
+    const calls: string[] = []
+    const stoppable = createServer({ repo_path: repo.path, shutdown: () => calls.push('stop') })
+    expect((await post(stoppable)).status).toBe(200)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(calls).toEqual(['stop'])
+  })
+
   it('reports its version to the app', async () => {
     const body = (await (await app.request('/api/version')).json()) as { version: string }
     expect(body.version).toBe(VERSION)
