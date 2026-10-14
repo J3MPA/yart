@@ -621,6 +621,14 @@ not on all interfaces. Thus nothing else on the network can connect to it. This
 is important, because the daemon can read all files in all repositories that it
 served.
 
+**Only requests to this computer get an answer.** A web page can make its own
+domain name point to `127.0.0.1`. Then the browser lets the page read the
+answers of the daemon, because the origin is the same. But the browser still
+sends the name of the page in the `Host` header. The daemon answers only
+`localhost`, `127.0.0.1` and `[::1]`, and refuses all other names with 403.
+A request with no `Host` header passes, because only a browser can do this
+attack, and a browser always sends the header.
+
 The daemon has three parts.
 
 **A git adapter.** It reads revision ranges, changed files with the blob on each

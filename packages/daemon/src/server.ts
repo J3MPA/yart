@@ -97,6 +97,16 @@ const parseSpeaker = (
 /** Only the person or an AI reviewer gives a verdict. The agent under review does not. */
 const SUBMITTERS: ReadonlySet<string> = new Set(['human', 'reviewer'])
 
+/** The names of this computer that a request to the daemon can use. */
+const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** The name in a `Host` header, without the port, in lowercase. */
+export const hostName = (host: string): string => {
+  const trimmed = host.trim().toLowerCase()
+  if (trimmed.startsWith('[')) return trimmed.slice(0, trimmed.indexOf(']') + 1)
+  return trimmed.split(':')[0] ?? trimmed
+}
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== ''
 
@@ -245,6 +255,29 @@ export const createServer = ({
     const status = statusFor(cause)
     if (status === 500) console.error(cause)
     return context.json<ErrorBody>({ error: messageFor(cause) }, status as 400)
+  })
+
+  /**
+   * Refuses a request that a browser sent to a name other than this computer.
+   *
+   * A web page can make its own domain name point to `127.0.0.1`. Then the
+   * browser sends the requests of the page to the daemon, and lets the page
+   * read the answers, because the origin is the same. The answers include file
+   * contents. The browser still sends the name of the page in `Host`. Thus the
+   * daemon answers only the names of this computer.
+   *
+   * A request with no `Host` does not come from a browser, because a browser
+   * always sends it. Such a request cannot do this attack, thus it can pass.
+   */
+  app.use('*', async (context, next) => {
+    const host = context.req.header('host')
+    if (host !== undefined && !LOCAL_HOSTS.has(hostName(host))) {
+      return context.json<ErrorBody>(
+        { error: `yart answers only requests to localhost, not to ${hostName(host)}.` },
+        403,
+      )
+    }
+    await next()
   })
 
   /**
