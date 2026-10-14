@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Review } from './types.ts'
 import { createServer, hostName } from './server.ts'
 import { TestRepo } from './test-repo.ts'
+import { VERSION } from './version.ts'
 
 const FOUR_LINES = 'alpha\nbeta\ngamma\ndelta\n'
 
@@ -68,6 +69,11 @@ describe('health', () => {
   it('reports where its code runs from', async () => {
     const body = (await (await app.request('/health')).json()) as { code_dir: string }
     expect(body.code_dir).toBe(fileURLToPath(new URL('..', import.meta.url)))
+  })
+
+  it('reports its version to the app', async () => {
+    const body = (await (await app.request('/api/version')).json()) as { version: string }
+    expect(body.version).toBe(VERSION)
   })
 })
 

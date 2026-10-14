@@ -64,6 +64,9 @@ export const reviewApi = createApi({
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
+    getVersion: builder.query<{ version: string }, void>({
+      query: () => '/version',
+    }),
     getSettings: builder.query<Settings, void>({
       query: () => '/settings',
       providesTags: ['Settings'],
@@ -148,6 +151,7 @@ export const reviewApi = createApi({
 })
 
 export const {
+  useGetVersionQuery,
   useGetSettingsQuery,
   useUpdateSettingsMutation,
   useListReviewsQuery,

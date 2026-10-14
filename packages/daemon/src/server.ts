@@ -312,6 +312,8 @@ export const createServer = ({
     context.json({ ok: true, repo_path, version: VERSION, code_dir: CODE_DIR }),
   )
 
+  app.get('/api/version', (context) => context.json({ version: VERSION }))
+
   app.get('/api/reviews', async (context) => {
     const archived = context.req.query('archived') === 'true'
     const lists = await Promise.all(
