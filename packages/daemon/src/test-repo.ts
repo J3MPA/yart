@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 /**
- * A throwaway git repository for tests.
+ * A temporary git repository for tests.
  *
- * Exercising the git adapter against real git output is the whole point — a
- * mocked `git` would only prove the mock matches our assumptions about a format
- * we do not control.
+ * The tests must run the git adapter against the real output of git. A mock of
+ * `git` would only show that the mock agrees with our assumptions about a
+ * format that we do not control.
  */
 export class TestRepo {
   readonly path: string
@@ -54,8 +54,8 @@ export class TestRepo {
   /**
    * Adds a linked worktree and returns its path.
    *
-   * Worth exercising because a linked worktree's `.git` is a file rather than a
-   * directory, which anything assembling paths under it will trip over.
+   * Tests need this, because the `.git` of a linked worktree is a file, not a
+   * directory. Code that makes paths under it fails on this.
    */
   addWorktree(name: string): string {
     const worktree_path = `${this.path}-wt-${name}`

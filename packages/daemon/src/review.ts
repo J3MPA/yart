@@ -59,16 +59,16 @@ export interface CreateReviewParams {
   repo_path: string
   base: string
   head?: string
-  /** Overrides the default, which is the head commit's subject. */
+  /** Replaces the default, which is the subject of the head commit. */
   title?: string
 }
 
 /**
- * Names a review for a person scanning a list of them.
+ * Gives a review a name for a person who reads a list of reviews.
  *
- * The head commit's subject is almost always what the review is about, and it
- * is already written; falling back to an abbreviated range at least stays
- * stable, which `main..HEAD` does not.
+ * The subject of the head commit is almost always what the review is about, and
+ * it already exists. Without a commit, a short range is the name. It stays the
+ * same, but `main..HEAD` does not.
  */
 const deriveTitle = async (repo_path: string, head_sha: string, base_sha: string) =>
   (await commitSubject(repo_path, head_sha)) ?? `${base_sha.slice(0, 8)}..${head_sha.slice(0, 8)}`
@@ -78,7 +78,7 @@ interface ResolvedHead {
   is_snapshot: boolean
 }
 
-/** Resolves the head of a review, snapshotting the working tree when asked to. */
+/** Finds the head of a review. It makes a snapshot of the working tree when the request asks. */
 const resolveHead = async (
   repo_path: string,
   head: string,
@@ -96,34 +96,34 @@ const resolveHead = async (
 /**
  * Names the working tree as one end of a review.
  *
- * The moment an agent finishes work is before it has committed anything, so a
- * review has to be able to point at what is on disk rather than only at
- * history.
+ * An agent finishes its work before it commits anything. Thus a review must be
+ * able to point to what is on the disk, not only to the history.
  */
 export const WORKING_TREE = 'working'
 
 export interface ListReviewsParams {
-  /** Return archived reviews instead of active ones. */
+  /** Return the archived reviews, not the active reviews. */
   archived?: boolean
 }
 
-/** A line comment written into a pending review, not yet a thread. */
+/** A comment on a line in a pending review. It is not a thread yet. */
 export interface DraftThread {
   path: string
   line: number
   side?: DiffSide
   body: string
   /**
-   * The blob the line was counted in, when the drafter knows it.
+   * The blob of the line number, when the writer of the draft knows it.
    *
-   * Checked against the file as it is now, because a draft can be held across
-   * rounds: the review's head having moved says nothing about this one file,
-   * but this file's blob having moved means the line may point elsewhere.
+   * The service compares it with the file as it is now, because a draft can stay
+   * through many rounds. A new head of the review says nothing about this one
+   * file. But a new blob of this file means that the line can point to a
+   * different place.
    */
   blob_sha?: string
 }
 
-/** A reply written into a pending review, to a thread that already exists. */
+/** A reply in a pending review, to a thread that already exists. */
 export interface DraftReply {
   thread_id: string
   body: string
@@ -131,18 +131,18 @@ export interface DraftReply {
 
 export interface SubmitParams {
   verdict?: ReviewVerdict
-  /** Who passes the verdict. Comments held for it are theirs too. */
+  /** Who gives the verdict. The held comments also belong to this author. */
   author?: SubmissionAuthor
   author_name?: string | null
   body?: string | null
   threads?: readonly DraftThread[]
   replies?: readonly DraftReply[]
   /**
-   * The head the submitter was looking at.
+   * The head that the submitter looked at.
    *
-   * When given and no longer current, the submission is refused: drafted lines
-   * were numbered against that head, and a verdict passed on it says nothing
-   * about code the submitter has not seen.
+   * If this head is given and is not current, the service refuses the
+   * submission. The line numbers of the drafts are for that head. A verdict on
+   * it says nothing about code that the submitter did not see.
    */
   expected_head_sha?: string
 }
@@ -156,7 +156,7 @@ export interface AddThreadParams {
   author_name?: string | null
 }
 
-/** A comment, carrying a reviewer's name only when there is one to carry. */
+/** A comment. It has the name of a reviewer only when there is a name. */
 const newComment = (
   body: string,
   author: CommentAuthor,
@@ -236,11 +236,11 @@ export class ReviewService {
   }
 
   /**
-   * Replaces a placeholder title with the head commit's subject, once.
+   * Replaces a temporary title with the subject of the head commit, one time.
    *
-   * Reviews written before titles existed would otherwise show a hash range
-   * forever. The result is persisted so this costs one git call per review
-   * rather than one per read.
+   * Without this, reviews from before titles existed would always show a hash
+   * range. The service saves the result. Thus this costs one git call for each
+   * review, not one for each read.
    */
   private async upgradeTitle(review: Review): Promise<Review> {
     if (review.title !== placeholderTitle(review)) return review
@@ -269,7 +269,7 @@ export class ReviewService {
     return this.persist({ ...review, threads: [...review.threads, thread] })
   }
 
-  /** Resolves a comment's line against the review and captures its context. */
+  /** Finds the line of a comment in the review, and keeps its context. */
   private async buildThread(review: Review, params: AddThreadParams): Promise<Thread> {
     const { path, line, side = 'head', body, author = 'human', author_name = null } = params
 
@@ -294,8 +294,8 @@ export class ReviewService {
         comment,
       })
     } catch (cause) {
-      // createThread rejects a line outside the file; that is a bad request
-      // rather than a server fault, so it is reported as one.
+      // createThread refuses a line that is not in the file. That is a bad
+      // request, not a server fault. Thus the error tells it as a bad request.
       if (cause instanceof RangeError) throw new ReviewError(cause.message, 400)
       throw cause
     }
@@ -334,11 +334,11 @@ export class ReviewService {
   }
 
   /**
-   * Posts a reply under a verdict.
+   * Adds a reply to a verdict.
    *
-   * Addressed by submission id rather than always landing on the latest,
-   * because a review that has been round several times has several verdicts and
-   * a reply belongs to the one it answers.
+   * The reply goes to a submission by its id, not always to the latest. A review
+   * that had many rounds has many verdicts, and a reply belongs to the verdict
+   * that it answers.
    */
   async addSubmissionComment(
     id: string,
@@ -360,11 +360,11 @@ export class ReviewService {
   }
 
   /**
-   * Hands the review back, with any comments that were held for it.
+   * Gives the review back, with the comments that were held for it.
    *
-   * Everything lands in one write or none of it does. A pending review is sent
-   * as a unit, and half of one — some comments posted, the verdict not — would
-   * leave the agent reading a review its author had not finished.
+   * The service writes all of it in one write, or none of it. A pending review
+   * goes as one unit. Half a review, with some comments sent but no verdict,
+   * would show the agent a review that its author did not complete.
    */
   async submit(id: string, params: SubmitParams = {}): Promise<Review> {
     const review = await this.get(id)
@@ -431,18 +431,18 @@ export class ReviewService {
   }
 
   /**
-   * Moves the review onto a newer head and re-anchors every thread onto it.
+   * Moves the review to a newer head, and attaches each thread to it again.
    *
-   * Threads are re-anchored one at a time rather than through `reanchorThreads`
-   * because that batch keys resolutions by blob hash alone, and two files with
-   * identical content share a hash — so a single resolution could not describe
-   * both. Line maps are cached here instead, which recovers the same saving.
+   * The service attaches the threads one at a time, not with `reanchorThreads`.
+   * That function uses only the blob hash as the key. Two files with the same
+   * content have the same hash, thus one resolution could not describe the two.
+   * The service keeps the line maps in a cache, which gives the same saving.
    */
   async advanceHead(id: string, head?: string): Promise<Review> {
     const review = await this.get(id)
 
-    // A snapshot review re-snapshots unless a revision is named explicitly,
-    // because "the working tree now" is the only thing that has moved.
+    // A snapshot review makes a new snapshot, unless the request names a
+    // revision. Only "the working tree now" moved.
     const target = head ?? (review.head_is_snapshot ? WORKING_TREE : 'HEAD')
     const is_snapshot = target === WORKING_TREE
     const head_sha = is_snapshot
@@ -466,7 +466,7 @@ export class ReviewService {
 
     for (const thread of review.threads) {
       const { anchor } = thread
-      // The base side of the range never moves, so its anchors stay valid.
+      // The base side of the range never moves. Thus its anchors stay correct.
       if (anchor === null || anchor.side === 'base') {
         threads.push(thread)
         continue
@@ -505,8 +505,8 @@ export class ReviewService {
       threads.push(reanchorThread(thread, resolution))
     }
 
-    // Pinned after the line maps are built, so the previous snapshot stays
-    // reachable while the threads that point into it are re-anchored.
+    // Pin the new snapshot after the line maps exist. Thus the old snapshot stays
+    // reachable while the threads that point into it get their new anchors.
     if (is_snapshot) await pinSnapshot(review.repo_path, review.id, head_sha)
 
     return this.persist({
@@ -523,8 +523,8 @@ export class ReviewService {
   }
 
   /**
-   * Archiving keeps the review and its comments; only the default listing
-   * stops showing it. Deleting is the irreversible one.
+   * An archived review keeps all its comments. Only the default list does not
+   * show it. A deletion is the action that you cannot undo.
    */
   async setArchived(id: string, archived: boolean): Promise<Review> {
     const review = await this.get(id)
@@ -533,18 +533,18 @@ export class ReviewService {
   }
 
   async remove(id: string): Promise<void> {
-    // The snapshot ref exists only to keep this review's blobs alive.
+    // The snapshot ref exists only to keep the blobs of this review.
     const review = await this.store.load(id)
     if (review !== null) await unpinSnapshot(review.repo_path, id)
     await this.store.remove(id)
   }
 
-  /** Whether a review is kept in this repository's store. */
+  /** Tells if the store of this repository keeps a review. */
   async holds(id: string): Promise<boolean> {
     return (await this.store.load(id)) !== null
   }
 
-  /** Whether there is uncommitted work that a snapshot would capture. */
+  /** Tells if there is uncommitted work for a snapshot to keep. */
   async hasUncommittedWork(): Promise<boolean> {
     return isWorkingTreeDirty(this.repo_path)
   }

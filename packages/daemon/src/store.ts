@@ -4,39 +4,38 @@ import { findGitCommonDir } from './git.ts'
 import type { Review } from './types.ts'
 
 /**
- * Reviews live under the repository's git directory rather than in the working
- * tree.
+ * Reviews are in the git directory of the repository, not in the working tree.
  *
- * They are per-repository state that no one wants to see in `git status`, and
- * git's own directory is already excluded from every diff yart will show.
+ * They are the state of one repository, and nobody wants to see them in
+ * `git status`. Also, no diff that yart shows includes the git directory.
  *
- * The shared directory is asked of git rather than assembled from `.git`,
- * because in a linked worktree that is a file rather than a directory.
+ * This function asks git for the shared directory. It does not make the path
+ * from `.git`, because in a linked worktree `.git` is a file, not a directory.
  */
 export const storeDir = async (repo_path: string): Promise<string> =>
   join(await findGitCommonDir(repo_path), 'yart', 'reviews')
 
 /**
- * The placeholder title a review written before titles existed gets.
+ * The temporary title of a review from before titles existed.
  *
- * Exported so the service can recognise it and replace it with something a
- * person would actually read; the store itself does no git.
+ * The service uses it to find such a review, and replaces it with a title that
+ * a person can read. The store itself does not use git.
  */
 export const placeholderTitle = (review: Review): string =>
   `${review.base_sha.slice(0, 8)}..${review.head_sha.slice(0, 8)}`
 
 /**
- * Fills in fields added after a review was written.
+ * Gives values to the fields that were added after a review was written.
  *
- * Reviews are long-lived local state, so an older file has to keep opening
- * rather than crash the list it appears in.
+ * Reviews are local state that stays for a long time. Thus an older file must
+ * still open. It must not cause a crash of the list that shows it.
  */
 const withDefaults = (review: Review): Review => ({
   ...review,
   title: review.title ?? placeholderTitle(review),
   head_branch: review.head_branch ?? null,
-  // Reviews written before a submission could be replied to have no list to
-  // append to, and nothing else would put one there.
+  // Reviews from before replies to a verdict existed have no list of replies,
+  // and nothing else adds one.
   submissions: (review.submissions ?? []).map((submission) => ({
     ...submission,
     comments: submission.comments ?? [],
@@ -47,7 +46,7 @@ const withDefaults = (review: Review): Review => ({
 
 export class ReviewStore {
   private readonly repo_path: string
-  /** Resolved once: a repository does not move while the daemon is running. */
+  /** Found one time. A repository does not move while the daemon runs. */
   private resolved_dir: string | null
 
   constructor(repo_path: string) {
@@ -66,8 +65,8 @@ export class ReviewStore {
 
   async save(review: Review): Promise<void> {
     await mkdir(await this.dir(), { recursive: true })
-    // Written whole rather than patched: a review is small, and a partial write
-    // would leave threads pointing at a revision the file no longer records.
+    // Write the full review, not a part of it. A review is small. A partial write
+    // would leave threads that point to a revision that the file does not record.
     await writeFile(await this.pathFor(review.id), `${JSON.stringify(review, null, 2)}\n`, 'utf8')
   }
 
