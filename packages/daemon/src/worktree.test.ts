@@ -30,7 +30,7 @@ afterEach(() => {
 describe('a linked worktree', () => {
   it('has a .git file rather than a directory, which is the whole problem', () => {
     expect(existsSync(join(worktree, '.git'))).toBe(true)
-    // Joining a path under this would fail with ENOTDIR.
+    // A path under this would fail with ENOTDIR.
     expect(existsSync(join(worktree, '.git', 'config'))).toBe(false)
   })
 

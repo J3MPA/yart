@@ -14,7 +14,7 @@ import type { Review } from '@yart/daemon'
 
 export const DEFAULT_PORT = 7777
 
-/** How long to wait for a daemon we started to answer its health check. */
+/** How long to wait until a daemon that we started answers its health check. */
 const STARTUP_TIMEOUT_MS = 10_000
 const STARTUP_POLL_MS = 150
 
@@ -28,7 +28,7 @@ export class DaemonError extends Error {
   }
 }
 
-/** What `/health` answers. `version` is absent from a daemon older than it. */
+/** The answer of `/health`. A daemon that is older than `version` does not send it. */
 interface DaemonHealth {
   ok: boolean
   repo_path?: string
@@ -38,13 +38,14 @@ interface DaemonHealth {
 
 export interface DaemonClientOptions {
   port?: number
-  /** The repository this client works in; null for none, as in the desktop app. */
+  /** The repository of this client, or null for none, as in the desktop app. */
   repo_path?: string | null
-  /** Start a daemon when none is listening. On by default, so the agent's first call works. */
+  /** Start a daemon when no daemon listens. It is on by default, thus the first call of the agent works. */
   autostart?: boolean
   /**
-   * The daemon entry point to start. Defaults to this workspace's, which a
-   * packaged app does not have: it passes the bundled one instead.
+   * The entry point of the daemon to start. The default is the entry point of
+   * this workspace. A packaged app does not have it, thus it gives the bundled
+   * entry point.
    */
   daemon_cli?: string
 }
@@ -54,7 +55,7 @@ const resolveDaemonCli = (): string => {
   return requireFromHere.resolve('@yart/daemon/cli')
 }
 
-/** One round of an AI reviewer's: its verdict and what it says with it. */
+/** One round of an AI reviewer: its verdict and what it says with it. */
 export interface ReviewerRound {
   verdict: ReviewVerdict
   summary?: string
@@ -64,10 +65,10 @@ export interface ReviewerRound {
 }
 
 /**
- * Whether the agent under review has done anything since an AI reviewer's last
- * verdict: advanced the review onto new work, or said something in it. Either
- * is the reviewer's turn — a reply alone may be the author disagreeing rather
- * than fixing, and that needs answering too.
+ * Tells if the agent under review did something after the last verdict of an AI
+ * reviewer. It can move the review to new work, or write in it. Both give the
+ * turn to the reviewer. A reply alone can mean that the author disagrees, and
+ * that also needs an answer.
  */
 export const authorHasAnswered = (review: Review): boolean => {
   const verdict = latestSubmission(review)
@@ -113,11 +114,11 @@ export class DaemonClient {
   /**
    * Refuses a daemon that would review the wrong repository.
    *
-   * A daemon from before `version` existed serves only the repository it was
-   * started in, and ignores the one a request names — so reusing it from
-   * anywhere else would review its working tree instead, without a word. That
-   * daemon is still running for a while after an update, which is exactly when
-   * this matters. One started in this same repository is fine to keep using.
+   * A daemon from before `version` existed serves only the repository that it
+   * started in. It ignores the repository that a request names. Thus from a
+   * different place, it would review its own working tree, with no warning.
+   * After an update, such a daemon still runs for some time, and then this check
+   * is important. A daemon that started in this same repository is correct.
    */
   private checkServes(health: DaemonHealth): void {
     if (health.version !== undefined || health.repo_path === undefined) return
@@ -135,11 +136,12 @@ export class DaemonClient {
   }
 
   /**
-   * Makes sure a daemon is listening, starting one if not.
+   * Makes sure that a daemon listens. It starts one if no daemon listens.
    *
-   * The child is detached and its stdio discarded so the review outlives this
-   * process: an MCP server dies with its client, and a review has to survive
-   * that. An already-running daemon is reused, whoever started it.
+   * The child process is detached, and its stdio goes nowhere. Thus the review
+   * continues after this process stops. An MCP server stops with its client, and
+   * a review must continue after that. A daemon that already runs is used again,
+   * whoever started it.
    */
   async ensureRunning(): Promise<void> {
     if (this.started) return
@@ -165,8 +167,8 @@ export class DaemonClient {
       {
         detached: true,
         stdio: 'ignore',
-        // Inside the desktop app this process is Electron, which runs as plain
-        // Node only when told to; anywhere else the variable is ignored.
+        // In the desktop app, this process is Electron. Electron runs as plain
+        // Node only when this variable tells it to. All other processes ignore it.
         // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
         env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       },
@@ -219,8 +221,8 @@ export class DaemonClient {
   }
 
   createReview(base?: string, head?: string, title?: string): Promise<Review> {
-    // Named on every request: one daemon serves every repository, and this is
-    // the only thing that tells it which one the agent is working in.
+    // Each request names the repository. One daemon serves all repositories, and
+    // only this tells it which repository the agent works in.
     return this.post<Review>('/api/reviews', { base, head, title, repo_path: this.repo_path })
   }
 
@@ -250,7 +252,7 @@ export class DaemonClient {
     return this.request<Settings>('/api/settings')
   }
 
-  /** Passes a verdict as an AI reviewer, with the comments and replies of its round. */
+  /** Gives a verdict as an AI reviewer, with the comments and replies of its round. */
   submitAsReviewer(review_id: string, round: ReviewerRound): Promise<Review> {
     return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/submit`, {
       verdict: round.verdict,
@@ -274,10 +276,10 @@ export class DaemonClient {
   }
 
   /**
-   * Polls until the review is submitted or the deadline passes.
+   * Polls until the review has a verdict, or until the time limit is over.
    *
-   * Polling rather than a held-open connection: the daemon keeps no waiter
-   * state, and a dropped poll costs one second rather than a lost wakeup.
+   * It polls, and does not keep a connection open. The daemon keeps no state
+   * about who waits. A lost poll costs one second, not a lost signal.
    */
   async waitForAuthor(
     review_id: string,

@@ -22,7 +22,7 @@ afterEach(() => {
   repo.dispose()
 })
 
-/** Creates a review over base..HEAD after applying a change. */
+/** Makes a review over base..HEAD after it applies a change. */
 const reviewAfter = async (change: () => void) => {
   change()
   repo.commit('change')
@@ -508,9 +508,9 @@ describe('persistence', () => {
     const review = await reviewAfter(() => repo.write('a.txt', 'alpha\nCHANGED\ngamma\ndelta\n'))
     await service.submit(review.id, { verdict: 'approved' })
 
-    // Rewrite the file as an older yart would have left it, with no `comments`
-    // on the submission at all, and check nothing downstream has to cope with
-    // the field being absent.
+    // Write the file again as an older yart would leave it, with no `comments` on
+    // the submission. Then make sure that no later code must handle the missing
+    // field.
     const file = join(repo.path, '.git', 'yart', 'reviews', `${review.id}.json`)
     const stored = JSON.parse(readFileSync(file, 'utf8')) as {
       submissions: Record<string, unknown>[]

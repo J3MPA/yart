@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildFileTree, flattenFileTree, orderFilesByTree, type TreeNode } from './file-tree'
 
-/** A readable shape to assert against: 'name' for a file, 'name/[...]' for a directory. */
+/** A shape that is easy to read in assertions: 'name' for a file, 'name/[...]' for a directory. */
 const sketch = (nodes: readonly TreeNode[]): unknown[] =>
   nodes.map((node) => (node.kind === 'file' ? node.name : { [node.name]: sketch(node.children) }))
 

@@ -82,7 +82,7 @@ describe('reviewing uncommitted work', () => {
     const review = await service.create({ repo_path: repo.path, base: 'HEAD' })
 
     expect(gitIn('rev-parse', `refs/yart/reviews/${review.id}`)).toBe(review.head_sha)
-    // Aggressive pruning must not reap a pinned snapshot.
+    // A strong prune must not remove a pinned snapshot.
     gitIn('gc', '--prune=now', '--quiet')
     expect(await objectType(repo.path, review.head_sha)).toBe('tree')
   })
@@ -92,7 +92,7 @@ describe('reviewing uncommitted work', () => {
     const review = await service.create({ repo_path: repo.path, base: 'HEAD' })
     await service.addThread(review.id, { path: 'brand-new.txt', line: 2, body: 'look' })
 
-    // The agent edits again, still without committing.
+    // The agent edits again, and still does not commit.
     writeFileSync(join(repo.path, 'brand-new.txt'), 'an import\nhello\nworld\n')
     const advanced = await service.advanceHead(review.id)
 

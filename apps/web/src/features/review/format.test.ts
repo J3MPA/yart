@@ -6,7 +6,7 @@ const NOW = Date.parse('2026-09-20T12:00:00.000Z')
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
 
 describe('shortSha', () => {
-  it('keeps enough to be recognisable', () => {
+  it('keeps enough to be recognizable', () => {
     expect(shortSha('91107204638b017e8c3dd4dec2d7c08e6e7afbf9')).toBe('91107204')
   })
 
@@ -114,8 +114,8 @@ describe('describeStatus', () => {
   })
 
   it('reads the latest verdict once the agent has moved the head past it', () => {
-    // The current head has no verdict yet, which is exactly the moment the
-    // status should say the agent has done something.
+    // The current head has no verdict yet. At that time, the status must say
+    // that the agent did something.
     const status = describeStatus(
       review({ head_sha: 'head2', submissions: [verdict('changes_requested', 'head1')] }),
     )

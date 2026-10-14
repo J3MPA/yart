@@ -1,21 +1,21 @@
 #!/bin/sh
-# Installs yart: the app into ~/Applications and the yart and yart-mcp commands
-# into ~/.local/bin. Installing over an existing install replaces it, which is
-# how yart is updated. Nothing here needs sudo.
+# Installs yart: the app into ~/Applications, and the yart and yart-mcp commands
+# into ~/.local/bin. An install over an existing install replaces it. This is how
+# yart updates. Nothing here needs sudo.
 #
 #   curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
 #
-# YART_RELEASE_URL points it at somewhere else to download the app from.
+# YART_RELEASE_URL gives a different place to download the app from.
 #
-# Downloaded with curl rather than a browser on purpose: macOS only checks an
-# app with Gatekeeper when the download is marked quarantined, and curl does not
-# mark it, so the app's free ad-hoc signature is enough for it to open.
+# Use curl, not a browser, on purpose. macOS examines an app with Gatekeeper only
+# when the download has a quarantine mark. curl does not mark it. Thus the free
+# ad-hoc signature of the app is sufficient to open it.
 set -eu
 
-# Filled in by the release workflow with the tag this copy was published under,
-# so that the installer attached to a release installs that release. That is
-# what lets a pre-release be installed at all, since GitHub's "latest" skips
-# them. Left empty, as it is in the repository, it installs the latest release.
+# The release workflow puts the tag of this release here. Thus the installer of a
+# release installs that release. Only this lets you install a pre-release, because
+# "latest" on GitHub ignores pre-releases. When it is empty, as in the
+# repository, it installs the latest release.
 release_tag=
 if [ -n "$release_tag" ]; then
   default_url="https://github.com/J3MPA/yart/releases/download/$release_tag"
@@ -40,7 +40,7 @@ fail() {
 case "$(uname -m)" in
   arm64) arch=arm64 ;;
   x86_64)
-    # A shell running under Rosetta reports Intel on Apple Silicon.
+    # A shell that runs under Rosetta tells Intel on Apple Silicon.
     if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then
       arch=arm64
     else
@@ -62,8 +62,8 @@ curl -fsSL -o "$work/$zip.sha256" "$release_url/$zip.sha256"
 ditto -x -k "$work/$zip" "$work/unpacked"
 [ -d "$work/unpacked/yart.app" ] || fail "$zip does not contain yart.app."
 
-# A running app is not replaced underneath itself, and a daemon left running
-# would go on serving the old version's code.
+# Do not replace an app while it runs. A daemon that still ran would continue to
+# serve the code of the old version.
 was_running=false
 if [ "$(osascript -e "application id \"$bundle_id\" is running" 2>/dev/null)" = true ]; then
   was_running=true
@@ -76,7 +76,7 @@ updating=false
 mkdir -p "$app_dir" "$bin_dir"
 rm -rf "$app"
 mv "$work/unpacked/yart.app" "$app"
-# So that yart:// links reach it before it has ever been opened.
+# Thus yart:// links get to the app before it was ever opened.
 "$lsregister" -f "$app" 2>/dev/null || true
 
 for command in yart yart-mcp; do
@@ -109,8 +109,8 @@ if [ "$updating" = true ]; then
   say ""
   say "Agent sessions already running keep the old yart-mcp until they restart."
 else
-  # An absolute path, because Claude Code starts MCP servers with its own
-  # environment, which may not include the shell's PATH.
+  # A full path, because Claude Code starts MCP servers with its own environment.
+  # That environment can be without the PATH of the shell.
   say ""
   say "To let Claude Code use yart, register it:"
   say "  claude mcp add -s user yart -- $bin_dir/yart-mcp"

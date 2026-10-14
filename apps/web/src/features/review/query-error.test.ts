@@ -27,8 +27,8 @@ describe('describeQueryError', () => {
   })
 
   it('treats a gateway error as the daemon being unreachable', () => {
-    // Vite proxies /api to the daemon in development, so a dead daemon surfaces
-    // as a 502 rather than a failed connection.
+    // During development, Vite sends /api to the daemon. Thus a daemon that does
+    // not run shows as a 502, not as a failed connection.
     for (const status of [502, 503, 504]) {
       const described = describeQueryError({ status, data: undefined })
       expect(described.message).toMatch(/daemon/i)

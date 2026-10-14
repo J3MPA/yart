@@ -16,13 +16,14 @@ import { parseCount, parseNotice } from './signals.ts'
 
 const config = readConfig(process.env)
 
-// Before the lock is taken: the lock belongs to the profile.
+// Do this before the app takes the lock, because the lock belongs to the profile.
 if (config.profile !== null) {
   app.setPath('userData', join(app.getPath('appData'), config.profile))
 }
 
-// The app belongs to no repository, so the daemon it starts has no default one.
-// Packaged, it carries its own bundled daemon laid out as the workspace is.
+// The app belongs to no repository. Thus the daemon that it starts has no
+// default repository. A packaged app has its own bundled daemon, with the layout
+// of the workspace.
 const daemon = new DaemonClient({
   port: config.daemon_port,
   repo_path: null,
@@ -33,11 +34,12 @@ const daemon = new DaemonClient({
 
 let window: BrowserWindow | null = null
 let started = false
-/** A review asked for before there was a window to show it in. */
+/** A review that a link asked for before a window existed to show it. */
 let pending_review: string | null = null
 /**
- * Notifications on screen. Held because Electron lets go of one that nothing
- * references, and a notification collected that way no longer reports a click.
+ * The notifications on the screen. The app keeps them, because Electron removes
+ * a notification that nothing refers to. Such a notification does not tell of a
+ * click.
  */
 const notifications = new Set<Notification>()
 
@@ -60,8 +62,8 @@ const createWindow = (url: string = config.start_url) => {
     webPreferences: { preload: PRELOAD },
   })
 
-  // The window shows yart and nothing else: a link to another site in a review
-  // opens in the browser rather than turning this window into one.
+  // The window shows only yart. A link to a different site in a review opens in
+  // the browser. It does not make this window a browser.
   created.webContents.setWindowOpenHandler(({ url }) => {
     openOutside(url)
     return { action: 'deny' }
@@ -99,7 +101,7 @@ const openLink = (link: string) => {
   if (review_id !== null) showReview(review_id)
 }
 
-/** Only yart's own page may set the badge or raise a notification. */
+/** Only the page of yart can set the badge or show a notification. */
 const fromYart = (event: IpcMainEvent): boolean => event.senderFrame?.origin === config.origin
 
 ipcMain.on('unseen-changed', (event, value: unknown) => {
@@ -125,8 +127,8 @@ ipcMain.on('notify', (event, value: unknown) => {
   notification.show()
 })
 
-// Registered before anything else: on macOS a link that launches the app
-// arrives before it is ready.
+// Register this before all other things. On macOS, a link that starts the app
+// comes before the app is ready.
 app.on('open-url', (event, link) => {
   event.preventDefault()
   openLink(link)
@@ -135,12 +137,12 @@ app.on('open-url', (event, link) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  // Only an installed app claims the scheme: a development shell doing so would
-  // take links meant for the installed one.
+  // Only an installed app claims the scheme. A development shell would take the
+  // links for the installed app.
   if (config.profile === null) app.setAsDefaultProtocolClient(SCHEME)
 
-  // Where macOS delivers a link through open-url, other platforms start a
-  // second copy with the link among its arguments.
+  // macOS sends a link through open-url. Other platforms start a second copy, with
+  // the link in its arguments.
   app.on('second-instance', (_event, argv) => {
     const link = argv.find((arg) => arg.startsWith(`${SCHEME}://`))
     if (link !== undefined) {

@@ -6,7 +6,7 @@ export interface AuthorLabelProps {
   author_name?: string | null
 }
 
-/** Who wrote a comment, with an AI reviewer set apart from the agent it reviews. */
+/** Who wrote a comment. An AI reviewer looks different from the agent that it reviews. */
 export const AuthorLabel = ({ author, author_name }: AuthorLabelProps) => (
   <div
     className={[styles.comment_author, author === 'reviewer' ? styles.comment_author_reviewer : '']

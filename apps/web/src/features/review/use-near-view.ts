@@ -1,17 +1,17 @@
 import { useEffect, useState, type RefObject } from 'react'
 
 /**
- * How far outside the viewport counts as near: a couple of screens, so that a
- * file is coloured before it scrolls into sight rather than as it does.
+ * How far outside the viewport counts as near: approximately two screens. Thus a
+ * file gets its colors before you scroll to it, not while you scroll to it.
  */
 export const NEAR_VIEW_MARGIN_PX = 1600
 
 /**
- * Whether an element has come near the viewport. Once true it stays true, since
- * what it gates — fetching and colouring a file — is done once and kept.
+ * Tells if an element came near the viewport. When it is true, it stays true.
+ * The action that it controls, to get and color a file, occurs one time.
  *
- * True from the start where there is no `IntersectionObserver` to ask, so that
- * nothing is withheld for want of one.
+ * It is true from the start when there is no `IntersectionObserver`. Thus the
+ * page does not hold back anything when the observer is missing.
  */
 export const useNearView = (
   ref: RefObject<Element | null>,

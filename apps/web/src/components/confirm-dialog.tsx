@@ -12,12 +12,12 @@ export interface ConfirmDialogProps {
 }
 
 /**
- * Asks before something that cannot be undone, saying what will be lost.
+ * Asks before an action that you cannot undo, and tells what you will lose.
  *
- * A native `<dialog>` opened as a modal, which keeps focus inside it, closes on
- * Escape and makes the page behind it inert — none of which then needs doing by
- * hand. Cancel takes the initial focus, so a stray Enter keeps things as they
- * are.
+ * It is a native `<dialog>` that opens as a modal. The dialog keeps the focus in
+ * it, closes on Escape, and makes the page behind it inert. Thus no code must do
+ * these things. Cancel gets the focus first. Thus an Enter by mistake changes
+ * nothing.
  */
 export const ConfirmDialog = ({
   open,
@@ -42,7 +42,7 @@ export const ConfirmDialog = ({
       className={styles.dialog}
       aria-labelledby="confirm-dialog-title"
       onCancel={(event) => {
-        // Escape: let React's state close it, so the two never disagree.
+        // Escape: let the React state close it. Thus the two never disagree.
         event.preventDefault()
         onCancel()
       }}

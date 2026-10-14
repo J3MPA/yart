@@ -6,23 +6,23 @@ interface DraftBase {
   created_at: string
 }
 
-/** A line comment held for the pending review. */
+/** A comment on a line, held for the pending review. */
 export interface ThreadDraft extends DraftBase {
   kind: 'thread'
   path: string
   side: DiffSide
   line: number
   /**
-   * The blob the line number was counted in.
+   * The blob of the line number.
    *
-   * Per file rather than per review head: a new round that leaves this file
-   * alone leaves the line meaning what it meant, and should not cost the
-   * reviewer a comment they already wrote.
+   * This is for each file, not for each head of the review. A new round that
+   * does not change this file does not change what the line means. The
+   * reviewer must not lose a comment that they already wrote.
    */
   blob_sha: string
 }
 
-/** A reply held for the pending review, to a thread that has already been sent. */
+/** A reply held for the pending review, to a thread that was already sent. */
 export interface ReplyDraft extends DraftBase {
   kind: 'reply'
   thread_id: string
@@ -31,21 +31,21 @@ export interface ReplyDraft extends DraftBase {
 export type Draft = ThreadDraft | ReplyDraft
 
 /**
- * One person's working state on one review.
+ * The work state of one person on one review.
  *
- * Kept in the browser with the rest of what is per person, so an agent reading
- * the review through `get_review` never sees a comment its author has not sent,
- * and a directory folded on one machine stays open on another.
+ * The browser keeps it, with the other state of each person. Thus an agent that
+ * reads the review through `get_review` never sees a comment that its author did
+ * not send. A directory that you fold on one computer stays open on a different
+ * computer.
  */
 export interface LocalReviewState {
-  /** Directory paths folded away in the file tree. */
+  /** The paths of the folded directories in the file tree. */
   folded: readonly string[]
   /**
-   * Files marked reviewed, each against the blob it was reviewed at.
+   * The files marked as reviewed, each with the blob of the review.
    *
-   * Keyed on the blob so a file the agent changes afterwards stops counting as
-   * reviewed on its own: a tick that outlived the code it was given for would
-   * say something untrue.
+   * The key is the blob. Thus a file that the agent changes later stops counting
+   * as reviewed. A mark that stays after its code changed would be incorrect.
    */
   reviewed: Readonly<Record<string, string>>
   drafts: readonly Draft[]
@@ -72,7 +72,7 @@ export const toggleFolded = (state: LocalReviews, review_id: string, path: strin
       : [...local.folded, path],
   }))
 
-/** Marks a file reviewed at a blob, or clears the mark when the blob is null. */
+/** Marks a file as reviewed at a blob, or removes the mark when the blob is null. */
 export const setReviewed = (
   state: LocalReviews,
   review_id: string,
@@ -86,7 +86,7 @@ export const setReviewed = (
     return { ...local, reviewed }
   })
 
-/** Whether a file is reviewed as it stands now, not merely as it once was. */
+/** Tells if a file is reviewed as it is now, not only as it was before. */
 export const isReviewed = (local: LocalReviewState, path: string, blob_sha: string): boolean =>
   local.reviewed[path] === blob_sha
 
@@ -118,11 +118,10 @@ export const clearDrafts = (state: LocalReviews, review_id: string): LocalReview
   withLocal(state, review_id, (local) => ({ ...local, drafts: [] }))
 
 /**
- * Drops the state of reviews that no longer exist.
+ * Removes the state of reviews that do not exist now.
  *
- * Only ever given the ids of every review, archived ones included: pruning
- * against the active list alone would throw away the drafts on a review the
- * moment it was archived.
+ * Always give it the ids of all reviews, archived reviews included. With only
+ * the active list, it would remove the drafts of a review when it was archived.
  */
 export const forgetDeleted = (state: LocalReviews, live_ids: Iterable<string>): LocalReviews => {
   const live = new Set(live_ids)
@@ -134,9 +133,10 @@ export const forgetDeleted = (state: LocalReviews, live_ids: Iterable<string>): 
 }
 
 /**
- * The blob a file is reviewed against: its head, or its base when deleted.
+ * The blob of the review mark of a file: its head, or its base when the file was
+ * deleted.
  *
- * Null only for a file with neither, which has nothing in it to have read.
+ * Null only for a file with neither. Such a file has nothing to read.
  */
 export const reviewBlob = (file: {
   head_blob_sha: string | null

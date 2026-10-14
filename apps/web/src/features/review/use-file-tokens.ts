@@ -10,11 +10,11 @@ export interface SideTokens {
 const NONE: SideTokens = { base: null, head: null }
 
 /**
- * Both sides of a file as tokens, once its contents have arrived.
+ * The two sides of a file as tokens, after the content of the file comes.
  *
- * Whole files rather than the diff's lines, because a line's colour depends on
- * what came before it — the middle of a block comment reads as code otherwise —
- * and the diff only holds the lines that changed.
+ * Full files, not the lines of the diff, because the color of a line depends on
+ * the lines before it. Otherwise the middle of a block comment shows as code.
+ * The diff holds only the lines that changed.
  */
 export const useFileTokens = (path: string, contents: FileContents | undefined): SideTokens => {
   const [tokens, setTokens] = useState<SideTokens>(NONE)
@@ -45,12 +45,12 @@ export const useFileTokens = (path: string, contents: FileContents | undefined):
 }
 
 /**
- * The tokens for one row: a removed line is read from the base, anything else
- * from the head.
+ * The tokens for one row. A removed line takes them from the base, and all other
+ * lines from the head.
  *
- * Null unless they spell out exactly the row's text, so that a file read with
- * different line endings, or changed since the diff was taken, shows plain text
- * rather than the wrong colours — or worse, the wrong words.
+ * Null if they do not spell out exactly the text of the row. Thus a file with
+ * different line endings, or a file that changed after the diff, shows plain
+ * text. It does not show the wrong colors, or the wrong words.
  */
 export const tokensForLine = (
   tokens: SideTokens,

@@ -5,12 +5,12 @@ export interface ChevronProps {
 }
 
 /**
- * An open/closed marker for anything that folds.
+ * An open or closed marker for all items that fold.
  *
- * Drawn rather than typed: the Unicode small triangles collapse to dots at the
- * tree's text size, and a glyph's weight depends on whichever font happens to
- * supply it. One shape, rotated, also reads as the same control in both places
- * it is used.
+ * It is a drawn shape, not a character. At the text size of the tree, the small
+ * Unicode triangles become dots. The weight of a character depends on the font
+ * that supplies it. One shape that turns also looks like the same control in the
+ * two places that use it.
  */
 export const Chevron = ({ expanded }: ChevronProps) => (
   <svg

@@ -3,11 +3,11 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 import { forgetMissing, markSeen, readSeen } from './seen-reviews'
 
 /**
- * Which reviews have been looked at, and how far.
+ * The reviews that the person saw, and how much of each.
  *
- * In the store rather than in each component because three places need the same
- * answer — the list rows, the review page that clears it, and the tab title —
- * and two of them are never mounted at the same time.
+ * This is in the store, not in each component. Three places need the same
+ * answer: the list rows, the review page that clears it, and the tab title. Two
+ * of them are never mounted at the same time.
  */
 const seen_slice = createSlice({
   name: 'seen',
@@ -21,8 +21,8 @@ const seen_slice = createSlice({
     },
     missingForgotten(state, action: PayloadAction<readonly string[]>) {
       const next = forgetMissing(state, action.payload)
-      // Returning the same object when nothing was dropped keeps the store from
-      // notifying, which would otherwise re-render on every poll.
+      // Return the same object when nothing was removed. Thus the store does not
+      // notify, and the page does not render again on each poll.
       return Object.keys(next).length === Object.keys(state).length ? state : next
     },
   },

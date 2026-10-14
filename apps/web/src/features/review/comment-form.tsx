@@ -9,11 +9,11 @@ export interface CommentFormProps {
   pending?: boolean
   onSubmit: (body: string) => void
   /**
-   * Holds the comment for the pending review instead of sending it.
+   * Holds the comment for the pending review, and does not send it.
    *
-   * When given, this becomes the primary action and the one Cmd+Enter takes,
-   * as on GitHub: a review is drafted, not dictated, so holding a comment is
-   * the common case and sending one on its own the exception.
+   * When it is given, this becomes the main action, and Cmd+Enter does it, as on
+   * GitHub. You draft a review, you do not dictate it. Thus to hold a comment is
+   * the usual case, and to send one alone is the exception.
    */
   onQueue?: (body: string) => void
   queue_label?: string
@@ -41,7 +41,7 @@ export const CommentForm = ({
 
   const primary = onQueue ?? onSubmit
 
-  // Cmd/Ctrl+Enter takes the primary action, because a reviewer's hands are
+  // Cmd/Ctrl+Enter does the main action, because the hands of a reviewer are
   // already on the keyboard.
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

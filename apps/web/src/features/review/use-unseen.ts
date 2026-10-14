@@ -7,26 +7,26 @@ import { deletedReviewsForgotten } from './local-review-slice'
 import { missingForgotten } from './seen-slice'
 
 /**
- * How often the list is re-read.
+ * How frequently the page reads the list again.
  *
- * The signal exists to be noticed while attention is elsewhere, and a page
- * nobody is looking at never regains focus — so refetching on focus, which is
- * how the rest of the app stays current, cannot deliver it. Ten seconds against
- * a daemon on localhost is nothing, and browsers throttle timers in hidden tabs
- * anyway, which is the case that matters here.
+ * The signal must get your attention while you look at something else. A page
+ * that nobody looks at never gets focus again. The rest of the app gets new data
+ * on focus, but that cannot give this signal. A request every ten seconds to a
+ * daemon on localhost costs nothing. Also, browsers slow the timers in hidden
+ * tabs, and this signal is for those tabs.
  */
 export const POLL_MS = 10_000
 
 export interface Unseen {
   ids: ReadonlySet<string>
   count: number
-  /** Each unseen review's title, for anything announcing it outside the page. */
+  /** The title of each unseen review, for signals outside the page. */
   titles: ReadonlyMap<string, string>
-  /** Whether the list has arrived; until then nothing is unseen for want of reviews. */
+  /** Tells if the list came. Before it comes, nothing is unseen, because there are no reviews. */
   loaded: boolean
 }
 
-/** Reviews the agent has touched since they were last looked at. */
+/** The reviews that the agent touched after the person last looked at them. */
 export const useUnseenReviews = (): Unseen => {
   const dispatch = useAppDispatch()
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit Query's option name
@@ -37,10 +37,10 @@ export const useUnseenReviews = (): Unseen => {
 
   const reviews = useMemo(() => data ?? [], [data])
 
-  // State kept for deleted reviews would otherwise outlive them for as long as
-  // the browser profile lives. Only pruned once both lists have loaded, and
-  // against both: a review missing from the active list may just be archived,
-  // and pruning it then would throw away its drafts.
+  // Without this, the state of deleted reviews would stay for as long as the
+  // browser profile exists. Remove it only after the two lists loaded, and
+  // against the two. A review that is not in the active list can be archived.
+  // A removal then would delete its drafts.
   useEffect(() => {
     if (data === undefined || archived.data === undefined) return
     const ids = [...data, ...archived.data].map((review) => review.id)

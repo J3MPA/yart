@@ -1,7 +1,7 @@
 #!/bin/sh
-# Runs yart's MCP server on the Node built into yart.app, pointing it at the
-# daemon bundled beside it. Resolves its own link first: it is installed as a
-# link elsewhere.
+# Runs the MCP server of yart on the Node in yart.app, with the bundled daemon
+# next to it. It finds its own link first, because the install puts a link to it
+# in a different place.
 set -e
 here=$(dirname "$(readlink -f "$0")")
 contents=$(cd "$here/../.." && pwd)

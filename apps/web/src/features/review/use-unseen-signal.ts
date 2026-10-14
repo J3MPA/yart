@@ -12,11 +12,11 @@ const setIcon = (href: string): void => {
 }
 
 /**
- * Puts the count where it can be seen from outside the page.
+ * Puts the count where you can see it from outside the page.
  *
- * Both the title and the favicon, because neither is enough on its own: a
- * pinned tab shows no title, and a tab among twenty shows a favicon too small
- * to read a number on. Together they cover how the tab is actually being kept.
+ * The title and the favicon, because one alone is not sufficient. A pinned tab
+ * shows no title. In a row of twenty tabs, a favicon is too small for a number.
+ * Together, they cover the ways that people keep the tab.
  */
 export const useUnseenSignal = (count: number): void => {
   useEffect(() => {

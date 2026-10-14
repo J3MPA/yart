@@ -11,7 +11,7 @@ export interface DraftCommentProps {
   draft: Draft
 }
 
-/** A comment held for the pending review: seen only by its author, still editable. */
+/** A comment held for the pending review. Only its author sees it, and can still edit it. */
 export const DraftComment = ({ review_id, draft }: DraftCommentProps) => {
   const dispatch = useAppDispatch()
   const [editing, setEditing] = useState(false)

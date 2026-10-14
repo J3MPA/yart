@@ -34,10 +34,12 @@ const STATUS_CLASS: Record<StatusTone, string> = {
 }
 
 /**
- * The line under the title: where it is, what it covers, and when it appeared.
+ * The line under the title: where the review is, what it covers, and when it
+ * came.
  *
- * The repository leads only when the list spans more than one, since in a list
- * of one project's reviews it would repeat the same word on every row.
+ * The repository comes first only when the list has more than one repository.
+ * In a list of the reviews of one project, it would show the same word on each
+ * row.
  */
 const describe = (review: Review, show_repository: boolean): string =>
   [
@@ -142,7 +144,7 @@ export interface ReviewListProps {
 export const ReviewList = ({ unseen }: ReviewListProps) => {
   const [archived, setArchivedView] = useState(false)
   const [selection, setSelection] = useState<Selection>(new Set())
-  /** The reviews the delete dialog is asking about, or null when it is closed. */
+  /** The reviews that the delete dialog asks about, or null when it is closed. */
   const [deleting, setDeleting] = useState<readonly Review[] | null>(null)
   const { data, isLoading: is_loading } = useListReviewsQuery(archived)
   const [setArchived] = useSetReviewArchivedMutation()
@@ -157,7 +159,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
 
   useEffect(() => setSelection((previous) => keepListed(previous, ids)), [ids])
 
-  // A checkbox can only be part-ticked from script.
+  // Only a script can make a checkbox partly selected.
   useEffect(() => {
     if (select_all.current !== null) select_all.current.indeterminate = state === 'some'
   }, [state])

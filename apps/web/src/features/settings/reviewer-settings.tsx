@@ -16,7 +16,7 @@ const ROUNDS = Array.from(
   (_, index) => MIN_AI_REVIEW_ROUNDS + index,
 )
 
-/** Model names Claude Code takes as aliases; anything else can be typed in full. */
+/** Model names that Claude Code accepts as aliases. You can type all other names in full. */
 const SUGGESTED_MODELS = ['opus', 'sonnet', 'haiku']
 
 export interface ReviewerSettingsProps {
@@ -24,12 +24,12 @@ export interface ReviewerSettingsProps {
 }
 
 /**
- * How an AI reviewer should run. yart runs no model itself: these are read by
- * whatever starts a reviewer, through the `get_reviewer_settings` tool.
+ * How an AI reviewer must run. yart does not run a model. The process that
+ * starts a reviewer reads these settings with the `get_reviewer_settings` tool.
  */
 export const ReviewerSettings = ({ settings }: ReviewerSettingsProps) => {
   const [updateSettings, update_state] = useUpdateSettingsMutation()
-  // Typed text is saved when the field is left, rather than on every key.
+  // Save typed text when the field loses focus, not on each key.
   const [model, setModel] = useState(settings.reviewer_model ?? '')
   const [instructions, setInstructions] = useState(settings.reviewer_instructions ?? '')
 

@@ -1,5 +1,5 @@
-/* The reset zeroes every margin, and auto margins are what centre a modal
-   dialog in the viewport. */
+/* The reset sets each margin to zero. Auto margins put a modal dialog at the
+   center of the viewport. */
 .dialog {
   margin: auto;
   width: min(32rem, calc(100vw - 2 * var(--yart-space-4)));

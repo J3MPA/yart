@@ -48,8 +48,8 @@ const local_review_slice = createSlice({
     },
     deletedReviewsForgotten(state, action: PayloadAction<readonly string[]>) {
       const next = forgetDeleted(state, action.payload)
-      // The same object back when nothing was dropped, so a poll that changes
-      // nothing does not re-render or rewrite storage.
+      // Return the same object when nothing was removed. Thus a poll that changes
+      // nothing does not render again or write the storage again.
       return Object.keys(next).length === Object.keys(state).length ? state : next
     },
   },

@@ -1,7 +1,7 @@
 import { latestSubmission, reviewProgress } from '@yart/core'
 import type { Review, ReviewVerdict } from '@yart/core'
 
-/** Enough of a hash to be recognisable, which is all a list needs. */
+/** Sufficient characters of a hash to identify it, which is all that a list needs. */
 export const shortSha = (sha: string): string => sha.slice(0, 8)
 
 const MINUTE = 60_000
@@ -11,8 +11,8 @@ const DAY = 24 * HOUR
 /**
  * How long ago, in words.
  *
- * A list of reviews is scanned rather than read, and "3 minutes ago" answers
- * "is this the one I just opened?" far faster than a timestamp does.
+ * People look quickly at a list of reviews. They do not read it. "3 minutes ago"
+ * answers "is this the review that I just opened?" much faster than a time.
  */
 export const relativeTime = (iso: string, now: number = Date.now()): string => {
   const then = Date.parse(iso)
@@ -33,10 +33,10 @@ export const relativeTime = (iso: string, now: number = Date.now()): string => {
 }
 
 /**
- * How a review's range reads in a list.
+ * How the range of a review shows in a list.
  *
- * A snapshot has a tree hash for a head, which means nothing to a person, so it
- * says what it actually is.
+ * The head of a snapshot is a tree hash, which means nothing to a person. Thus
+ * the text says what it is.
  */
 export const describeRange = (review: {
   base_sha: string
@@ -48,9 +48,9 @@ export const describeRange = (review: {
 /**
  * A repository as a person names it: the last part of its path.
  *
- * Split by hand because this runs in the browser, where `node:path` does not
- * exist — Vite replaces it with an empty stub. Empty parts are dropped so a
- * trailing slash does not leave the name blank.
+ * The code divides the path itself, because this runs in the browser. There,
+ * `node:path` does not exist, and Vite replaces it with an empty stub. The code
+ * removes empty parts. Thus a slash at the end does not make the name empty.
  */
 export const repositoryName = (repo_path: string): string =>
   repo_path.split(/[\\/]/).filter(Boolean).pop() ?? repo_path
@@ -66,21 +66,21 @@ export type StatusTone = 'plain' | 'approved' | 'changes' | 'working' | 'ready'
 export interface ReviewStatus {
   label: string
   tone: StatusTone
-  /** The detail behind the label, for a tooltip; null when the label is all there is. */
+  /** The detail of the label, for a tooltip, or null when the label tells all. */
   detail: string | null
 }
 
 /**
- * Where a review stands, as one label.
+ * The state of a review, as one label.
  *
- * The verdict and the agent's progress used to be two badges, but they are one
- * fact read at different moments: a verdict is given, then the agent responds
- * to it. Once the agent has moved, what you decided matters less than whose
- * turn it is — and the verdict is at the top of the page you are about to open.
+ * Before, the verdict and the progress of the agent were two badges. But they
+ * are one fact at different times. You give a verdict, and then the agent
+ * responds. After the agent moves, whose turn it is is more important than
+ * what you decided. The verdict is at the top of the page that you open.
  *
- * Built from the latest verdict rather than the current head's, because an
- * agent advancing the review is exactly when this should change, and the
- * current head has no verdict yet at that point.
+ * The label uses the latest verdict, not the verdict of the current head. The
+ * label must change when the agent moves the review, and at that time the
+ * current head has no verdict.
  */
 export const describeStatus = (review: Review): ReviewStatus => {
   const progress = reviewProgress(review)

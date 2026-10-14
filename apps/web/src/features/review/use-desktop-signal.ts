@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Unseen } from './use-unseen'
 
-/** What the desktop app's preload puts on the page; absent in a browser. */
+/** What the preload of the desktop app puts on the page. It is not there in a browser. */
 interface DesktopBridge {
   unseenChanged(count: number): void
   notify(notice: { review_id: string; title: string }): void
@@ -14,10 +14,10 @@ declare global {
 }
 
 /**
- * The reviews that have turned unseen since the last look.
+ * The reviews that became unseen after the last look.
  *
- * Null before there is a last look, so that opening the app does not announce
- * every review that was already waiting — the badge says how many there are.
+ * Null before the first look. Thus the app does not announce each review that
+ * already waited when it opens. The badge tells how many there are.
  */
 export const newlyUnseen = (
   before: ReadonlySet<string> | null,
@@ -25,11 +25,11 @@ export const newlyUnseen = (
 ): string[] => (before === null ? [] : [...now].filter((id) => !before.has(id)))
 
 /**
- * Carries the unseen count to the dock, and raises a notification when the agent
+ * Sends the unseen count to the dock, and shows a notification when the agent
  * answers on a review.
  *
- * Not while the window has focus: whoever is looking at yart sees the dot in the
- * list, and a banner on top of it is noise.
+ * Not while the window has focus. The person who looks at yart sees the dot in
+ * the list, and a banner on top of it is noise.
  */
 export const useDesktopSignal = (unseen: Unseen): void => {
   const before = useRef<ReadonlySet<string> | null>(null)
@@ -39,8 +39,8 @@ export const useDesktopSignal = (unseen: Unseen): void => {
   }, [unseen.count])
 
   useEffect(() => {
-    // Before the list arrives nothing is unseen, and taking that as the first
-    // look would announce everything already waiting the moment it did.
+    // Before the list comes, nothing is unseen. If that were the first look, the
+    // hook would announce each review that already waited when the list came.
     if (!unseen.loaded) return
     const bridge = window.yart_desktop
     const fresh = newlyUnseen(before.current, unseen.ids)

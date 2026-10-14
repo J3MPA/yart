@@ -36,7 +36,7 @@ export interface ReviewPageProps {
   review_id: string
 }
 
-/** A dead end still needs a way out, so failures keep the way back. */
+/** A page with no result still needs a way out. Thus a failure keeps the link back. */
 const Missing = ({ children }: { children: ReactNode }) => (
   <>
     <a className={styles.back} href="/">
@@ -58,8 +58,8 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const dispatch = useAppDispatch()
   const review = review_query.data
 
-  // Looking at the review is what marks it seen, and it stays seen while it is
-  // open: anything that arrives now arrives in front of someone reading it.
+  // When you look at the review, it becomes seen. It stays seen while it is
+  // open, because all that comes now comes in front of a person who reads it.
   useEffect(() => {
     if (review === undefined) return
     dispatch(reviewSeen({ review_id: review.id, activity: agentActivity(review) }))
@@ -69,8 +69,8 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
     () => groupThreadsByAnchor(review?.threads ?? []),
     [review?.threads],
   )
-  // Ordered here rather than in the sidebar, so that the tree and the diffs
-  // below it are one list read the same way round.
+  // The order is set here, not in the sidebar. Thus the tree and the diffs below
+  // it are one list, in the same order.
   const files = useMemo(() => orderFilesByTree(diff_query.data ?? []), [diff_query.data])
   const paths = useMemo(() => files.map((file) => file.path), [files])
   const active_path = useActiveFile(paths)

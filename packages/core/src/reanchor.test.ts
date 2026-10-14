@@ -27,7 +27,7 @@ const threadAt = (
   })
 }
 
-/** Builds a `modified` resolution by diffing `before` against `after`. */
+/** Makes a `modified` resolution from a diff of `before` against `after`. */
 const modified = (
   after: string,
   {

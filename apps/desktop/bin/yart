@@ -1,7 +1,7 @@
 #!/bin/sh
-# Runs yart's daemon on the Node built into yart.app, so neither Node nor npm is
-# needed, and carries the commands that manage the install itself. Resolves its
-# own link first: it is installed as a link elsewhere.
+# Runs the daemon of yart on the Node in yart.app. Thus you need no Node and no
+# npm. It also has the commands that manage the install. It finds its own link
+# first, because the install puts a link to it in a different place.
 set -e
 here=$(dirname "$(readlink -f "$0")")
 contents=$(cd "$here/../.." && pwd)
@@ -13,15 +13,15 @@ fail() {
   exit 1
 }
 
-# The newest release, pre-releases included, as GitHub lists them newest first.
+# The newest release, pre-releases included. GitHub lists the newest first.
 newest_tag() {
   curl -fsSL "https://api.github.com/repos/$repository/releases?per_page=1" |
     sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
 }
 
-# Runs a release's own installer, since it is the one that knows how to put that
-# release in place. Fetched in full before running, so that a missing release is
-# reported rather than half a script run.
+# Runs the installer of a release, because that installer knows how to install
+# that release. It gets the full file before it runs it. Thus a missing release
+# gives an error, and half a script does not run.
 install_from() {
   installer=$(mktemp)
   trap 'rm -f "$installer"' EXIT

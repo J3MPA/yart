@@ -83,7 +83,7 @@ describe('reviewProgress', () => {
   })
 
   it('is in progress when the code moved but comments are still waiting', () => {
-    // Changes without answers are not an invitation to look again.
+    // Changes without answers are not a reason to look again.
     const progress = reviewProgress(
       review({ submissions: [submission('head1')], threads: [thread(['human'])] }),
     )

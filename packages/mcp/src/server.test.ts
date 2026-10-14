@@ -16,7 +16,7 @@ let client: Client
 let base: string
 let opened: string[]
 
-/** Calls a tool and returns its text, failing loudly if the tool reported an error. */
+/** Calls a tool and returns its text. Fails clearly if the tool gave an error. */
 const call = async (name: string, args: Record<string, unknown> = {}): Promise<string> => {
   const result = await client.callTool({ name, arguments: args })
   const body = (result.content as { type: string; text: string }[])
@@ -26,14 +26,14 @@ const call = async (name: string, args: Record<string, unknown> = {}): Promise<s
   return body
 }
 
-/** Calls a tool expecting failure, returning the error text. */
+/** Calls a tool that must fail, and returns the error text. */
 const callExpectingError = async (name: string, args: Record<string, unknown>): Promise<string> => {
   const result = await client.callTool({ name, arguments: args })
   expect(result.isError).toBe(true)
   return (result.content as { text: string }[]).map((block) => block.text).join('\n')
 }
 
-/** The human's side of the loop, which the agent cannot do for itself. */
+/** The side of the loop that belongs to the person. The agent cannot do it. */
 const humanComments = async (review_id: string, line: number, body: string): Promise<void> => {
   const response = await fetch(`http://localhost:${port}/api/reviews/${review_id}/threads`, {
     method: 'POST',
@@ -80,9 +80,9 @@ beforeEach(async () => {
   })
   port = (http.address() as AddressInfo).port
 
-  // autostart is off: the daemon above is already listening on this port.
-  // The opener is recorded rather than run, so the suite never takes over a
-  // browser on whoever is running it.
+  // autostart is off, because the daemon above already listens on this port.
+  // The test records the opener and does not run it. Thus the tests never open
+  // a browser on the computer of the person who runs them.
   opened = []
   const mcp = createMcpServer({
     port,
@@ -192,9 +192,9 @@ describe('get_review and list_reviews', () => {
 
 describe('an agent in another repository', () => {
   it('reviews its own repository through a daemon started in a different one', async () => {
-    // The daemon in beforeEach was started for `repo`. An agent working in a
-    // second repository reuses it, as every agent reuses whatever is on the
-    // port — and used to get a review of the first repository's working tree.
+    // The daemon in beforeEach started for `repo`. An agent in a second
+    // repository uses it, as each agent uses the daemon on the port. Before, that
+    // agent got a review of the working tree of the first repository.
     const other = new TestRepo()
     try {
       other.write('elsewhere.txt', 'one\n')
@@ -237,8 +237,8 @@ describe('opening the review', () => {
   })
 
   it('falls back to asking for the URL to be opened when opening is off', async () => {
-    // The real switch, rather than a stand-in for it: this is the one path a
-    // person configures, so it is worth testing the thing they actually set.
+    // The real switch, not a replacement. A person configures this path. Thus the
+    // test examines the value that they set.
     process.env.YART_NO_BROWSER = '1'
     const quiet = createMcpServer({
       port,

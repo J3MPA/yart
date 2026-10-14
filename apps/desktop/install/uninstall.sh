@@ -1,13 +1,13 @@
 #!/bin/sh
-# Removes yart: stops the app and its daemon, removes the app, and removes the
-# yart and yart-mcp commands if they still point into it. Running it twice is
-# harmless.
+# Removes yart. It stops the app and its daemon, and removes the app. It removes
+# the yart and yart-mcp commands if they still point into the app. A second run
+# causes no problem.
 #
 #   uninstall.sh [--purge]
 #
-# The app's own data, its seen state and drafts, is kept unless --purge is
-# given, since a draft is something a person wrote. Reviews are never touched:
-# they live in each repository's .git/yart and belong to that repository.
+# It keeps the data of the app, the seen state and the drafts, unless you give
+# --purge, because a draft is the work of a person. It never touches reviews.
+# They are in the .git/yart of each repository, and they belong to it.
 set -eu
 
 app="$HOME/Applications/yart.app"

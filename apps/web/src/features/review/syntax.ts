@@ -1,31 +1,31 @@
 import type { HighlighterCore, ThemedToken } from 'shiki/core'
 import { bundledLanguages, type BundledLanguage } from 'shiki/langs'
 
-/** One coloured run of text within a line. */
+/** One run of text in a line, with one color. */
 export interface SyntaxToken {
   content: string
-  /** A CSS colour, `var(--yart-syntax-…)`, or null to inherit the text colour. */
+  /** A CSS color, `var(--yart-syntax-…)`, or null to use the text color. */
   color: string | null
   italic: boolean
   bold: boolean
 }
 
-/** A file's lines as tokens, indexed from zero: line 1 is `lines[0]`. */
+/** The lines of a file as tokens. The index starts at zero: line 1 is `lines[0]`. */
 export type FileTokens = readonly (readonly SyntaxToken[])[]
 
 /**
- * Beyond this a file is shown plain. Tokenizing runs on the main thread, and a
- * generated or vendored file of this size is not one anyone reads line by line.
+ * A file larger than this shows as plain text. The tokens are made on the main
+ * thread. Nobody reads a generated or vendored file of this size line by line.
  */
 export const MAX_HIGHLIGHT_BYTES = 256 * 1024
 
-/** Whole file names that say what a file is where an extension would. */
+/** Full file names that tell the type of a file, in the place of an extension. */
 const BY_NAME: Readonly<Record<string, BundledLanguage>> = {
   dockerfile: 'dockerfile',
   makefile: 'make',
 }
 
-/** Interpreters a script names on its first line, where they are not a grammar's name. */
+/** Interpreters that a script names on its first line, when they are not the name of a grammar. */
 const BY_INTERPRETER: Readonly<Record<string, BundledLanguage>> = {
   bash: 'sh',
   zsh: 'sh',
@@ -41,8 +41,8 @@ const hasExtension = (name: string): boolean => name.lastIndexOf('.') > 0
 const SHEBANG = /^#!\s*(?:\S*\/env\s+(?:-S\s+)?)?(?:\S*\/)?(\S+)/
 
 /**
- * The grammar for a file, or null for one with none worth loading. A file with
- * no extension, such as a script in `bin/`, is read from its first line.
+ * The grammar for a file, or null when no grammar is useful. For a file without
+ * an extension, such as a script in `bin/`, the first line tells the grammar.
  */
 export const languageFor = (
   path: string,
@@ -62,8 +62,8 @@ export const languageFor = (
 }
 
 /**
- * Whether a file is worth fetching to colour: it has a grammar by its name, or
- * it has no extension and its first line may name one.
+ * Tells if a file is worth a request to color it. Its name gives a grammar, or
+ * it has no extension and its first line can name a grammar.
  */
 export const mayHighlight = (path: string): boolean =>
   languageFor(path) !== null || !hasExtension(baseName(path))
@@ -71,20 +71,20 @@ export const mayHighlight = (path: string): boolean =>
 let highlighter: Promise<HighlighterCore> | null = null
 
 /**
- * One highlighter for the page, with grammars added as files need them: each
- * grammar is its own chunk, so a review downloads only the languages it has.
- * The highlighter itself is loaded the first time a file is coloured, so a page
- * that colours nothing never pays for it, and the JavaScript regex engine spares
- * loading the WebAssembly one.
+ * One highlighter for the page. Grammars come when files need them. Each grammar
+ * is its own chunk. Thus a review downloads only the languages that it has. The
+ * highlighter loads when the first file gets color. Thus a page that colors
+ * nothing never loads it. The JavaScript regex engine prevents the load of the
+ * WebAssembly engine.
  */
 const getHighlighter = (): Promise<HighlighterCore> => {
   highlighter ??= (async () => {
     const [{ createCssVariablesTheme, createHighlighterCore }, { createJavaScriptRegexEngine }] =
       await Promise.all([import('shiki/core'), import('shiki/engine/javascript')])
     return createHighlighterCore({
-      // Colours come out as CSS variables rather than a highlighter's own
-      // theme, so that `tokens.css` decides them for both colour schemes like
-      // every other colour in the interface.
+      // The colors come as CSS variables, not from a theme of the highlighter.
+      // Thus `tokens.css` sets them for the two color schemes, as it does for
+      // all other colors in the interface.
       themes: [
         createCssVariablesTheme({
           name: 'yart',
@@ -101,7 +101,7 @@ const getHighlighter = (): Promise<HighlighterCore> => {
   return highlighter
 }
 
-// Shiki's FontStyle flags, which its types expose only as a const enum.
+// The FontStyle flags of Shiki. Its types give them only as a const enum.
 const ITALIC = 1
 const BOLD = 2
 
@@ -115,7 +115,7 @@ const toToken = (token: ThemedToken): SyntaxToken => {
   }
 }
 
-/** Tokens for a whole file, or null when it is not one to highlight. */
+/** The tokens for a full file, or null when the file gets no highlights. */
 export const tokenize = async (
   content: string,
   language: BundledLanguage,

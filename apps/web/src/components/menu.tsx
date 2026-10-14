@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import styles from './menu.module.css'
 
 export interface MenuProps {
-  /** Announced to assistive technology, since the trigger is only an icon. */
+  /** Assistive technology reads this, because the trigger is only an icon. */
   label: string
   /**
-   * Called whenever the menu closes, however it closed.
+   * Called each time the menu closes, however it closed.
    *
-   * Anything the menu was part-way through — a confirmation waiting on a second
-   * click — should be forgotten here, or it is still armed when the menu is
-   * next opened.
+   * Clear here each step that the menu did not complete, such as a confirmation
+   * that waits for a second click. Otherwise it is still ready when the menu
+   * opens the next time.
    */
   onClose?: () => void
   children: (close: () => void) => ReactNode
@@ -18,15 +18,16 @@ export interface MenuProps {
 /**
  * An overflow menu.
  *
- * Actions that are rarely wanted and hard to undo live behind this rather than
- * sitting in the row, where they compete with the thing the row is actually for.
+ * Actions that people seldom want, and that are difficult to undo, go behind
+ * this menu. In the row, they would take attention from the main purpose of the
+ * row.
  */
 export const Menu = ({ label, onClose, children }: MenuProps) => {
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
 
-  // Kept in a ref so the listener effect does not re-subscribe whenever the
-  // caller passes a new closure.
+  // Kept in a ref. Thus the listener effect does not subscribe again each time the
+  // caller gives a new closure.
   const on_close = useRef(onClose)
   on_close.current = onClose
 
@@ -81,7 +82,7 @@ export const Menu = ({ label, onClose, children }: MenuProps) => {
 
 export interface MenuItemProps {
   onClick: () => void
-  /** Styles the item as destructive, for actions that cannot be undone. */
+  /** Gives the item a destructive style, for actions that you cannot undo. */
   danger?: boolean
   children: ReactNode
 }

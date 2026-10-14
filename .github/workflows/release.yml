@@ -9,9 +9,9 @@ permissions:
 
 jobs:
   release:
-    # Apple Silicon, building the Intel app too: packaging for another
-    # architecture only downloads that architecture's Electron, and macOS
-    # minutes are the expensive kind.
+    # Apple Silicon, which also builds the Intel app. A package for a different
+    # architecture only downloads the Electron of that architecture. macOS
+    # minutes cost the most.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -34,18 +34,18 @@ jobs:
       - name: Package for Intel
         run: pnpm package:desktop --arch x64 --version "${GITHUB_REF_NAME#v}"
 
-      # The installer attached to a release installs that release, rather than
-      # whatever is latest: GitHub's "latest" skips pre-releases, so without
-      # this a beta could not be installed.
+      # The installer of a release installs that release, not the latest release.
+      # "latest" on GitHub ignores pre-releases. Without this step, you could not
+      # install a beta.
       - name: Point the installer at this release
         run: |
           sed -i '' "s/^release_tag=$/release_tag=$GITHUB_REF_NAME/" apps/desktop/install/install.sh
           grep -q "^release_tag=$GITHUB_REF_NAME$" apps/desktop/install/install.sh
 
-      # The install scripts go with the release, so each is the one that matches
-      # what it installs. A version with a suffix, such as v0.2.0-beta.1, is
-      # published as a pre-release: visible, installable from its own URL, and
-      # never what "latest" points at.
+      # The install scripts go with the release. Thus each script matches what it
+      # installs. A version with a suffix, such as v0.2.0-beta.1, becomes a
+      # pre-release. People can see it and install it from its own URL, but
+      # "latest" never points to it.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

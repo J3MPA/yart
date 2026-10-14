@@ -9,14 +9,14 @@ import type { SyntaxToken } from './syntax'
 import { anchorKey } from './thread-anchors'
 import styles from './review.module.css'
 
-/** Where the comment form is open: at most one row on the page at a time. */
+/** Where the comment form is open. Only one row on the page at a time. */
 export interface ComposeTarget {
   path: string
   side: DiffSide
   line: number
 }
 
-/** The side and line a comment on this row would attach to. */
+/** The side and the line of a comment on this row. */
 export interface RowTarget {
   side: DiffSide
   line: number
@@ -26,9 +26,9 @@ export interface DiffRowProps {
   review_id: string
   file_path: string
   line: DiffLine
-  /** The line's colours, or null to show it plain. */
+  /** The colors of the line, or null to show it as plain text. */
   tokens: readonly SyntaxToken[] | null
-  /** The file's blobs, which a drafted comment records its line against. */
+  /** The blobs of the file. A draft comment records its line against them. */
   file_blobs: FileBlobs
   threads_by_anchor: ReadonlyMap<string, Thread[]>
   drafting: Drafting
@@ -45,18 +45,17 @@ const MARKER: Record<DiffLine['kind'], string> = {
 }
 
 /**
- * Whether the click was the end of a text selection rather than a plain click.
+ * Tells if the click was the end of a text selection, not a usual click.
  *
- * The whole row is clickable, so selecting code would otherwise open a comment
- * form every time someone tried to copy a line.
+ * You can click all of the row. Without this check, each selection of code would
+ * open a comment form when someone tried to copy a line.
  */
 const isSelecting = (): boolean => (window.getSelection()?.toString() ?? '') !== ''
 
 /**
- * A comment attaches to whichever side of the diff the row actually exists on.
- * A removed line only exists in the base, an added line only in the head, and a
- * context line is addressed on the head because that is the version being
- * reviewed.
+ * A comment goes on the side of the diff where the row exists. A removed line
+ * exists only in the base. An added line exists only in the head. A context line
+ * uses the head, because that is the version under review.
  */
 const targetFor = (line: DiffLine): RowTarget | null => {
   if (line.kind === 'removed') {
@@ -65,7 +64,7 @@ const targetFor = (line: DiffLine): RowTarget | null => {
   return line.head_line === null ? null : { side: 'head', line: line.head_line }
 }
 
-/** One line of a diff, with whatever conversation hangs beneath it. */
+/** One line of a diff, with its conversation below it. */
 export const DiffRow = ({
   review_id,
   file_path,
@@ -138,8 +137,8 @@ export const DiffRow = ({
               className={styles.add_button}
               aria-label={`Comment on ${file_path} line ${target.line}`}
               onClick={(event) => {
-                // The row handles this too; without stopping here it
-                // would toggle twice and cancel itself out.
+                // The row also does this. Without a stop here, it would toggle
+                // two times and cancel itself.
                 event.stopPropagation()
                 toggleComment()
               }}
@@ -190,8 +189,8 @@ export const DiffRow = ({
               onQueue={(body) => {
                 const blob_sha =
                   target.side === 'head' ? file_blobs.head_blob_sha : file_blobs.base_blob_sha
-                // A row only offers a side that exists, so this is a guard
-                // against the impossible rather than a case to handle.
+                // A row offers only a side that exists. Thus this guard is for a
+                // case that cannot occur.
                 if (blob_sha === null) return
                 dispatch(
                   draftAdded({

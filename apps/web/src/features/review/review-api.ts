@@ -32,7 +32,7 @@ export interface SubmitReviewArgs {
   body?: string
   threads?: { path: string; side: DiffSide; line: number; body: string; blob_sha: string }[]
   replies?: { thread_id: string; body: string }[]
-  /** The head on screen when submitting; the daemon refuses if it has moved. */
+  /** The head on the screen at the submit. The daemon refuses if the head moved. */
   expected_head_sha?: string
 }
 
@@ -51,16 +51,16 @@ export interface SetThreadStatusArgs {
 export const reviewApi = createApi({
   reducerPath: 'reviewApi',
   baseQuery: fetchBaseQuery({ baseUrl: '/api' }),
-  // Threads change on nearly every interaction, so the review is refetched
-  // rather than patched locally: the server owns anchor state and re-deriving
-  // it in the browser would be a second implementation of it.
+  // Threads change on almost each action. Thus the page gets the review again,
+  // and does not change it locally. The server owns the anchor state. To
+  // calculate it again in the browser would be a second implementation.
   //
-  // The diff is tagged separately because it does not change when someone
-  // comments — only when head advances. Sharing one tag made every comment
-  // re-run `git diff` over every file in the review.
+  // The diff has its own tag, because it does not change when someone comments.
+  // It changes only when the head moves. With one shared tag, each comment ran
+  // `git diff` again over all files in the review.
   tagTypes: ['Review', 'ReviewList', 'Diff', 'Settings'],
-  // Nothing in this app advances the review; an agent does, over MCP. Refetching
-  // when the window regains focus is how the page notices that happened.
+  // Nothing in this app moves the review. An agent does that, over MCP. The page
+  // gets new data when the window gets focus. That is how it sees the change.
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
@@ -96,9 +96,10 @@ export const reviewApi = createApi({
       query: (review_id) => `/reviews/${review_id}/diff`,
       providesTags: ['Diff'],
     }),
-    // Fetched only when someone expands a collapsed run, and per file rather
-    // than with the diff: whole files for a 28-file review is a lot of text to
-    // send for the handful of lines anyone actually opens.
+    // Requested for each file, not with the diff. The page asks for a file when
+    // someone opens a collapsed run, or when the file comes near the screen and
+    // gets syntax highlights. Full files for all of a large review would be a
+    // lot of text to send at the start.
     getReviewFile: builder.query<FileContents, { review_id: string; path: string }>({
       query: ({ review_id, path }) => `/reviews/${review_id}/file?path=${encodeURIComponent(path)}`,
       providesTags: ['Diff'],

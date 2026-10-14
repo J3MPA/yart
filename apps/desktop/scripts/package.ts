@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/naming-convention -- esbuild's and
    @electron/packager's option names, and package.json's field names. */
 /**
- * Builds yart.app for one architecture, ad-hoc signed and zipped with its
- * checksum beside it.
+ * Builds yart.app for one architecture, with an ad-hoc signature. It puts the
+ * app in a zip, with the checksum next to it.
  *
  * Usage: pnpm package:desktop [--arch arm64|x64] [--version <version>]
  *
- * Everything the app runs is bundled into a staging directory laid out as the
- * workspace is — `packages/daemon/dist/cli.mjs` where the workspace has
- * `packages/daemon/src/cli.ts` — so that the files the daemon finds relative to
- * itself, its UI and its version, are where it looks.
+ * esbuild bundles all that the app runs into a staging directory with the same
+ * layout as the workspace. For example, `packages/daemon/dist/cli.mjs` is where
+ * the workspace has `packages/daemon/src/cli.ts`. Thus the daemon finds its UI
+ * and its version in the places where it looks, relative to itself.
  */
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -29,8 +29,8 @@ const STAGING = join(OUT, 'staging')
 const BUNDLE_ID = 'io.github.j3mpa.yart'
 
 /**
- * Bundles that pull in CommonJS dependencies call `require`, which an ES module
- * does not have until it is made.
+ * Bundles with CommonJS dependencies call `require`. An ES module does not have
+ * `require` until something makes it.
  */
 const REQUIRE_SHIM =
   "import { createRequire as yartCreateRequire } from 'node:module'; " +
@@ -72,7 +72,7 @@ const main = async () => {
   ).version
   const started = Date.now()
 
-  // Only this architecture's output, so that building both leaves both.
+  // Remove only the output of this architecture. Thus a build of the two keeps the two.
   const zip_name = `yart-darwin-${arch}.zip`
   const zip_path = join(OUT, zip_name)
   for (const stale of [STAGING, join(OUT, `yart-darwin-${arch}`), zip_path, `${zip_path}.sha256`]) {
@@ -90,7 +90,7 @@ const main = async () => {
   await bundle('apps/desktop/src/main.ts', 'apps/desktop/dist/main.mjs', ['electron'])
   await cp(join(DESKTOP, 'src', 'preload.cjs'), join(STAGING, 'apps/desktop/dist/preload.cjs'))
 
-  // The daemon reports the version beside it, so it is the app's.
+  // The daemon gives the version of the file next to it. Thus it is the version of the app.
   await writeFile(
     join(STAGING, 'packages', 'daemon', 'package.json'),
     `${JSON.stringify({ name: '@yart/daemon', version }, null, 2)}\n`,
@@ -116,14 +116,15 @@ const main = async () => {
     asar: true,
     overwrite: true,
     protocols: [{ name: 'yart', schemes: ['yart'] }],
-    // `yart uninstall` runs the uninstaller the app carries, which matches it.
+    // `yart uninstall` runs the uninstaller in the app, which matches the app.
     extraResource: [join(DESKTOP, 'bin'), join(DESKTOP, 'install', 'uninstall.sh')],
   })
   if (app_dir === undefined) throw new Error('Packaging produced no app')
   const app_path = join(app_dir, 'yart.app')
 
-  // What the packager writes is only linker-signed and fails verification; an
-  // ad-hoc signature over the whole bundle is what lets it open unquarantined.
+  // The output of the packager has only a signature from the linker, and fails
+  // the check. An ad-hoc signature over the full bundle lets it open without
+  // quarantine.
   await run('codesign', ['--force', '--deep', '--sign', '-', app_path])
   await run('codesign', ['--verify', '--deep', '--strict', app_path])
 

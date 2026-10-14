@@ -1,4 +1,4 @@
-/* Sized in em so it follows whatever text it sits beside. */
+/* The size is in em, thus it follows the text next to it. */
 .chevron {
   width: 1.15em;
   height: 1.15em;

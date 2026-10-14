@@ -1,27 +1,27 @@
-/** Where a file's section sits relative to the top of the window. */
+/** Where the section of a file is, relative to the top of the window. */
 export interface FilePosition {
   path: string
-  /** Distance from the top of the viewport, as `getBoundingClientRect` gives it. */
+  /** The distance from the top of the viewport, as `getBoundingClientRect` gives it. */
   top: number
 }
 
 /**
- * How far down the window the reading line sits, as a fraction of its height.
+ * How far down the window the reading line is, as a fraction of its height.
  *
- * Not the very top: the file being read is the one filling the screen, not the
- * one whose last rows are scrolling out of it.
+ * Not at the top. The file that you read is the file that fills the screen, not
+ * the file whose last rows go out of it.
  */
 export const READING_LINE = 0.25
 
 /**
- * Which file is being read, given where each one starts.
+ * The file that you read, from where each file starts.
  *
- * The last file to have begun above the reading line — everything below it has
- * not been reached yet. Positions must be in the order they appear on the page.
+ * This is the last file that starts above the reading line. You did not get to
+ * the files below it yet. The positions must be in the order of the page.
  *
- * Before the first file has crossed the line there is still a file on screen,
- * so the first one is named rather than nothing: an index that highlights
- * nothing at the top of the page reads as broken rather than as precise.
+ * Before the first file crosses the line, a file is still on the screen. Thus
+ * the function names the first file, not nothing. An index that marks nothing at
+ * the top of the page looks broken, not precise.
  */
 export const activeFile = (
   positions: readonly FilePosition[],

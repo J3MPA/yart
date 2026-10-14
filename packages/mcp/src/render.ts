@@ -3,11 +3,11 @@ import type { DiffLine, FileDiff, ReviewVerdict, Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 /**
- * Threads are rendered as text rather than returned as JSON.
+ * Threads come back as text, not as JSON.
  *
- * The consumer is a model deciding what to change, and a comment is far easier
- * to act on next to the code it points at than as a line number in a JSON
- * object. Thread ids are included because replying and resolving need them.
+ * A model reads them and decides what to change. A comment next to its code is
+ * much easier to act on than a line number in a JSON object. The text includes
+ * the thread ids, because a reply and a resolve need them.
  */
 
 const indent = (lines: readonly string[], prefix: string): string =>
@@ -60,10 +60,10 @@ const VERDICT_LABEL: Record<ReviewVerdict, string> = {
 export { currentSubmission } from '@yart/core'
 
 /**
- * The verdict, its summary, and anything already said back to it.
+ * The verdict, its summary, and the replies to it.
  *
- * The id is shown because the summary can be replied to, and `reply_to_verdict`
- * needs something to aim at when the review has been round more than once.
+ * The text shows the id, because the summary can get a reply. `reply_to_verdict`
+ * needs the id when the review had more than one round.
  */
 export const renderVerdict = (review: Review): string => {
   const submission = currentSubmission(review)
@@ -74,8 +74,8 @@ export const renderVerdict = (review: Review): string => {
     (comment) => `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}`,
   )
   const conversation = replies.length === 0 ? '' : `\n\n${replies.join('\n')}`
-  // Said outright when an AI reviewer passed it, since the agent should know
-  // its work has not yet been seen by the person.
+  // Say clearly when an AI reviewer gave the verdict. The agent must know that the
+  // person did not see its work yet.
   const by =
     submissionAuthor(submission) === 'reviewer'
       ? ` by ${describeAuthor('reviewer', submission.author_name)}`
@@ -112,10 +112,10 @@ export const renderReview = (review: Review, url: string): string => {
 }
 
 /**
- * One line per review, led by its title.
+ * One line for each review, with its title first.
  *
- * A revision range does not identify anything in a list: `..HEAD` is stale the
- * moment the head moves, and a hash says nothing at all.
+ * A revision range does not identify a review in a list. `..HEAD` is not
+ * correct after the head moves, and a hash says nothing.
  */
 export const renderReviewLine = (review: Review): string => {
   const submission = currentSubmission(review)
@@ -129,8 +129,8 @@ export const renderReviewLine = (review: Review): string => {
 }
 
 export const renderReviewWithThreads = (review: Review, url: string): string => {
-  // The verdict and anything said back to it belong here too: an agent checking
-  // progress needs to see the conversation it is part of, not just the counts.
+  // The verdict and its replies also belong here. An agent that examines the
+  // progress must see its conversation, not only the counts.
   const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review)]
   return [
     renderReview(review, url),
@@ -141,8 +141,8 @@ export const renderReviewWithThreads = (review: Review, url: string): string => 
 }
 
 /**
- * Past this many lines a diff is cut short. A reviewer reads it into its
- * context, and a change this large is better read file by file with git.
+ * After this count of lines, the diff stops. A reviewer reads it into its
+ * context. For a change this large, it is better to read each file with git.
  */
 export const MAX_DIFF_LINES = 3000
 
@@ -152,8 +152,8 @@ const renderDiffLine = (line: DiffLine): string =>
   `${MARKER[line.kind]} ${String(line.base_line ?? '').padStart(5)} ${String(line.head_line ?? '').padStart(5)}  ${line.text}`
 
 /**
- * A review's diff for an AI reviewer to read, with both line numbers on every
- * line so that a comment can be aimed at the side it is about.
+ * The diff of a review, for an AI reviewer to read. Each line has the two line
+ * numbers. Thus a comment can go on the side that it is about.
  */
 export const renderDiff = (files: readonly FileDiff[], review: Review): string => {
   const out: string[] = [

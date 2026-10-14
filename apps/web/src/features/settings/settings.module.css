@@ -47,8 +47,8 @@
   background-color: var(--yart-color-surface-sunken);
 }
 
-/* Drawn from the tokens, as the list's checkboxes are, rather than the
-   browser's own bright control. */
+/* The tokens draw this, as they do for the checkboxes of the list. The control of
+   the browser is too bright. */
 .radio {
   flex: none;
   display: inline-grid;

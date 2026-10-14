@@ -1,3 +1,3 @@
-# The ruleset on main requires a code owner's approval, so this makes every pull
-# request need the maintainer's.
+# The ruleset on main requires the approval of a code owner. Thus each pull
+# request needs the approval of the maintainer.
 * @J3MPA
