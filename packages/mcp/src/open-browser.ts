@@ -17,12 +17,26 @@ const LINUX_LAUNCHER = { command: 'xdg-open', args: [] as readonly string[] }
 
 export type BrowserOpener = (url: string) => void
 
+/**
+ * The environment for a launcher. The `yart-mcp` of the desktop app runs on the
+ * Electron of the app with `ELECTRON_RUN_AS_NODE`. If `open` gives that variable
+ * to yart.app, the app starts as plain Node and stops with no window.
+ */
+export const launcherEnv = (
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string | undefined> => {
+  const clean = { ...env }
+  delete clean.ELECTRON_RUN_AS_NODE
+  return clean
+}
+
 export const openInBrowser: BrowserOpener = (url) => {
   const launcher = LAUNCHERS[process.platform] ?? LINUX_LAUNCHER
   try {
     const child = spawn(launcher.command, [...launcher.args, url], {
       detached: true,
       stdio: 'ignore',
+      env: launcherEnv(),
     })
     // A computer with no browser, or with no launcher on PATH, must not make the
     // tool call fail. The URL is in the response in all cases.
@@ -58,7 +72,7 @@ export const openReview = (url: string, port: number, fallback: BrowserOpener = 
     fallback(url)
   }
   try {
-    const child = spawn('open', [appLink(url)], { stdio: 'ignore' })
+    const child = spawn('open', [appLink(url)], { stdio: 'ignore', env: launcherEnv() })
     child.on('error', fallBack)
     child.on('exit', (code) => {
       if (code !== 0) fallBack()
