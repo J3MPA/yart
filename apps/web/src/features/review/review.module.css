@@ -358,7 +358,7 @@
   align-items: center;
   gap: var(--yart-space-3);
   width: 100%;
-  padding: var(--yart-space-3);
+  padding: var(--yart-space-2) var(--yart-space-3);
   background-color: var(--yart-color-surface);
   border-bottom: 1px solid var(--yart-color-border);
   color: inherit;
@@ -441,7 +441,7 @@
 }
 
 .list_title {
-  font-size: var(--yart-text-md);
+  font-size: var(--yart-text-sm);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -461,10 +461,13 @@
 }
 
 .list_meta {
-  margin-top: var(--yart-space-1);
+  margin-top: 1px;
+  overflow: hidden;
   font-family: var(--yart-font-mono);
   font-size: var(--yart-text-xs);
   color: var(--yart-color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .list_counts {
