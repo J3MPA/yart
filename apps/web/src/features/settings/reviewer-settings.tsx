@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   MAX_AI_REVIEW_ROUNDS,
+  MAX_REVIEWER_COMMAND_LENGTH,
   MAX_REVIEWER_INSTRUCTIONS_LENGTH,
   MAX_REVIEWER_MODEL_LENGTH,
   MIN_AI_REVIEW_ROUNDS,
@@ -32,8 +33,12 @@ export const ReviewerSettings = ({ settings }: ReviewerSettingsProps) => {
   // Save typed text when the field loses focus, not on each key.
   const [model, setModel] = useState(settings.reviewer_model ?? '')
   const [instructions, setInstructions] = useState(settings.reviewer_instructions ?? '')
+  const [command, setCommand] = useState(settings.reviewer_command ?? '')
 
-  const saveText = (field: 'reviewer_model' | 'reviewer_instructions', value: string) => {
+  const saveText = (
+    field: 'reviewer_model' | 'reviewer_instructions' | 'reviewer_command',
+    value: string,
+  ) => {
     if (value.trim() === (settings[field] ?? '')) return
     void updateSettings({ [field]: value })
   }
@@ -121,6 +126,28 @@ export const ReviewerSettings = ({ settings }: ReviewerSettingsProps) => {
           placeholder="For example: look hardest at error handling and tests."
           onChange={(event) => setInstructions(event.target.value)}
           onBlur={() => saveText('reviewer_instructions', instructions)}
+        />
+      </label>
+
+      <label className={styles.field}>
+        <span className={styles.choice_label}>Command for the commit hook</span>
+        <span className={styles.choice_detail}>
+          The shell command that starts a reviewer before each commit, in repositories where you ran{' '}
+          <code>yart hook install</code>. Empty turns the hook off. The command gets the review in{' '}
+          <code>YART_REVIEW_ID</code> and <code>YART_REVIEW_URL</code>, and these settings in{' '}
+          <code>YART_REVIEWER_MODEL</code>, <code>YART_REVIEWER_EFFORT</code> and{' '}
+          <code>YART_REVIEWER_INSTRUCTIONS</code>.
+        </span>
+        <textarea
+          className={[styles.textarea, styles.code_input].join(' ')}
+          rows={3}
+          value={command}
+          maxLength={MAX_REVIEWER_COMMAND_LENGTH}
+          placeholder={
+            'claude -p "Review the yart review $YART_REVIEW_ID as an AI reviewer." --model "${YART_REVIEWER_MODEL:-sonnet}"'
+          }
+          onChange={(event) => setCommand(event.target.value)}
+          onBlur={() => saveText('reviewer_command', command)}
         />
       </label>
     </fieldset>

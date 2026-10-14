@@ -288,6 +288,44 @@ sequenceDiagram
     You->>Daemon: your verdict
 ```
 
+### Review each commit with an AI
+
+A commit hook can make an AI reviewer review the staged changes before each
+commit. The commit continues only when the reviewer approves. To set it up, do
+these steps:
+
+1. In the repository, run `yart hook install`. This adds a `pre-commit` hook. It
+   does not replace a hook that yart did not write.
+2. Open **Settings**, and set **Command for the commit hook** in the **AI
+   reviewer** section. This is the shell command that starts a reviewer.
+
+The command gets the review in `YART_REVIEW_ID` and `YART_REVIEW_URL`, and the
+reviewer settings in `YART_REVIEWER_MODEL`, `YART_REVIEWER_EFFORT` and
+`YART_REVIEWER_INSTRUCTIONS`. They are environment variables, not text in the
+command. Thus a value with quotes cannot break the command. For Claude Code:
+
+```sh
+claude -p "Review the yart review $YART_REVIEW_ID as an AI reviewer. Use get_reviewer_settings, get_diff and submit_verdict. $YART_REVIEWER_INSTRUCTIONS" --model "${YART_REVIEWER_MODEL:-sonnet}"
+```
+
+On each commit, the hook does these steps:
+
+1. It makes a tree of the staged changes, and opens a review of it against
+   `HEAD`.
+2. It runs the command, and waits for the verdict of the reviewer for up to 10
+   minutes.
+3. If the reviewer approves, the commit continues.
+4. If the reviewer asks for changes, the commit stops. The hook shows the
+   comments and the link to the review. Make the fixes, stage them and commit
+   again. The next commit moves the same review, and the comments follow their
+   lines.
+
+The commit also stops when the command fails, when no verdict comes in time,
+and when the reviewer has no more rounds. Without a command, or with nothing
+staged, the hook does nothing. Each run of the reviewer costs a model run.
+`git commit --no-verify` skips the hook one time. `yart hook uninstall` removes
+it.
+
 ### Clean up approved reviews
 
 **Settings**, linked from the review list, sets what happens to a review after
