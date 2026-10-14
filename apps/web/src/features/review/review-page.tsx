@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { agentActivity, currentSubmission } from '@yart/core'
+import { agentActivity, currentSubmission, describeAuthor, submissionAuthor } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { Button } from '@/components/button'
+import { AuthorLabel } from './author-label'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { DiffFile } from './diff-file'
@@ -153,13 +154,16 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
             .join(' ')}
         >
           <div className={styles.verdict_label}>
-            {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
+            {VERDICT_LABEL[submission.verdict]}
+            {submissionAuthor(submission) === 'reviewer' &&
+              ` · by ${describeAuthor('reviewer', submission.author_name)}`}{' '}
+            · {relativeTime(submission.created_at)}
           </div>
           {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
 
           {submission.comments.map((comment) => (
             <div key={comment.id} className={styles.verdict_reply}>
-              <div className={styles.comment_author}>{comment.author}</div>
+              <AuthorLabel author={comment.author} author_name={comment.author_name} />
               <div className={styles.comment_body}>{comment.body}</div>
             </div>
           ))}

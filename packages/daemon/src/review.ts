@@ -23,7 +23,13 @@ import {
   type ChangedFile,
 } from './git.ts'
 import { placeholderTitle, ReviewStore } from './store.ts'
-import type { Review, ReviewFile, ReviewSubmission, ReviewVerdict } from './types.ts'
+import type {
+  Review,
+  ReviewFile,
+  ReviewSubmission,
+  ReviewVerdict,
+  SubmissionAuthor,
+} from './types.ts'
 
 export class ReviewError extends Error {
   readonly status: number
@@ -125,6 +131,9 @@ export interface DraftReply {
 
 export interface SubmitParams {
   verdict?: ReviewVerdict
+  /** Who passes the verdict. Comments held for it are theirs too. */
+  author?: SubmissionAuthor
+  author_name?: string | null
   body?: string | null
   threads?: readonly DraftThread[]
   replies?: readonly DraftReply[]
@@ -144,7 +153,21 @@ export interface AddThreadParams {
   side?: DiffSide
   body: string
   author?: CommentAuthor
+  author_name?: string | null
 }
+
+/** A comment, carrying a reviewer's name only when there is one to carry. */
+const newComment = (
+  body: string,
+  author: CommentAuthor,
+  author_name: string | null = null,
+): Comment => ({
+  id: randomUUID(),
+  author,
+  ...(author_name === null ? {} : { author_name }),
+  body,
+  created_at: nowIso(),
+})
 
 export class ReviewService {
   private readonly repo_path: string
@@ -248,7 +271,7 @@ export class ReviewService {
 
   /** Resolves a comment's line against the review and captures its context. */
   private async buildThread(review: Review, params: AddThreadParams): Promise<Thread> {
-    const { path, line, side = 'head', body, author = 'human' } = params
+    const { path, line, side = 'head', body, author = 'human', author_name = null } = params
 
     const file = review.files.find((candidate) => candidate.path === path)
     if (file === undefined) {
@@ -261,12 +284,7 @@ export class ReviewService {
     }
 
     const content = await readBlob(review.repo_path, blob_sha)
-    const comment: Comment = {
-      id: randomUUID(),
-      author,
-      body,
-      created_at: nowIso(),
-    }
+    const comment = newComment(body, author, author_name)
 
     try {
       return createThread({
@@ -302,8 +320,9 @@ export class ReviewService {
     thread_id: string,
     body: string,
     author: CommentAuthor = 'human',
+    author_name: string | null = null,
   ): Promise<Review> {
-    const comment: Comment = { id: randomUUID(), author, body, created_at: nowIso() }
+    const comment = newComment(body, author, author_name)
     return this.withThread(id, thread_id, (thread) => ({
       ...thread,
       comments: [...thread.comments, comment],
@@ -326,12 +345,13 @@ export class ReviewService {
     submission_id: string,
     body: string,
     author: CommentAuthor = 'human',
+    author_name: string | null = null,
   ): Promise<Review> {
     const review = await this.get(id)
     const index = review.submissions.findIndex((submission) => submission.id === submission_id)
     if (index === -1) throw new ReviewError(`No submission with id ${submission_id}`, 404)
 
-    const comment: Comment = { id: randomUUID(), author, body, created_at: nowIso() }
+    const comment = newComment(body, author, author_name)
     const submissions = [...review.submissions]
     const submission = submissions[index] as ReviewSubmission
     submissions[index] = { ...submission, comments: [...submission.comments, comment] }
@@ -350,6 +370,8 @@ export class ReviewService {
     const review = await this.get(id)
     const {
       verdict = 'commented',
+      author = 'human',
+      author_name = null,
       body = null,
       threads: drafts = [],
       replies = [],
@@ -378,25 +400,22 @@ export class ReviewService {
           )
         }
       }
-      threads.push(await this.buildThread(review, { ...draft, author: 'human' }))
+      threads.push(await this.buildThread(review, { ...draft, author, author_name }))
     }
 
     for (const reply of replies) {
       const index = threads.findIndex((thread) => thread.id === reply.thread_id)
       if (index === -1) throw new ReviewError(`No thread with id ${reply.thread_id}`, 404)
       const thread = threads[index] as Thread
-      const comment: Comment = {
-        id: randomUUID(),
-        author: 'human',
-        body: reply.body,
-        created_at: nowIso(),
-      }
+      const comment = newComment(reply.body, author, author_name)
       threads[index] = { ...thread, comments: [...thread.comments, comment] }
     }
 
     const submission: ReviewSubmission = {
       id: randomUUID(),
       verdict,
+      author,
+      ...(author_name === null ? {} : { author_name }),
       body: body === null || body.trim() === '' ? null : body.trim(),
       comments: [],
       head_sha: review.head_sha,

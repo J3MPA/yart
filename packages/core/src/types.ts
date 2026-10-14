@@ -42,11 +42,21 @@ export type AnchorState = 'current' | 'shifted' | 'outdated'
 /** Conversational state, independent of whether the anchor still resolves. */
 export type ThreadStatus = 'open' | 'resolved'
 
-export type CommentAuthor = 'human' | 'agent'
+/**
+ * Who wrote a comment: the person reviewing, the agent whose work is under
+ * review, or an AI reviewer standing in for the person.
+ */
+export type CommentAuthor = 'human' | 'agent' | 'reviewer'
 
 export interface Comment {
   id: string
   author: CommentAuthor
+  /**
+   * The name an AI reviewer goes by, such as `claude-reviewer`, so that more
+   * than one can be told apart. Absent for the person and the agent, and on
+   * comments written before reviewers existed.
+   */
+  author_name?: string | null
   body: string
   /** ISO 8601. */
   created_at: string

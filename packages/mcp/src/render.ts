@@ -1,4 +1,4 @@
-import { currentSubmission } from '@yart/core'
+import { currentSubmission, describeAuthor, submissionAuthor } from '@yart/core'
 import type { ReviewVerdict, Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
@@ -35,7 +35,9 @@ const renderLocation = (thread: Thread): string => {
 }
 
 export const renderThread = (thread: Thread): string => {
-  const comments = thread.comments.map((comment) => `  ${comment.author}: ${comment.body}`)
+  const comments = thread.comments.map(
+    (comment) => `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}`,
+  )
   const status = thread.status === 'resolved' ? ' [resolved]' : ''
   return [
     `[${thread.id}] ${renderLocation(thread)}${status}`,
@@ -68,10 +70,18 @@ export const renderVerdict = (review: Review): string => {
   if (submission === null) return 'Not submitted yet.'
 
   const summary = submission.body === null ? '' : `\n\n  ${submission.body}`
-  const replies = submission.comments.map((comment) => `  ${comment.author}: ${comment.body}`)
+  const replies = submission.comments.map(
+    (comment) => `  ${describeAuthor(comment.author, comment.author_name)}: ${comment.body}`,
+  )
   const conversation = replies.length === 0 ? '' : `\n\n${replies.join('\n')}`
+  // Said outright when an AI reviewer passed it, since the agent should know
+  // its work has not yet been seen by the person.
+  const by =
+    submissionAuthor(submission) === 'reviewer'
+      ? ` by ${describeAuthor('reviewer', submission.author_name)}`
+      : ''
 
-  return `Verdict: ${VERDICT_LABEL[submission.verdict]}  [${submission.id}]${summary}${conversation}`
+  return `Verdict: ${VERDICT_LABEL[submission.verdict]}${by}  [${submission.id}]${summary}${conversation}`
 }
 
 export const openThreads = (review: Review): Thread[] =>

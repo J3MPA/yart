@@ -264,6 +264,12 @@
   color: var(--yart-color-text-muted);
 }
 
+/* An AI reviewer speaks for the person, so it is set apart from the agent whose
+   work it reviews. */
+.comment_author_reviewer {
+  color: var(--yart-color-accent);
+}
+
 .comment_body {
   white-space: pre-wrap;
   font-size: var(--yart-text-sm);

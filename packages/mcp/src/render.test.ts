@@ -1,6 +1,7 @@
 import { createThread, type Comment, type Thread } from '@yart/core'
+import type { Review } from '@yart/daemon'
 import { describe, expect, it } from 'vitest'
-import { openThreads, renderThread, renderThreads } from './render.ts'
+import { openThreads, renderThread, renderThreads, renderVerdict } from './render.ts'
 
 const COMMENT: Comment = {
   id: 'c1',
@@ -88,5 +89,36 @@ describe('openThreads', () => {
       threads: [threadAt(1), { ...threadAt(2), id: 't-done', status: 'resolved' as const }],
     }
     expect(openThreads(review as never).map((thread) => thread.id)).toEqual(['t-abc'])
+  })
+})
+
+describe('an AI reviewer', () => {
+  it('is shown by its name on its comments', () => {
+    const thread = createThread({
+      id: 't-r',
+      anchor: { path: 'src/a.ts', blob_sha: 'blob1', line: 2, side: 'head' },
+      content: CONTENT,
+      comment: { ...COMMENT, author: 'reviewer', author_name: 'claude-reviewer' },
+    })
+    expect(renderThread(thread)).toContain('reviewer claude-reviewer: this needs a null check')
+  })
+
+  it('is named on a verdict it passed, so the agent knows the person has not seen it yet', () => {
+    const review = {
+      head_sha: 'h',
+      submissions: [
+        {
+          id: 's1',
+          verdict: 'approved',
+          author: 'reviewer',
+          author_name: 'claude-reviewer',
+          body: null,
+          comments: [],
+          head_sha: 'h',
+          created_at: '2026-10-14T00:00:00.000Z',
+        },
+      ],
+    } as unknown as Review
+    expect(renderVerdict(review)).toContain('Verdict: APPROVED by reviewer claude-reviewer')
   })
 })

@@ -33,9 +33,16 @@ export type ReviewStatus = 'open' | 'submitted'
  */
 export type ReviewVerdict = 'commented' | 'approved' | 'changes_requested'
 
+/** Who can pass a verdict: the person, or an AI reviewer standing in for them. */
+export type SubmissionAuthor = 'human' | 'reviewer'
+
 export interface ReviewSubmission {
   id: string
   verdict: ReviewVerdict
+  /** Absent on verdicts from before reviewers existed, which were all the person's. */
+  author?: SubmissionAuthor
+  /** The AI reviewer's name, as on its comments. */
+  author_name?: string | null
   /** Summary written when submitting, separate from any line comments. */
   body: string | null
   /**
