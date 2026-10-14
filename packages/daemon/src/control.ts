@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
+import type { Review } from '@yart/core'
 
 export interface DaemonHealth {
   repo_path: string | null
@@ -76,4 +77,34 @@ export const startDaemon = async (options: StartOptions): Promise<void> => {
   ).unref()
   const started = await waitFor(async () => (await daemonHealth(port)) !== null, timeout_ms)
   if (!started) throw new Error(`The daemon did not start on port ${port}.`)
+}
+
+export interface WaitOptions {
+  port: number
+  review_id: string
+  /** Null waits with no limit. */
+  timeout_ms: number | null
+  poll_ms?: number
+}
+
+/**
+ * Waits until a review has a verdict, as `await_review` does. Returns the
+ * review, or null when the time is over. A daemon that does not answer for a
+ * short time, for example during a restart, does not stop the wait.
+ */
+export const waitForVerdict = async (options: WaitOptions): Promise<Review | null> => {
+  const { port, review_id, timeout_ms, poll_ms = 1000 } = options
+  const deadline = timeout_ms === null ? null : Date.now() + timeout_ms
+  for (;;) {
+    const response = await fetch(
+      `http://localhost:${port}/api/reviews/${encodeURIComponent(review_id)}`,
+    ).catch(() => null)
+    if (response?.status === 404) throw new Error(`There is no review ${review_id}.`)
+    if (response?.ok === true) {
+      const review = (await response.json()) as Review
+      if (review.status === 'submitted') return review
+    }
+    if (deadline !== null && Date.now() >= deadline) return null
+    await delay(poll_ms)
+  }
 }

@@ -237,6 +237,12 @@ describe('opening the review', () => {
     expect(rendered).toContain('yart opened the review')
   })
 
+  it('tells the agent how to wait in the background, on the port of its daemon', async () => {
+    const rendered = await call('start_review', { base })
+    expect(rendered).toContain(`yart await ${idFrom(rendered)} --port ${port}`)
+    expect(rendered).toContain('Else call await_review')
+  })
+
   it('does not open a window for a review with nothing in it', async () => {
     await call('start_review', { base: 'HEAD' })
     expect(opened).toEqual([])
