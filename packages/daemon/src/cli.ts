@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import type { Server } from 'node:http'
-import { daemonHealth, startDaemon, stopDaemon } from './control.ts'
+import { latestSubmission, submissionAuthor } from '@yart/core'
+import { daemonHealth, startDaemon, stopDaemon, waitForVerdict } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
 import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
@@ -196,8 +197,57 @@ const control = async (command: string, argv: readonly string[]): Promise<number
   }
 }
 
+/**
+ * `yart await <review-id>`. It waits until the review has a verdict. An agent
+ * runs it in the background, thus its turn stays free while the person reviews.
+ * Exit code 0: a verdict came. Exit code 2: the time limit was over.
+ */
+const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: { port: { type: 'string', short: 'p' }, timeout: { type: 'string', short: 't' } },
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Node's option name
+    allowPositionals: true,
+  })
+  const review_id = positionals[0]
+  if (review_id === undefined) {
+    process.stderr.write('Usage: yart await <review-id> [--port <port>] [--timeout <minutes>]\n')
+    return 1
+  }
+  const minutes = values.timeout === undefined ? null : Number(values.timeout)
+  if (minutes !== null && !(minutes > 0)) throw new Error(`Invalid timeout: ${values.timeout}`)
+
+  const review = await waitForVerdict({
+    port: parsePort(values.port),
+    review_id,
+    timeout_ms: minutes === null ? null : minutes * 60_000,
+  })
+  if (review === null) {
+    process.stdout.write(`yart: no verdict on ${review_id} in ${minutes} minutes.\n`)
+    return 2
+  }
+  const verdict = latestSubmission(review)
+  const who =
+    verdict !== null && submissionAuthor(verdict) === 'reviewer' ? 'an AI reviewer' : 'the person'
+  const open = review.threads.filter((thread) => thread.status === 'open').length
+  process.stdout.write(
+    `yart: ${who} gave the verdict ${verdict?.verdict ?? 'unknown'} on ${review_id}, with ` +
+      `${open} open comment${open === 1 ? '' : 's'}. Call get_review to read it.\n`,
+  )
+  return 0
+}
+
 export const main = async (argv: readonly string[]): Promise<void> => {
   const command = argv[0]
+  if (command === 'await') {
+    try {
+      process.exitCode = await awaitVerdict(argv.slice(1))
+    } catch (cause) {
+      process.stderr.write(`yart: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+      process.exitCode = 1
+    }
+    return
+  }
   if (command !== undefined && CONTROL_COMMANDS.has(command)) {
     try {
       process.exitCode = await control(command, argv.slice(1))
@@ -252,6 +302,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         'Usage: yart [options]',
         '       yart start|stop|restart|status [--port <port>]',
+        '       yart await <review-id> [--port <port>] [--timeout <minutes>]',
         '       yart hook <install|uninstall|pre-commit>',
         '       yart reviewer <install|uninstall> [--user]',
         '',

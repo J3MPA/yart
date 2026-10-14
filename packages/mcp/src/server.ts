@@ -34,7 +34,8 @@ const MAX_IMAGES = 10
 const INSTRUCTIONS = [
   'yart is a local code review tool. Obey these rules:',
   '- When the person asks to review changes, call start_review. Do not ask how they want to review.',
-  '- After start_review, call await_review at once. Do not wait for the person to tell you.',
+  '- After start_review and advance_review, wait for the verdict at once. Do not wait for the ' +
+    'person to tell you. Their results tell you how to wait.',
   '- When yart opens the review for the person, do not send the review URL.',
   '- When you fix a problem that the person can see, such as a UI change, attach a ' +
     'screenshot of the fix with image_paths.',
@@ -134,6 +135,15 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const opening_enabled = browserOpeningEnabled()
   // When yart opens the review for the person, the agent does not get the URL.
   // An agent repeats a URL in the chat, and the person does not need it there.
+  /**
+   * How to wait for the verdict. A background command keeps the turn of the
+   * agent free while the person reviews. `await_review` works in each client.
+   */
+  const waitHint = (review_id: string): string =>
+    'Then wait for the verdict. If you can run a shell command in the background, run ' +
+    `\`yart await ${review_id}${port === DEFAULT_PORT ? '' : ` --port ${port}`}\` in the ` +
+    'background, and call get_review when it stops. Else call await_review with this id.'
+
   const shownUrl = (review_id: string): string | null =>
     opening_enabled ? null : daemon.reviewUrl(review_id)
 
@@ -173,7 +183,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         'Open a code review of your changes for the person. Call this when you complete ' +
         'your changes. You do not have to commit them. Also call this when the person asks ' +
         'to review changes. By default, the review shows all changes in the files on disk, ' +
-        'also new files. Then call await_review.',
+        'also new files. Then wait for the verdict, as the result tells you.',
       input_schema: {
         base: z
           .string()
@@ -225,9 +235,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             '',
             opening_enabled
               ? 'yart opened the review for the person. Tell them in one short sentence that ' +
-                'it is open. Do not send the URL. Then call await_review with this id.'
-              : 'Ask the person to open the URL and review the changes. Then call await_review ' +
-                'with this id.',
+                'it is open. Do not send the URL.'
+              : 'Ask the person to open the URL and review the changes.',
+            waitHint(review.id),
           ].join('\n'),
         )
       }),
@@ -448,7 +458,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           [
             renderReviewWithThreads(review, shownUrl(review.id)),
             '',
-            'Tell the person that the review is ready again. Then call await_review.',
+            'Tell the person that the review is ready again.',
+            waitHint(review.id),
           ].join('\n'),
         )
       }),

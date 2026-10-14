@@ -635,6 +635,12 @@ yart restart   # Stop the daemon, and start it again with the same repository.
 Each command accepts `--port`. `yart` with no command runs the daemon in the
 foreground.
 
+**Wait for a verdict in the background.** `yart await <review-id>` waits until
+the review has a verdict, then prints it and stops with exit code 0. With
+`--timeout <minutes>`, it stops with exit code 2 when the time is over. An agent
+that can run a shell command in the background uses it in place of
+`await_review`. Thus the turn of the agent stays free while you review.
+
 **Writes must be JSON.** A web page on any site can send a "simple" POST across
 origins to `localhost`. The browser does not ask first. The page cannot read
 the answer, but the daemon would do the action, in any repository that the page
