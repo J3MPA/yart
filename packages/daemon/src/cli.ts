@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import type { Server } from 'node:http'
-import { latestSubmission, submissionAuthor } from '@yart/core'
-import { daemonHealth, startDaemon, stopDaemon, waitForVerdict } from './control.ts'
+import { authorHasAnswered, latestSubmission, submissionAuthor } from '@yart/core'
+import { daemonHealth, startDaemon, stopDaemon, waitForReview } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
 import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
@@ -198,30 +198,58 @@ const control = async (command: string, argv: readonly string[]): Promise<number
 }
 
 /**
- * `yart await <review-id>`. It waits until the review has a verdict. An agent
- * runs it in the background, thus its turn stays free while the person reviews.
- * Exit code 0: a verdict came. Exit code 2: the time limit was over.
+ * `yart await <review-id>`. It waits until the review has a verdict. With
+ * `--author`, an AI reviewer waits until the author answers its verdict. An
+ * agent runs it in the background, thus its turn stays free while it waits.
+ * Exit code 0: the wait is over. Exit code 2: the time limit was over.
  */
 const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
   const { values, positionals } = parseArgs({
     args: [...argv],
-    options: { port: { type: 'string', short: 'p' }, timeout: { type: 'string', short: 't' } },
+    options: {
+      port: { type: 'string', short: 'p' },
+      timeout: { type: 'string', short: 't' },
+      author: { type: 'boolean', short: 'a' },
+    },
     // eslint-disable-next-line @typescript-eslint/naming-convention -- Node's option name
     allowPositionals: true,
   })
   const review_id = positionals[0]
   if (review_id === undefined) {
-    process.stderr.write('Usage: yart await <review-id> [--port <port>] [--timeout <minutes>]\n')
+    process.stderr.write(
+      'Usage: yart await <review-id> [--author] [--port <port>] [--timeout <minutes>]\n',
+    )
     return 1
   }
   const minutes = values.timeout === undefined ? null : Number(values.timeout)
   if (minutes !== null && !(minutes > 0)) throw new Error(`Invalid timeout: ${values.timeout}`)
 
-  const review = await waitForVerdict({
-    port: parsePort(values.port),
-    review_id,
-    timeout_ms: minutes === null ? null : minutes * 60_000,
-  })
+  const port = parsePort(values.port)
+  const timeout_ms = minutes === null ? null : minutes * 60_000
+
+  if (values.author === true) {
+    const current = await waitForReview({ port, review_id, timeout_ms: 0, done: () => true })
+    const verdict = current === null ? null : latestSubmission(current)
+    if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
+      throw new Error(
+        `No AI reviewer gave a verdict on ${review_id}. Give one with submit_verdict.`,
+      )
+    }
+    const answered = await waitForReview({ port, review_id, timeout_ms, done: authorHasAnswered })
+    if (answered === null) {
+      process.stdout.write(
+        `yart: the author did not answer on ${review_id} in ${minutes} minutes.\n`,
+      )
+      return 2
+    }
+    process.stdout.write(
+      `yart: the author answered on ${review_id}. Read the changes with get_diff and the ` +
+        'answers with get_review.\n',
+    )
+    return 0
+  }
+
+  const review = await waitForReview({ port, review_id, timeout_ms })
   if (review === null) {
     process.stdout.write(`yart: no verdict on ${review_id} in ${minutes} minutes.\n`)
     return 2
@@ -302,7 +330,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         'Usage: yart [options]',
         '       yart start|stop|restart|status [--port <port>]',
-        '       yart await <review-id> [--port <port>] [--timeout <minutes>]',
+        '       yart await <review-id> [--author] [--port <port>] [--timeout <minutes>]',
         '       yart hook <install|uninstall|pre-commit>',
         '       yart reviewer <install|uninstall> [--user]',
         '',

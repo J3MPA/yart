@@ -84,16 +84,24 @@ export interface WaitOptions {
   review_id: string
   /** Null waits with no limit. */
   timeout_ms: number | null
+  /** Tells if the wait is over. The default waits for a verdict, as `await_review` does. */
+  done?: (review: Review) => boolean
   poll_ms?: number
 }
 
 /**
- * Waits until a review has a verdict, as `await_review` does. Returns the
+ * Waits until a review is in the state that `done` asks for. Returns the
  * review, or null when the time is over. A daemon that does not answer for a
  * short time, for example during a restart, does not stop the wait.
  */
-export const waitForVerdict = async (options: WaitOptions): Promise<Review | null> => {
-  const { port, review_id, timeout_ms, poll_ms = 1000 } = options
+export const waitForReview = async (options: WaitOptions): Promise<Review | null> => {
+  const {
+    port,
+    review_id,
+    timeout_ms,
+    done = (review) => review.status === 'submitted',
+    poll_ms = 1000,
+  } = options
   const deadline = timeout_ms === null ? null : Date.now() + timeout_ms
   for (;;) {
     const response = await fetch(
@@ -102,7 +110,7 @@ export const waitForVerdict = async (options: WaitOptions): Promise<Review | nul
     if (response?.status === 404) throw new Error(`There is no review ${review_id}.`)
     if (response?.ok === true) {
       const review = (await response.json()) as Review
-      if (review.status === 'submitted') return review
+      if (done(review)) return review
     }
     if (deadline !== null && Date.now() >= deadline) return null
     await delay(poll_ms)

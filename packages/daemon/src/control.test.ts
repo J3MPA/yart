@@ -2,7 +2,8 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { serve, type ServerType } from '@hono/node-server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { daemonHealth, stopDaemon, waitForVerdict } from './control.ts'
+import { authorHasAnswered } from '@yart/core'
+import { daemonHealth, stopDaemon, waitForReview } from './control.ts'
 import { createServer } from './server.ts'
 import { TestRepo } from './test-repo.ts'
 
@@ -68,7 +69,7 @@ describe('stopDaemon', () => {
   })
 })
 
-describe('waitForVerdict', () => {
+describe('waitForReview', () => {
   const post = (port: number, path: string, body: unknown) =>
     fetch(`http://localhost:${port}${path}`, {
       method: 'POST',
@@ -87,7 +88,7 @@ describe('waitForVerdict', () => {
     const { http, port } = await listen()
     const { id } = await openReview(port)
     setTimeout(() => void post(port, `/api/reviews/${id}/submit`, { verdict: 'approved' }), 100)
-    const review = await waitForVerdict({ port, review_id: id, timeout_ms: 5000, poll_ms: 20 })
+    const review = await waitForReview({ port, review_id: id, timeout_ms: 5000, poll_ms: 20 })
     expect(review?.status).toBe('submitted')
     await close(http)
   })
@@ -95,15 +96,37 @@ describe('waitForVerdict', () => {
   it('returns null when the time is over', async () => {
     const { http, port } = await listen()
     const { id } = await openReview(port)
-    expect(await waitForVerdict({ port, review_id: id, timeout_ms: 100, poll_ms: 20 })).toBe(null)
+    expect(await waitForReview({ port, review_id: id, timeout_ms: 100, poll_ms: 20 })).toBe(null)
     await close(http)
   })
 
   it('stops for a review that does not exist', async () => {
     const { http, port } = await listen()
     await expect(
-      waitForVerdict({ port, review_id: 'nope', timeout_ms: 1000, poll_ms: 20 }),
+      waitForReview({ port, review_id: 'nope', timeout_ms: 1000, poll_ms: 20 }),
     ).rejects.toThrow(/no review/)
+    await close(http)
+  })
+
+  it('waits for the answer of the author when it is asked to', async () => {
+    const { http, port } = await listen()
+    const { id } = await openReview(port)
+    await post(port, `/api/reviews/${id}/submit`, {
+      verdict: 'changes_requested',
+      author: 'reviewer',
+    })
+    setTimeout(() => {
+      repo.write('a.txt', 'gamma\n')
+      void post(port, `/api/reviews/${id}/advance`, {})
+    }, 100)
+    const review = await waitForReview({
+      port,
+      review_id: id,
+      timeout_ms: 5000,
+      done: authorHasAnswered,
+      poll_ms: 20,
+    })
+    expect(review?.rounds).toHaveLength(2)
     await close(http)
   })
 })
