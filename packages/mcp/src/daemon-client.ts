@@ -127,10 +127,9 @@ export class DaemonClient {
       mine !== null && (mine === health.repo_path || mine.startsWith(health.repo_path + sep))
     if (inside) return
     throw new DaemonError(
-      `The yart daemon on port ${this.port} is from an older yart and only serves ` +
-        `${health.repo_path}, so it would review that instead of ${mine ?? 'the others'}. Stop the process ` +
-        `listening on port ${this.port}; the next request starts a daemon that serves every ` +
-        'repository.',
+      `The yart daemon on port ${this.port} is from an older yart. It serves only ` +
+        `${health.repo_path}, not ${mine ?? 'the other repositories'}. Stop the process on port ` +
+        `${this.port}. The next request starts a daemon that serves all repositories.`,
       null,
     )
   }
@@ -152,7 +151,10 @@ export class DaemonClient {
       return
     }
     if (!this.autostart) {
-      throw new DaemonError(`No yart daemon on ${this.base_url}. Start one with \`yart\`.`, null)
+      throw new DaemonError(
+        `No yart daemon answers on ${this.base_url}. Start one with \`yart\`.`,
+        null,
+      )
     }
 
     const child = spawn(
@@ -183,7 +185,7 @@ export class DaemonClient {
         return
       }
     }
-    throw new DaemonError(`Daemon did not become healthy within ${STARTUP_TIMEOUT_MS}ms`, null)
+    throw new DaemonError(`The yart daemon did not start in ${STARTUP_TIMEOUT_MS} ms.`, null)
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -196,7 +198,10 @@ export class DaemonClient {
 
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null
-      throw new DaemonError(body?.error ?? `Request failed: ${response.status}`, response.status)
+      throw new DaemonError(
+        body?.error ?? `The request to the yart daemon failed with status ${response.status}.`,
+        response.status,
+      )
     }
     return (await response.json()) as T
   }

@@ -63,9 +63,11 @@ is the same as the format in the source.
 
 ## Documentation and comments
 
-Write all documentation and code comments in ASD-STE100 Simplified Technical
-English (STE). STE makes text clear to all readers, also to readers whose first
-language is not English. Obey these rules:
+Write all documentation, code comments and MCP text in ASD-STE100 Simplified
+Technical English (STE). STE makes text clear to all readers, also to readers
+whose first language is not English. MCP text is all text that the MCP server
+sends to an agent: server instructions, tool titles, tool and parameter
+descriptions, results and errors. Obey these rules:
 
 - Use one word for one meaning. Use the same word for the same thing each time.
 - Use technical names as they are: code, file names, commands and product

@@ -25,7 +25,7 @@ const renderContext = (thread: Thread): string => {
 
 const renderLocation = (thread: Thread): string => {
   if (thread.anchor === null) {
-    return `${thread.origin.path}  [OUTDATED — the commented line no longer exists]`
+    return `${thread.origin.path}  [OUTDATED: the line of this comment does not exist now]`
   }
   const moved =
     thread.anchor_state === 'shifted'
@@ -67,7 +67,7 @@ export { currentSubmission } from '@yart/core'
  */
 export const renderVerdict = (review: Review): string => {
   const submission = currentSubmission(review)
-  if (submission === null) return 'Not submitted yet.'
+  if (submission === null) return 'No verdict yet.'
 
   const summary = submission.body === null ? '' : `\n\n  ${submission.body}`
   const replies = submission.comments.map(
@@ -87,7 +87,7 @@ export const renderVerdict = (review: Review): string => {
 export const openThreads = (review: Review): Thread[] =>
   review.threads.filter((thread) => thread.status === 'open')
 
-export const renderReview = (review: Review, url: string): string => {
+export const renderReview = (review: Review, url: string | null): string => {
   const files = review.files.map((file) => {
     const renamed = file.old_path === null ? '' : ` (was ${file.old_path})`
     return `  ${file.status.padEnd(9)} ${file.path}${renamed}`
@@ -103,7 +103,7 @@ export const renderReview = (review: Review, url: string): string => {
     `  title:   ${review.title}`,
     `  range:   ${review.base}..${review.head}  (round ${review.rounds.length})`,
     `  status:  ${review.status}${submission === null ? '' : ` — ${VERDICT_LABEL[submission.verdict]}`}`,
-    `  url:     ${url}`,
+    ...(url === null ? [] : [`  url:     ${url}`]),
     `  threads: ${review.threads.length} total, ${open.length} open${outdated > 0 ? `, ${outdated} outdated` : ''}`,
     '',
     `Files (${review.files.length}):`,
@@ -128,7 +128,7 @@ export const renderReviewLine = (review: Review): string => {
   ].join('\n')
 }
 
-export const renderReviewWithThreads = (review: Review, url: string): string => {
+export const renderReviewWithThreads = (review: Review, url: string | null): string => {
   // The verdict and its replies also belong here. An agent that examines the
   // progress must see its conversation, not only the counts.
   const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review)]
@@ -159,8 +159,8 @@ export const renderDiff = (files: readonly FileDiff[], review: Review): string =
   const out: string[] = [
     `Diff of ${review.title} (${review.base_sha.slice(0, 8)}..${review.head_sha.slice(0, 8)}), ` +
       `${files.length} file${files.length === 1 ? '' : 's'}.`,
-    'Columns: marker, base line, head line, text. Comment on a removed (-) line with side ' +
-      '"base" and its base line, and on any other line with side "head" and its head line.',
+    'The columns are: marker, base line, head line and text. For a removed (-) line, use ' +
+      'side "base" and the base line. For all other lines, use side "head" and the head line.',
   ]
   let written = 0
   for (const [index, file] of files.entries()) {
@@ -168,7 +168,7 @@ export const renderDiff = (files: readonly FileDiff[], review: Review): string =
       const left = files.slice(index).map((rest) => rest.path)
       out.push(
         '',
-        `Cut short at ${MAX_DIFF_LINES} lines. Not shown: ${left.join(', ')}. ` +
+        `The diff stops at ${MAX_DIFF_LINES} lines. These files are not shown: ${left.join(', ')}. ` +
           `Read them with: git diff ${review.base_sha} ${review.head_sha} -- <path>`,
       )
       break
@@ -176,7 +176,7 @@ export const renderDiff = (files: readonly FileDiff[], review: Review): string =
     const renamed = file.old_path === null ? '' : ` (was ${file.old_path})`
     out.push('', `=== ${file.path}  [${file.status}]${renamed}`)
     if (file.is_binary) {
-      out.push('  (binary, not shown)')
+      out.push('  (binary file, not shown)')
       continue
     }
     for (const hunk of file.hunks) {
