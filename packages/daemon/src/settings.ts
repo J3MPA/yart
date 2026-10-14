@@ -1,12 +1,58 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DEFAULT_SETTINGS, type ApprovalAction, type Settings } from '@yart/core'
+import {
+  DEFAULT_SETTINGS,
+  isAiReviewRounds,
+  isReviewerEffort,
+  MAX_AI_REVIEW_ROUNDS,
+  MAX_REVIEWER_INSTRUCTIONS_LENGTH,
+  MAX_REVIEWER_MODEL_LENGTH,
+  MIN_AI_REVIEW_ROUNDS,
+  REVIEWER_EFFORTS,
+  type ApprovalAction,
+  type Settings,
+} from '@yart/core'
 import { ReviewError } from './review.ts'
 
 const APPROVAL_ACTIONS: ReadonlySet<string> = new Set<ApprovalAction>(['keep', 'archive', 'delete'])
 
 const isApprovalAction = (value: unknown): value is ApprovalAction =>
   typeof value === 'string' && APPROVAL_ACTIONS.has(value)
+
+/**
+ * Optional free text: trimmed, with empty meaning unset, or undefined when the
+ * value is not text of an acceptable length at all.
+ */
+const optionalText = (value: unknown, max_length: number): string | null | undefined => {
+  if (value === null) return null
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  return trimmed.length > max_length ? undefined : trimmed
+}
+
+/**
+ * Reads settings from what was stored, leaving anything missing or invalid at
+ * its default rather than refusing to start over one bad value.
+ */
+const fromStored = (stored: Record<string, unknown>): Settings => {
+  const model = optionalText(stored.reviewer_model, MAX_REVIEWER_MODEL_LENGTH)
+  const instructions = optionalText(stored.reviewer_instructions, MAX_REVIEWER_INSTRUCTIONS_LENGTH)
+  return {
+    on_approve: isApprovalAction(stored.on_approve)
+      ? stored.on_approve
+      : DEFAULT_SETTINGS.on_approve,
+    ai_review_rounds: isAiReviewRounds(stored.ai_review_rounds)
+      ? stored.ai_review_rounds
+      : DEFAULT_SETTINGS.ai_review_rounds,
+    reviewer_model: model === undefined ? DEFAULT_SETTINGS.reviewer_model : model,
+    reviewer_effort: isReviewerEffort(stored.reviewer_effort)
+      ? stored.reviewer_effort
+      : DEFAULT_SETTINGS.reviewer_effort,
+    reviewer_instructions:
+      instructions === undefined ? DEFAULT_SETTINGS.reviewer_instructions : instructions,
+  }
+}
 
 /**
  * Where the daemon's settings are kept.
@@ -27,12 +73,7 @@ export class SettingsStore {
   async read(): Promise<Settings> {
     if (this.path === null) return this.in_memory
     try {
-      const parsed = JSON.parse(await readFile(this.path, 'utf8')) as Partial<Settings>
-      return {
-        on_approve: isApprovalAction(parsed.on_approve)
-          ? parsed.on_approve
-          : DEFAULT_SETTINGS.on_approve,
-      }
+      return fromStored(JSON.parse(await readFile(this.path, 'utf8')) as Record<string, unknown>)
     } catch {
       return DEFAULT_SETTINGS
     }
@@ -46,6 +87,47 @@ export class SettingsStore {
         throw new ReviewError('on_approve must be "keep", "archive" or "delete"', 400)
       }
       next.on_approve = changes.on_approve
+    }
+    if (changes.ai_review_rounds !== undefined) {
+      if (!isAiReviewRounds(changes.ai_review_rounds)) {
+        throw new ReviewError(
+          `ai_review_rounds must be a whole number from ${MIN_AI_REVIEW_ROUNDS} to ${MAX_AI_REVIEW_ROUNDS}`,
+          400,
+        )
+      }
+      next.ai_review_rounds = changes.ai_review_rounds
+    }
+    if (changes.reviewer_model !== undefined) {
+      const model = optionalText(changes.reviewer_model, MAX_REVIEWER_MODEL_LENGTH)
+      if (model === undefined) {
+        throw new ReviewError(
+          `reviewer_model must be a model name of at most ${MAX_REVIEWER_MODEL_LENGTH} characters, or null`,
+          400,
+        )
+      }
+      next.reviewer_model = model
+    }
+    if (changes.reviewer_effort !== undefined) {
+      if (changes.reviewer_effort !== null && !isReviewerEffort(changes.reviewer_effort)) {
+        throw new ReviewError(
+          `reviewer_effort must be one of ${REVIEWER_EFFORTS.join(', ')}, or null`,
+          400,
+        )
+      }
+      next.reviewer_effort = changes.reviewer_effort
+    }
+    if (changes.reviewer_instructions !== undefined) {
+      const instructions = optionalText(
+        changes.reviewer_instructions,
+        MAX_REVIEWER_INSTRUCTIONS_LENGTH,
+      )
+      if (instructions === undefined) {
+        throw new ReviewError(
+          `reviewer_instructions must be text of at most ${MAX_REVIEWER_INSTRUCTIONS_LENGTH} characters, or null`,
+          400,
+        )
+      }
+      next.reviewer_instructions = instructions
     }
 
     if (this.path === null) {

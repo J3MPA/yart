@@ -1,0 +1,128 @@
+import { useState } from 'react'
+import {
+  MAX_AI_REVIEW_ROUNDS,
+  MAX_REVIEWER_INSTRUCTIONS_LENGTH,
+  MAX_REVIEWER_MODEL_LENGTH,
+  MIN_AI_REVIEW_ROUNDS,
+  REVIEWER_EFFORTS,
+  type ReviewerEffort,
+  type Settings,
+} from '@yart/core'
+import { useUpdateSettingsMutation } from '@/features/review/review-api'
+import styles from './settings.module.css'
+
+const ROUNDS = Array.from(
+  { length: MAX_AI_REVIEW_ROUNDS - MIN_AI_REVIEW_ROUNDS + 1 },
+  (_, index) => MIN_AI_REVIEW_ROUNDS + index,
+)
+
+/** Model names Claude Code takes as aliases; anything else can be typed in full. */
+const SUGGESTED_MODELS = ['opus', 'sonnet', 'haiku']
+
+export interface ReviewerSettingsProps {
+  settings: Settings
+}
+
+/**
+ * How an AI reviewer should run. yart runs no model itself: these are read by
+ * whatever starts a reviewer, through the `get_reviewer_settings` tool.
+ */
+export const ReviewerSettings = ({ settings }: ReviewerSettingsProps) => {
+  const [updateSettings, update_state] = useUpdateSettingsMutation()
+  // Typed text is saved when the field is left, rather than on every key.
+  const [model, setModel] = useState(settings.reviewer_model ?? '')
+  const [instructions, setInstructions] = useState(settings.reviewer_instructions ?? '')
+
+  const saveText = (field: 'reviewer_model' | 'reviewer_instructions', value: string) => {
+    if (value.trim() === (settings[field] ?? '')) return
+    void updateSettings({ [field]: value })
+  }
+
+  return (
+    <fieldset className={styles.group} disabled={update_state.isLoading}>
+      <legend className={styles.legend}>AI reviewer</legend>
+
+      <label className={styles.field}>
+        <span className={styles.choice_label}>Rounds</span>
+        <span className={styles.choice_detail}>
+          How many verdicts an AI reviewer may pass on one review before it is yours to finish.
+        </span>
+        <select
+          className={styles.input}
+          value={settings.ai_review_rounds}
+          onChange={(event) =>
+            void updateSettings({ ai_review_rounds: Number(event.target.value) })
+          }
+        >
+          {ROUNDS.map((rounds) => (
+            <option key={rounds} value={rounds}>
+              {rounds}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className={styles.field}>
+        <span className={styles.choice_label}>Model</span>
+        <span className={styles.choice_detail}>
+          An alias such as sonnet, or a full model id. Empty leaves it to whatever starts the
+          reviewer.
+        </span>
+        <input
+          className={styles.input}
+          list="reviewer-models"
+          value={model}
+          maxLength={MAX_REVIEWER_MODEL_LENGTH}
+          placeholder="Its own choice"
+          onChange={(event) => setModel(event.target.value)}
+          onBlur={() => saveText('reviewer_model', model)}
+        />
+        <datalist id="reviewer-models">
+          {SUGGESTED_MODELS.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </label>
+
+      <label className={styles.field}>
+        <span className={styles.choice_label}>Effort</span>
+        <span className={styles.choice_detail}>
+          Passed on where the tool starting the reviewer takes one.
+        </span>
+        <select
+          className={styles.input}
+          value={settings.reviewer_effort ?? ''}
+          onChange={(event) =>
+            void updateSettings({
+              reviewer_effort:
+                event.target.value === '' ? null : (event.target.value as ReviewerEffort),
+            })
+          }
+        >
+          <option value="">Not set</option>
+          {REVIEWER_EFFORTS.map((effort) => (
+            <option key={effort} value={effort}>
+              {effort}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className={styles.field}>
+        <span className={styles.choice_label}>Instructions</span>
+        <span className={styles.choice_detail}>
+          What a reviewer should look for, added to its brief.
+        </span>
+        <textarea
+          className={styles.textarea}
+          rows={4}
+          value={instructions}
+          maxLength={MAX_REVIEWER_INSTRUCTIONS_LENGTH}
+          placeholder="For example: look hardest at error handling and tests."
+          onChange={(event) => setInstructions(event.target.value)}
+          onBlur={() => saveText('reviewer_instructions', instructions)}
+        />
+      </label>
+    </fieldset>
+  )
+}

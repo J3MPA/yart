@@ -579,3 +579,72 @@ describe('an AI reviewer', () => {
     expect((await settling.request(`/api/reviews/${opened.id}`)).status).toBe(200)
   })
 })
+
+describe('the AI reviewer’s round limit', () => {
+  const choose = (changes: Record<string, unknown>) =>
+    app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+
+  const reviewerVerdict = (id: string) =>
+    post(`/api/reviews/${id}/submit`, { verdict: 'changes_requested', author: 'reviewer' })
+
+  it('refuses a reviewer’s verdict once its rounds are used', async () => {
+    await choose({ ai_review_rounds: 2 })
+    const review = await openReview()
+    expect((await reviewerVerdict(review.id)).status).toBe(200)
+    expect((await reviewerVerdict(review.id)).status).toBe(200)
+    const refused = await reviewerVerdict(review.id)
+    expect(refused.status).toBe(409)
+    expect(((await refused.json()) as { error: string }).error).toMatch(/person/)
+  })
+
+  it('still takes the person’s verdict after the reviewer has run out', async () => {
+    await choose({ ai_review_rounds: 1 })
+    const review = await openReview()
+    await reviewerVerdict(review.id)
+    expect((await post(`/api/reviews/${review.id}/submit`, { verdict: 'approved' })).status).toBe(
+      200,
+    )
+  })
+
+  it('refuses a limit outside the range', async () => {
+    expect((await choose({ ai_review_rounds: 0 })).status).toBe(400)
+    expect((await choose({ ai_review_rounds: 2.5 })).status).toBe(400)
+  })
+})
+
+describe('reviewer settings', () => {
+  const choose = (changes: Record<string, unknown>) =>
+    app.request('/api/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+
+  it('keeps a preferred model, effort and instructions, and clears them again', async () => {
+    const set = (await (
+      await choose({
+        reviewer_model: ' sonnet ',
+        reviewer_effort: 'high',
+        reviewer_instructions: 'Look hardest at error handling.',
+      })
+    ).json()) as Record<string, unknown>
+    expect(set.reviewer_model).toBe('sonnet')
+    expect(set.reviewer_effort).toBe('high')
+    expect(set.reviewer_instructions).toBe('Look hardest at error handling.')
+
+    const cleared = (await (
+      await choose({ reviewer_model: '', reviewer_effort: null, reviewer_instructions: null })
+    ).json()) as Record<string, unknown>
+    expect(cleared.reviewer_model).toBeNull()
+    expect(cleared.reviewer_effort).toBeNull()
+    expect(cleared.reviewer_instructions).toBeNull()
+  })
+
+  it('refuses an effort that is not one', async () => {
+    expect((await choose({ reviewer_effort: 'maximum' })).status).toBe(400)
+  })
+})

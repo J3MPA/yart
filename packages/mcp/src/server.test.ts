@@ -106,13 +106,17 @@ describe('tool surface', () => {
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'advance_review',
+      'await_author',
       'await_review',
+      'get_diff',
       'get_review',
+      'get_reviewer_settings',
       'list_reviews',
       'reply_to_thread',
       'reply_to_verdict',
       'resolve_thread',
       'start_review',
+      'submit_verdict',
     ])
   })
 
@@ -392,5 +396,85 @@ describe('advance_review', () => {
     const rendered = await call('advance_review', { review_id })
     expect(rendered).toContain('[OUTDATED')
     expect(rendered).toContain('TARGET')
+  })
+})
+
+describe('an AI reviewer', () => {
+  const settle = (changes: Record<string, unknown>) =>
+    fetch(`http://localhost:${port}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+
+  it('reads how the person wants it run', async () => {
+    await settle({ reviewer_model: 'sonnet', reviewer_effort: 'high', ai_review_rounds: 2 })
+    const rendered = await call('get_reviewer_settings')
+    expect(rendered).toContain('model:        sonnet')
+    expect(rendered).toContain('effort:       high')
+    expect(rendered).toContain('rounds:       2 verdicts per review')
+  })
+
+  it('reads the diff with both line numbers on every line', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    const diff = await call('get_diff', { review_id: id })
+    expect(diff).toContain('=== a.txt  [modified]')
+    expect(diff).toMatch(/- +2 +beta/)
+    expect(diff).toMatch(/\+ +2 +TARGET/)
+  })
+
+  it('passes a verdict with its comments, and is told how many rounds it has left', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    const rendered = await call('submit_verdict', {
+      review_id: id,
+      verdict: 'changes_requested',
+      summary: 'One thing.',
+      comments: [{ path: 'a.txt', line: 2, body: 'TARGET is shouting' }],
+      reviewer_name: 'claude-reviewer',
+    })
+    expect(rendered).toContain('Verdict: CHANGES REQUESTED by reviewer claude-reviewer')
+    expect(rendered).toContain('Round 1 of 3.')
+    expect(rendered).toContain('await_author')
+  })
+
+  it('is told to stop on its last round', async () => {
+    await settle({ ai_review_rounds: 1 })
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    const rendered = await call('submit_verdict', { review_id: id, verdict: 'changes_requested' })
+    expect(rendered).toContain('That was your last round')
+  })
+
+  it('hears when the author answers, and only then', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    await call('submit_verdict', {
+      review_id: id,
+      verdict: 'changes_requested',
+      comments: [{ path: 'a.txt', line: 2, body: 'rename this' }],
+    })
+    expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'has not answered',
+    )
+    const author_view = await call('await_review', { review_id: id, timeout_seconds: 1 })
+    await call('reply_to_thread', {
+      review_id: id,
+      thread_id: threadIdFrom(author_view.split('Open comments')[1] ?? ''),
+      body: 'I think TARGET is right here.',
+    })
+    expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'The author has answered',
+    )
+  })
+
+  it('cannot wait for an answer to a verdict it never passed', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    expect(await callExpectingError('await_author', { review_id: id })).toMatch(/submit_verdict/)
+  })
+
+  it('tells the author when its approval still needs the person', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    await call('submit_verdict', { review_id: id, verdict: 'approved' })
+    expect(await call('await_review', { review_id: id, timeout_seconds: 1 })).toContain(
+      'the person has not looked yet',
+    )
   })
 })
