@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
+import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
 import { defaultStateDir } from './repositories.ts'
 import { createServer } from './server.ts'
 import { VERSION } from './version.ts'
@@ -105,7 +106,55 @@ const hook = async (argv: readonly string[]): Promise<number> => {
   }
 }
 
+const REVIEWER_USAGE = [
+  'Usage: yart reviewer <install|uninstall> [--user]',
+  '',
+  '  install      Add the yart-reviewer subagent of Claude Code to this project,',
+  '               in .claude/agents. With --user, add it for all projects.',
+  '  uninstall    Remove the subagent, if yart wrote it.',
+  '',
+].join('\n')
+
+/** The `yart reviewer` commands. They return the exit code. */
+const reviewer = async (argv: readonly string[]): Promise<number> => {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: { user: { type: 'boolean' } },
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Node's option name
+    allowPositionals: true,
+  })
+  const write = (line: string) => process.stderr.write(`${line}\n`)
+  const scope = values.user === true ? 'user' : { project_path: await findRepoRoot(process.cwd()) }
+
+  switch (positionals[0]) {
+    case 'install':
+      write(`yart: added the yart-reviewer subagent at ${await installReviewerAgent(scope)}.`)
+      write('Ask your agent for an AI review of its work before you look at it.')
+      return 0
+    case 'uninstall':
+      write(
+        (await uninstallReviewerAgent(scope))
+          ? 'yart: removed the yart-reviewer subagent.'
+          : 'yart: there is no yart-reviewer subagent of yart here.',
+      )
+      return 0
+    default:
+      write(REVIEWER_USAGE)
+      return positionals[0] === undefined ? 0 : 1
+  }
+}
+
 export const main = async (argv: readonly string[]): Promise<void> => {
+  if (argv[0] === 'reviewer') {
+    try {
+      process.exitCode = await reviewer(argv.slice(1))
+    } catch (cause) {
+      process.stderr.write(`yart: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+      process.exitCode = 1
+    }
+    return
+  }
+
   if (argv[0] === 'hook') {
     try {
       process.exitCode = await hook(argv.slice(1))
@@ -140,6 +189,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         'Usage: yart [options]',
         '       yart hook <install|uninstall|pre-commit>',
+        '       yart reviewer <install|uninstall> [--user]',
         '',
         `  -p, --port <port>  Port to listen on (default: ${DEFAULT_PORT})`,
         '  -r, --repo <path>  Repository for requests that name none (default: the current one)',
