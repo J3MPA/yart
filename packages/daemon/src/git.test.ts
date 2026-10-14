@@ -51,7 +51,7 @@ describe('lineMapFromHunks', () => {
   })
 
   it('carries the anchor line of a pure insertion, which has a zero old count', () => {
-    // "insert one line after old line 2"
+    // "add one line after old line 2"
     const map = lineMapFromHunks([{ old_start: 2, old_count: 0, new_start: 3, new_count: 1 }], 3)
     expect(map.get(2)).toBe(2)
     expect(map.get(3)).toBe(4)

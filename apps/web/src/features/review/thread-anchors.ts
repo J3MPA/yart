@@ -1,16 +1,16 @@
 import type { DiffSide, Thread } from '@yart/core'
 
 /**
- * Identifies the row a thread hangs under.
+ * Identifies the row that a thread shows under.
  *
- * A diff row carries a line number on each side, and a thread anchors to one of
- * them, so the side has to be part of the key: line 4 of the base and line 4 of
+ * A diff row has a line number on each side, and a thread is attached to one of
+ * them. Thus the side must be part of the key. Line 4 of the base and line 4 of
  * the head are different places.
  */
 export const anchorKey = (path: string, side: DiffSide, line: number): string =>
   `${side}\u0000${path}\u0000${line}`
 
-/** Threads that still resolve to a line, grouped by the row they belong under. */
+/** The threads that still point to a line, grouped by their row. */
 export const groupThreadsByAnchor = (threads: readonly Thread[]): Map<string, Thread[]> => {
   const grouped = new Map<string, Thread[]>()
   for (const thread of threads) {
@@ -24,15 +24,15 @@ export const groupThreadsByAnchor = (threads: readonly Thread[]): Map<string, Th
 }
 
 /**
- * Threads whose line is gone.
+ * The threads whose line is gone.
  *
- * They have nowhere to sit in the diff, so the file header lists them instead —
- * dropping them would silently discard the conversation.
+ * They have no place in the diff. Thus the file header shows them. To remove
+ * them would delete the conversation with no warning.
  */
 export const outdatedThreads = (threads: readonly Thread[]): Thread[] =>
   threads.filter((thread) => thread.anchor === null)
 
-/** Outdated threads for one file, matched on where the thread started. */
+/** The outdated threads of one file, found by where each thread started. */
 export const outdatedThreadsForPath = (threads: readonly Thread[], path: string): Thread[] =>
   outdatedThreads(threads).filter((thread) => thread.origin.path === path)
 

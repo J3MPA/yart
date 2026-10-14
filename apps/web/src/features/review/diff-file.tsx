@@ -33,15 +33,15 @@ export interface DiffFileProps {
   threads_by_anchor: ReadonlyMap<string, Thread[]>
   drafting: Drafting
   composing: ComposeTarget | null
-  /** Whether this file is marked reviewed at its current content. */
+  /** Tells if this file is marked as reviewed at its current content. */
   reviewed: boolean
-  /** False when the file has no blob to be reviewed against, and so cannot be. */
+  /** False when the file has no blob for a review mark. Then you cannot mark it. */
   can_review: boolean
   onComposingChange: (composing: ComposeTarget | null) => void
   onReviewedChange: (reviewed: boolean) => void
 }
 
-/** How much of one collapsed run has been opened, from each end. */
+/** How much of one collapsed run is open, from each end. */
 interface GapExpansion {
   top: number
   bottom: number
@@ -63,9 +63,10 @@ export const DiffFile = ({
 }: DiffFileProps) => {
   const [addThread, add_state] = useAddThreadMutation()
   const section_ref = useRef<HTMLElement>(null)
-  // Null until someone opens or closes the file by hand, so that a file follows
-  // its reviewed mark — closed once reviewed, open again if the agent changes it
-  // — without a reader's own choice being overridden while they look at it.
+  // Null until someone opens or closes the file by hand. Thus a file follows its
+  // review mark. It closes when you mark it, and opens again when the agent
+  // changes it. But the code does not change the choice of a reader while they
+  // look at it.
   const [collapse_choice, setCollapseChoice] = useState<boolean | null>(null)
   const collapsed = collapse_choice ?? reviewed
   const [expanded, setExpanded] = useState<ReadonlyMap<number, GapExpansion>>(new Map())
@@ -76,10 +77,11 @@ export const DiffFile = ({
     [file.hunks, file.head_line_count],
   )
 
-  // The whole file is fetched to colour it, which needs both sides in full, but
-  // only once it is near the viewport: a long review would otherwise fetch and
-  // tokenize every file as the page loads. Opening a collapsed run fetches it
-  // wherever it is. A closed file draws nothing to colour.
+  // The page gets the full file to color it, because the colors need the two
+  // sides in full. It gets the file only when it comes near the viewport.
+  // Otherwise a long review would get and tokenize all files when the page
+  // loads. When you open a collapsed run, the page gets the file wherever it is.
+  // A closed file shows nothing to color.
   const near = useNearView(section_ref)
   const wants_contents = expanded.size > 0 || (near && mayHighlight(file.path))
   const contents_query = useGetReviewFileQuery(
@@ -131,8 +133,8 @@ export const DiffFile = ({
     if (!can_review) return
     setCollapseChoice(null)
     onReviewedChange(next)
-    // Ticking the box at the bottom of a long file collapses it from under the
-    // reader, and without this the page would be left somewhere past it.
+    // When you select the box at the bottom of a long file, the file collapses
+    // under you. Without this, the page would stay at a place after the file.
     if (next) {
       requestAnimationFrame(() => section_ref.current?.scrollIntoView({ block: 'nearest' }))
     }
@@ -209,8 +211,8 @@ export const DiffFile = ({
                 ? []
                 : gapLines(gapSlice(gap, gap.length - state.bottom, state.bottom), head_lines)
 
-            // The band carries the following hunk's heading, so it has to know what
-            // comes next; a run at the end of a file has nothing to name.
+            // The band shows the heading of the next hunk. Thus it must know what
+            // comes next. A run at the end of a file has nothing to name.
             const next = sections[index + 1]
             const heading =
               next === undefined || next.kind !== 'hunk' ? '' : hunkSectionHeading(next.hunk.header)

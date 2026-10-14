@@ -3,14 +3,14 @@ import type { Draft, ReplyDraft, ThreadDraft } from './local-review-state'
 import { anchorKey } from './thread-anchors'
 
 /**
- * What a diff row or thread needs to write into the pending review, gathered
- * so it travels down the tree as one prop.
+ * What a diff row or a thread needs to write into the pending review. It is one
+ * object, thus it goes down the tree as one prop.
  */
 export interface Drafting {
   review_id: string
-  /** Whether a pending review has been started, which changes what the buttons say. */
+  /** Tells if a pending review started. This changes the text of the buttons. */
   in_progress: boolean
-  /** Line comments that still apply, keyed like threads so rows can find theirs. */
+  /** The line comments that still apply. They have the same keys as threads, thus rows can find them. */
   by_anchor: ReadonlyMap<string, ThreadDraft[]>
   by_thread: ReadonlyMap<string, ReplyDraft[]>
 }
@@ -21,12 +21,12 @@ const blobOn = (file: FileBlobs, side: DiffSide): string | null =>
   side === 'head' ? file.head_blob_sha : file.base_blob_sha
 
 /**
- * Whether a draft's line number still means anything.
+ * Tells if the line number of a draft is still correct.
  *
- * A line comment was counted against one version of one file, so it stays good
- * for exactly as long as that file does — through any number of rounds that
- * touch other files. A reply is never at risk: it belongs to a thread, and
- * threads are re-anchored when the review moves.
+ * The line of a comment is for one version of one file. Thus it stays correct
+ * for as long as that file does not change, through all rounds that change
+ * other files. A reply has no risk. It belongs to a thread, and threads get a
+ * new anchor when the review moves.
  */
 export const isStale = (draft: Draft, files: ReadonlyMap<string, FileBlobs>): boolean => {
   if (draft.kind === 'reply') return false
@@ -35,11 +35,11 @@ export const isStale = (draft: Draft, files: ReadonlyMap<string, FileBlobs>): bo
 }
 
 /**
- * Sorts drafts into where they are drawn.
+ * Sorts drafts by the place where they show.
  *
- * A stale line comment goes nowhere in the diff: drawn at its old line number
- * on a changed file, it would sit beside code it was never about. It stays in
- * the pending list instead, where it can be read and dropped.
+ * A stale line comment has no place in the diff. At its old line number on a
+ * changed file, it would be next to code that it is not about. It stays in the
+ * pending list, where you can read it and remove it.
  */
 export const groupDrafts = (
   drafts: readonly Draft[],

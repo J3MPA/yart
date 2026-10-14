@@ -3,16 +3,16 @@ import { activeFile, READING_LINE, type FilePosition } from './active-file'
 import { fileAnchorId } from './file-anchors'
 
 /**
- * Tracks which file the page is showing, for the sidebar to mark.
+ * Finds the file that the page shows, for the sidebar to mark.
  *
- * Measured from the sections themselves on every scroll rather than kept in
- * sync as they change: a run of context opening mid-page moves everything
- * below it, and any bookkeeping of where files were would be wrong the moment
- * it happened. A `ResizeObserver` covers exactly that case, since expanding a
- * run resizes a section without scrolling anything.
+ * The hook measures the sections themselves on each scroll. It does not keep a
+ * record of the positions. A run of context that opens in the middle of the page
+ * moves all that is below it, and a record would then be wrong at once. A
+ * `ResizeObserver` covers that case, because a run that opens changes the size
+ * of a section and does not scroll.
  *
- * `paths` must be stable between renders, or the listeners are torn down and
- * rebuilt on each one.
+ * `paths` must not change between renders. Otherwise the hook removes and adds
+ * the listeners again on each render.
  */
 export const useActiveFile = (paths: readonly string[]): string | null => {
   const [active, setActive] = useState<string | null>(null)
@@ -38,8 +38,8 @@ export const useActiveFile = (paths: readonly string[]): string | null => {
       setActive(activeFile(positions, window.innerHeight * READING_LINE))
     }
 
-    // Scrolling fires far faster than the page can be repainted, so the
-    // measurement is taken once per frame rather than once per event.
+    // Scroll events come much faster than the page can paint again. Thus the hook
+    // measures one time for each frame, not one time for each event.
     const schedule = () => {
       if (frame !== 0) return
       frame = requestAnimationFrame(measure)

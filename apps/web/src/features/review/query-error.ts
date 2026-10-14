@@ -4,26 +4,27 @@ import type { FetchBaseQueryError } from '@reduxjs/toolkit/query'
 export type QueryError = FetchBaseQueryError | SerializedError
 
 export interface DescribedError {
-  /** HTTP status, or null when the request never reached the daemon. */
+  /** The HTTP status, or null when the request never got to the daemon. */
   status: number | null
-  /** Whether the daemon answered that the thing genuinely is not there. */
+  /** Tells if the daemon answered that the item really does not exist. */
   is_missing: boolean
   message: string
 }
 
 const DAEMON_UNREACHABLE = 'Could not reach the yart daemon. Is it running?'
 
-/** Statuses a proxy returns when the daemon behind it is not answering. */
+/** The statuses that a proxy returns when the daemon behind it does not answer. */
 const GATEWAY_STATUSES = new Set([502, 503, 504])
 
 const isFetchError = (error: QueryError): error is FetchBaseQueryError => 'status' in error
 
 /**
- * Turns a query failure into something worth showing a person.
+ * Changes a failed query into a message for a person.
  *
- * Without this the UI cannot tell "the daemon says there is no such review"
- * from "the daemon did not answer", and both collapse into an absent `data`
- * that reads as an empty result — which is the opposite of what happened.
+ * Without this, the UI cannot tell "the daemon says that the review does not
+ * exist" apart from "the daemon did not answer". The two become a missing
+ * `data`, which looks like an empty result. That is the opposite of what
+ * occurred.
  */
 export const describeQueryError = (error: QueryError | undefined): DescribedError => {
   if (error === undefined) {
@@ -36,9 +37,9 @@ export const describeQueryError = (error: QueryError | undefined): DescribedErro
 
   if (typeof error.status === 'number') {
     const body = error.data as { error?: string } | undefined
-    // A gateway error means the proxy in front of the daemon could not reach
-    // it, which is the same situation as a failed connection and deserves the
-    // same advice rather than a bare status code.
+    // A gateway error means that the proxy in front of the daemon could not
+    // connect to it. That is the same as a failed connection. Thus it gets the
+    // same advice, not only a status code.
     if (GATEWAY_STATUSES.has(error.status)) {
       return { status: error.status, is_missing: false, message: DAEMON_UNREACHABLE }
     }
@@ -49,8 +50,8 @@ export const describeQueryError = (error: QueryError | undefined): DescribedErro
     }
   }
 
-  // FETCH_ERROR means the request never completed, which locally almost always
-  // means the daemon is not running.
+  // FETCH_ERROR means that the request did not complete. On a local computer, this
+  // almost always means that the daemon does not run.
   if (error.status === 'FETCH_ERROR') {
     return { status: null, is_missing: false, message: DAEMON_UNREACHABLE }
   }

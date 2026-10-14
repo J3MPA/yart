@@ -1,9 +1,9 @@
 /**
- * A changed file, or a directory holding them.
+ * A changed file, or a directory that holds changed files.
  *
- * `path` is the full path in both cases, so a node identifies itself without
- * reference to its parents — which is what the sidebar needs in order to look
- * a file's diff up, and what a folded directory needs to stay addressable.
+ * `path` is the full path in the two cases. Thus a node identifies itself
+ * without its parents. The sidebar needs this to find the diff of a file. A
+ * folded directory needs it to stay addressable.
  */
 export type TreeNode =
   | { kind: 'directory'; name: string; path: string; children: TreeNode[] }
@@ -24,13 +24,13 @@ const emptyDirectory = (name: string, path: string): Building => ({
 })
 
 /**
- * Compacts a subtree, folding a directory that holds nothing but one directory
- * into that child.
+ * Makes a subtree smaller. A directory that holds only one directory becomes one
+ * row with that child.
  *
- * `apps/web/src/features` as four nested rows is four levels of indentation
- * carrying no information; as one row it is a single place to click. This is
- * why a node keeps a full path rather than one segment: a folded name spans
- * several levels, and only the path still says where it is.
+ * As four nested rows, `apps/web/src/features` gives four indents with no
+ * information. As one row, it is one place to click. For this reason, a node
+ * keeps a full path, not one segment. A folded name covers many levels, and
+ * only the path still tells where it is.
  */
 const foldChain = (node: Building): Building => {
   const compacted = emptyDirectory(node.name, node.path)
@@ -51,7 +51,7 @@ const foldChain = (node: Building): Building => {
 const byName = (left: { name: string }, right: { name: string }): number =>
   left.name.localeCompare(right.name)
 
-/** Directories first, then files, each alphabetical — the shape a file tree has. */
+/** Directories first, then files, each in alphabetical order. This is the shape of a file tree. */
 const finish = (node: Building): TreeNode[] => [
   ...[...node.directories.values()]
     .map((child): TreeNode => ({
@@ -66,7 +66,7 @@ const finish = (node: Building): TreeNode[] => [
     .sort(byName),
 ]
 
-/** Arranges changed paths into a tree, folding single-child directory chains. */
+/** Puts changed paths into a tree. A chain of directories with one child each becomes one row. */
 export const buildFileTree = (paths: readonly string[]): TreeNode[] => {
   const root = emptyDirectory('', '')
 
@@ -91,8 +91,8 @@ export const buildFileTree = (paths: readonly string[]): TreeNode[] => {
     node.files.push(path)
   }
 
-  // The root is never folded: it has no name to fold into, and a tree whose
-  // top row is the whole repository is one row of nothing.
+  // The root never folds. It has no name to fold into. A tree whose top row is
+  // the full repository has one row that tells nothing.
   const folded = emptyDirectory('', '')
   folded.files = root.files
   for (const child of root.directories.values()) {
@@ -103,16 +103,16 @@ export const buildFileTree = (paths: readonly string[]): TreeNode[] => {
   return finish(folded)
 }
 
-/** The tree's files, in the order it presents them. */
+/** The files of the tree, in the order that the tree shows them. */
 export const flattenFileTree = (nodes: readonly TreeNode[]): string[] =>
   nodes.flatMap((node) => (node.kind === 'file' ? [node.path] : flattenFileTree(node.children)))
 
 /**
- * Reorders changed files to match the tree drawn from them.
+ * Puts the changed files in the same order as the tree.
  *
- * The tree is how a file is found, so the diffs below have to run in the same
- * order: two orderings of one list leave the index and the contents disagreeing
- * about what comes next, and scrolling stops being a way of getting anywhere.
+ * You find a file with the tree. Thus the diffs below must have the same order.
+ * With two orders of one list, the index and the content disagree about what
+ * comes next. Then you cannot find a file when you scroll.
  */
 export const orderFilesByTree = <Item extends { path: string }>(items: readonly Item[]): Item[] => {
   const order = new Map(

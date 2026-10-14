@@ -1,15 +1,15 @@
 import type { DiffGap } from '@yart/core'
 import styles from './review.module.css'
 
-/** How many lines one click reveals. Enough to see a function, short enough to aim. */
+/** How many lines one click shows. Sufficient to see a function, and short enough to aim. */
 export const EXPAND_STEP = 20
 
 export type GapEdge = 'top' | 'bottom'
 
 export interface GapBandProps {
-  /** What is still hidden, which shrinks as the run is opened from either end. */
+  /** What is still hidden. It becomes smaller when you open the run from either end. */
   gap: DiffGap
-  /** The enclosing context git named for the hunk below, if it named one. */
+  /** The context that git named for the hunk below, if it named one. */
   heading: string
   loading: boolean
   error: string | null
@@ -17,12 +17,12 @@ export interface GapBandProps {
 }
 
 /**
- * The seam where a diff skips unchanged lines.
+ * The place where a diff skips unchanged lines.
  *
- * It stands in for the `@@` header rather than sitting beside one: the header's
- * line numbers duplicate the gutters, and its only unique content — the
- * enclosing function git names — belongs with the lines it describes. Once a
- * run is fully open there is no seam left, so nothing is drawn at all.
+ * It replaces the `@@` header. It does not show next to one. The line numbers of
+ * the header are the same as the gutters. Its only unique content is the
+ * function that git names, and that belongs with the lines that it describes.
+ * When a run is fully open, there is no gap, and nothing shows.
  */
 export const GapBand = ({ gap, heading, loading, error, onExpand }: GapBandProps) => {
   const hidden = gap.length

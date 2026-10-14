@@ -8,7 +8,7 @@ import {
 } from './hunks.ts'
 import type { DiffHunk } from './review.ts'
 
-/** Only the header matters to the planner, so the lines stay empty. */
+/** The planner uses only the header. Thus the lines stay empty. */
 const hunk = (header: string): DiffHunk => ({ header, lines: [] })
 
 const gaps = (headers: readonly string[], head_line_count: number | null) =>
@@ -74,8 +74,8 @@ describe('planDiffSections', () => {
   })
 
   it('keeps the two sides in step across an insertion', () => {
-    // Three lines added inside the hunk, so the tail sits three lines lower on
-    // the head than on the base.
+    // The hunk adds three lines. Thus the end is three lines lower on the head
+    // than on the base.
     expect(gaps(['@@ -7,7 +7,10 @@'], 23).at(-1)).toEqual({
       base_start: 14,
       head_start: 17,
@@ -109,7 +109,7 @@ describe('planDiffSections', () => {
   })
 
   it('counts a pure insertion as consuming nothing on the base', () => {
-    // `-10,0` sits after base line 10, so base line 11 is still unchanged.
+    // `-10,0` is after base line 10. Thus base line 11 did not change.
     expect(gaps(['@@ -10,0 +11,2 @@'], 14).at(-1)).toEqual({
       base_start: 11,
       head_start: 13,

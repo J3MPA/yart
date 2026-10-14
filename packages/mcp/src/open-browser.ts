@@ -2,11 +2,11 @@ import { spawn } from 'node:child_process'
 import { DEFAULT_PORT } from './daemon-client.ts'
 
 /**
- * Opens a URL in whatever the machine treats as its browser.
+ * Opens a URL in the default browser of the computer.
  *
- * Detached and with its streams ignored, because the launcher outlives this
- * process on some platforms and anything it prints would land in the stdio
- * channel the MCP protocol is speaking over.
+ * The launcher is detached, and its output goes nowhere. On some platforms, the
+ * launcher continues after this process stops. Its output would go into the
+ * stdio channel that the MCP protocol uses.
  */
 const LAUNCHERS: Record<string, { command: string; args: readonly string[] }> = {
   darwin: { command: 'open', args: [] },
@@ -24,27 +24,27 @@ export const openInBrowser: BrowserOpener = (url) => {
       detached: true,
       stdio: 'ignore',
     })
-    // A machine with no browser, or no launcher on PATH, must not take the
-    // tool call down with it: the URL is in the response either way.
+    // A computer with no browser, or with no launcher on PATH, must not make the
+    // tool call fail. The URL is in the response in all cases.
     child.on('error', () => undefined)
     child.unref()
   } catch {
-    // Same reasoning as above, for the synchronous failures spawn can throw.
+    // The same reason as above, for the synchronous errors of spawn.
   }
 }
 
-/** The desktop app's link to a review, from the review's address on the daemon. */
+/** The link of the desktop app to a review, from the address of the review on the daemon. */
 export const appLink = (url: string): string => `yart:/${new URL(url).pathname}`
 
 /**
- * Opens a review in the desktop app when it is installed, and in the browser
- * when it is not.
+ * Opens a review in the desktop app when it is installed. Otherwise opens it in
+ * the browser.
  *
- * Only for the daemon on the default port, which is the one the installed app
- * uses: a link names a review but not a daemon, so a development daemon's
- * review would otherwise open in the installed app, served by other code. And
- * only on macOS, as the app is. `open` fails when nothing claims the scheme,
- * which is the check for whether the app is there.
+ * This applies only to the daemon on the default port, which the installed app
+ * uses. A link names a review, but not a daemon. Without this rule, a review of
+ * a development daemon would open in the installed app, with different code.
+ * It also applies only on macOS, as the app does. `open` fails when no app claims
+ * the scheme. That failure tells if the app is installed.
  */
 export const openReview = (url: string, port: number, fallback: BrowserOpener = openInBrowser) => {
   if (process.platform !== 'darwin' || port !== DEFAULT_PORT) {
@@ -69,13 +69,12 @@ export const openReview = (url: string, port: number, fallback: BrowserOpener = 
 }
 
 /**
- * Whether a new review should open a window.
+ * Tells if a new review must open a window.
  *
- * On by default: a review nobody opens is the one step of the loop that needs a
- * person, and asking an agent to relay a URL is how that step gets skipped.
- * `YART_NO_BROWSER` turns it off for anyone running yart somewhere a browser
- * would be wrong — a container, a remote shell, a second screen they did not
- * ask to be taken over.
+ * It is on by default. The person who looks is the one step of the loop that
+ * needs a person. When an agent must give a URL to the person, that step does not
+ * occur. `YART_NO_BROWSER` turns it off where a browser is not correct. For
+ * example: a container, a remote shell, or a second screen.
  */
 export const browserOpeningEnabled = (
   env: Record<string, string | undefined> = process.env,

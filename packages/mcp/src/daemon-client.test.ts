@@ -21,8 +21,8 @@ afterEach(async () => {
 })
 
 /**
- * Stands in for a daemon from before one daemon served every repository: its
- * health check names the one repository it serves and carries no version.
+ * Takes the place of a daemon from before one daemon served all repositories.
+ * Its health check names its one repository and has no version.
  */
 const oldDaemonServing = async (repo_path: string): Promise<number> => {
   fake = createServer((request, response) => {

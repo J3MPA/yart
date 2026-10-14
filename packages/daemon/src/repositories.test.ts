@@ -46,18 +46,18 @@ const open = async (app: Hono, repo_path?: string): Promise<Review> => {
 }
 
 /**
- * Where git says a repository is, which on macOS is past the `/var` symlink the
- * temporary directory sits behind — and so what a review records.
+ * The path of a repository as git gives it. On macOS, this path is after the
+ * `/var` symlink of the temporary directory. A review records this path.
  */
 const real = (path: string): string => realpathSync(path)
 
-/** A daemon started in repository A, as one would be by the first agent to ask. */
+/** A daemon that started in repository A, as the first agent that asks would start it. */
 const daemonIn = (repo: TestRepo) => createServer({ repo_path: repo.path, state_dir })
 
 describe('one daemon for every repository', () => {
   it('reviews the repository a request names, not the one it was started in', async () => {
-    // The bug this exists for: a daemon from A reused for a review in B used to
-    // snapshot A's working tree, with no error.
+    // The reason for this test: before, a daemon from A, used for a review in B,
+    // made a snapshot of the working tree of A, with no error.
     const review = await open(daemonIn(repo_a), repo_b.path)
     expect(review.repo_path).toBe(real(repo_b.path))
     expect(review.files.map((file) => file.path)).toEqual(['only-in-b.txt'])
@@ -107,7 +107,7 @@ describe('one daemon for every repository', () => {
   })
 
   it('falls back to the repository it was started in when a request names none', async () => {
-    // What an agent still running an older yart sends; it must keep working.
+    // An agent that still runs an older yart sends this. It must still work.
     const review = await open(daemonIn(repo_a))
     expect(review.repo_path).toBe(real(repo_a.path))
   })
@@ -139,7 +139,7 @@ describe('remembering repositories across restarts', () => {
   it('finds a review in another repository after the daemon is restarted', async () => {
     const in_b = await open(daemonIn(repo_a), repo_b.path)
 
-    // A fresh daemon has only ever heard of A, until it reads what it was told.
+    // A new daemon knows only A, until it reads its record.
     const restarted = daemonIn(repo_a)
     const response = await send(restarted, 'GET', `/api/reviews/${in_b.id}`)
     expect(response.status).toBe(200)

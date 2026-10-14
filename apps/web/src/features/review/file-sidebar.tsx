@@ -9,11 +9,11 @@ import styles from './review.module.css'
 export interface FileSidebarProps {
   files: readonly FileDiff[]
   threads: readonly Thread[]
-  /** The file the page is currently showing, marked in the list. */
+  /** The file that the page shows now. The list marks it. */
   active_path: string | null
-  /** Directory paths folded away. */
+  /** The paths of the folded directories. */
   folded: ReadonlySet<string>
-  /** Files marked reviewed at their current content. */
+  /** The files marked as reviewed at their current content. */
   reviewed: ReadonlySet<string>
   onSelect: (path: string) => void
   onToggleDirectory: (path: string) => void
@@ -27,7 +27,7 @@ const STATUS_LETTER: Record<FileDiff['status'], string> = {
   copied: 'C',
 }
 
-/** What the rows below the header read, gathered so it is passed down once. */
+/** What the rows below the header read. It is one object, thus it goes down one time. */
 interface TreeView {
   files: ReadonlyMap<string, FileDiff>
   summaries: ReadonlyMap<string, FileSummary>
@@ -75,8 +75,9 @@ const TreeRows = ({ nodes, view, onSelect, onToggleDirectory }: TreeRowsProps) =
       if (node.kind === 'directory') {
         const is_folded = view.folded.has(node.path)
         const hidden = is_folded ? flattenFileTree(node.children) : []
-        // A folded directory stands in for the file being read, or the mark
-        // would vanish from the tree whenever that file's directory was folded.
+        // A folded directory takes the place of the file that you read. Otherwise
+        // the mark would go from the tree each time you fold the directory of
+        // that file.
         const holds_active =
           is_folded && view.active_path !== null && hidden.includes(view.active_path)
 
@@ -148,7 +149,7 @@ const TreeRows = ({ nodes, view, onSelect, onToggleDirectory }: TreeRowsProps) =
   </ul>
 )
 
-/** The changed files of a review, as a tree, with what is waiting in each. */
+/** The changed files of a review, as a tree, with what waits in each. */
 export const FileSidebar = ({
   files,
   threads,

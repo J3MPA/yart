@@ -1,15 +1,15 @@
 import { readStored, writeStored } from './browser-storage'
 
 /**
- * How much of each review this person has already looked at.
+ * How much of each review this person already saw.
  *
- * Seen-ness is per person and per device rather than a property of the review,
- * so it lives in the browser and never reaches the daemon — which also keeps an
- * agent from being able to mark its own work as read.
+ * The seen state is for each person and each device. It is not a property of
+ * the review. Thus it is in the browser, and never goes to the daemon. Thus an
+ * agent also cannot mark its own work as read.
  *
- * The value stored against a review is `agentActivity` as it stood when the
- * review was last on screen, so "unseen" means the agent has done something
- * since.
+ * The value for a review is its `agentActivity` at the time when the review was
+ * last on the screen. Thus "unseen" means that the agent did something after
+ * that time.
  */
 const KEY = 'yart.seen-activity.v1'
 
@@ -20,10 +20,10 @@ export const readSeen = (): SeenActivity => readStored<SeenActivity>(KEY, {})
 export const writeSeen = (seen: SeenActivity): void => writeStored(KEY, seen)
 
 /**
- * Records a review as seen up to its current activity.
+ * Records a review as seen, up to its current activity.
  *
- * Returns the new map, or null when nothing changed — so a caller can skip a
- * write and a re-render on every poll of a review nobody has touched.
+ * Returns the new map, or null when nothing changed. Thus a caller can skip a
+ * write and a new render on each poll of a review that nobody touched.
  */
 export const markSeen = (
   seen: SeenActivity,
@@ -35,10 +35,10 @@ export const markSeen = (
 }
 
 /**
- * Drops reviews that are no longer listed.
+ * Removes the reviews that are not in the list now.
  *
- * Without this the map grows for as long as the browser profile lives, keeping
- * a number against every review ever deleted.
+ * Without this, the map grows for as long as the browser profile exists. It
+ * would keep a number for each review that was ever deleted.
  */
 export const forgetMissing = (seen: SeenActivity, live_ids: Iterable<string>): SeenActivity => {
   const live = new Set(live_ids)
@@ -50,10 +50,11 @@ export const forgetMissing = (seen: SeenActivity, live_ids: Iterable<string>): S
 }
 
 /**
- * Whether a review has moved since it was last looked at.
+ * Tells if a review moved after the person last looked at it.
  *
- * A review with no entry is not unseen: it has never been opened, so there is
- * no "since" to measure from, and a list where everything shouts says nothing.
+ * A review with no entry is not unseen. Nobody opened it, thus there is no
+ * "before" to compare with. Also, a list where all reviews show a dot gives no
+ * information.
  */
 export const isUnseen = (seen: SeenActivity, review_id: string, activity: number): boolean => {
   const mark = seen[review_id]

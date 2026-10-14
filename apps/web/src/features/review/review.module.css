@@ -1,5 +1,5 @@
-/* Layout lives in the shell, so both views sit on exactly the same gutter and
-   navigating between them does not shift the page. */
+/* The shell sets the layout. Thus the two views have the same gutter, and the
+   page does not move when you go from one view to the other. */
 
 .header {
   display: flex;
@@ -46,8 +46,8 @@
   background-color: color-mix(in srgb, var(--yart-color-remove-emphasis) 16%, transparent);
 }
 
-/* The one badge meant to pull the eye across a list: the agent is done and
-   the review is waiting on a person. */
+/* The one badge that must catch the eye in a list: the agent is done, and the
+   review waits on a person. */
 .badge_ready {
   color: var(--yart-color-add-emphasis);
   background-color: color-mix(in srgb, var(--yart-color-add-emphasis) 18%, transparent);
@@ -60,19 +60,19 @@
 
 .file {
   margin-top: var(--yart-space-6);
-  /* A grid column is `min-width: auto` by default, so a long unbroken line
-     would widen the column and push the sidebar off the page. */
+  /* By default, a grid column has `min-width: auto`. Thus a long line with no
+     break would make the column wider, and push the sidebar off the page. */
   min-width: 0;
   background-color: var(--yart-color-surface);
   border: 1px solid var(--yart-color-border);
   border-radius: var(--yart-radius-lg);
-  /* clip rather than hidden: hidden makes the file a scroll container, and a
-     sticky header inside one sticks to the file instead of to the window. */
+  /* clip, not hidden. hidden makes the file a scroll container. A sticky header
+     in a scroll container sticks to the file, not to the window. */
   overflow: clip;
 }
 
-/* Sticky so the Reviewed box is in reach at the end of a long file, which is
-   where the decision to tick it is made. */
+/* Sticky, thus the Reviewed box is near you at the end of a long file. You
+   decide there. */
 .file_header {
   position: sticky;
   top: 0;
@@ -158,8 +158,8 @@
   outline-offset: -1px;
 }
 
-/* Clicking anywhere on the row comments on it, but the code itself keeps a text
-   cursor so it still reads as selectable — which it is. */
+/* A click anywhere on the row comments on it. But the code keeps a text
+   cursor, thus it still looks as text that you can select. You can. */
 .row_clickable .code {
   cursor: text;
 }
@@ -264,8 +264,8 @@
   color: var(--yart-color-text-muted);
 }
 
-/* An AI reviewer speaks for the person, so it is set apart from the agent whose
-   work it reviews. */
+/* An AI reviewer speaks for the person. Thus it looks different from the agent
+   whose work it reviews. */
 .comment_author_reviewer {
   color: var(--yart-color-accent);
 }
@@ -335,8 +335,8 @@
   color: var(--yart-color-text-muted);
 }
 
-/* Not `overflow: hidden` — that would clip the overflow menu inside a row.
-   The corners are rounded on the rows themselves instead. */
+/* Not `overflow: hidden`, because that would clip the overflow menu in a row.
+   The rows themselves have the round corners. */
 .list {
   margin-top: var(--yart-space-4);
   border: 1px solid var(--yart-color-border);
@@ -448,8 +448,8 @@
   white-space: nowrap;
 }
 
-/* Sits inside the title rather than beside the badges: it answers "is there
-   anything here for me" before the eye reaches what kind of thing it is. */
+/* In the title, not next to the badges. It answers "is there something here for
+   me" before the eye gets to the type of the review. */
 .unseen_dot {
   display: inline-block;
   width: 0.5rem;
@@ -563,8 +563,8 @@
   border-radius: var(--yart-radius-sm);
 }
 
-/* The sidebar and the diff, side by side. The sidebar is fixed so that the
-   diff column's width does not shift from file to file. */
+/* The sidebar and the diff, next to each other. The sidebar has a fixed width.
+   Thus the width of the diff column does not change from file to file. */
 .layout {
   display: grid;
   grid-template-columns: 16rem minmax(0, 1fr);
@@ -580,8 +580,8 @@
   margin-top: var(--yart-space-6);
 }
 
-/* Below this the two columns no longer both fit, and a tree squeezed into a
-   few characters is worse than a list above the diff. */
+/* Below this width, the two columns do not fit. A tree in a few characters is
+   worse than a list above the diff. */
 @media (max-width: 60rem) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
@@ -621,8 +621,8 @@
   padding: 0;
 }
 
-/* Indentation comes from nesting rather than a per-row inset, so a folded
-   directory needs no arithmetic to sit at the right depth. */
+/* The indent comes from the nesting, not from an inset for each row. Thus a
+   folded directory needs no calculation to show at the correct depth. */
 .tree_list .tree_list {
   padding-left: var(--yart-space-3);
 }
@@ -653,8 +653,8 @@
   outline-offset: -2px;
 }
 
-/* Centred on the row rather than on the text baseline, which sits too low for
-   a drawn shape. */
+/* Centered on the row, not on the text baseline. The baseline is too low for a
+   drawn shape. */
 .tree_chevron {
   display: flex;
   flex: none;
@@ -662,8 +662,8 @@
   font-size: var(--yart-text-sm);
 }
 
-/* Muted rather than hidden: a reviewed file is done with, but still has to be
-   findable when its conversation picks up again. */
+/* Quiet, not hidden. A reviewed file is done, but you must still find it when
+   its conversation starts again. */
 .tree_file_reviewed {
   color: var(--yart-color-text-muted);
 }
@@ -691,8 +691,8 @@
   background-color: var(--yart-color-surface-sunken);
 }
 
-/* The bar is drawn with a transparent border on every row, so marking one
-   shifts no text sideways. */
+/* Each row has a transparent border for the bar. Thus a mark on one row does
+   not move text to the side. */
 .tree_file {
   border-left: 2px solid transparent;
 }
@@ -744,11 +744,11 @@
   color: var(--yart-color-accent);
 }
 
-/* Stands where the `@@` header used to: same grid as a diff row, so the
-   controls land in the gutters and the label lines up with the code. */
+/* In the place of the `@@` header. It has the same grid as a diff row. Thus the
+   controls go into the gutters, and the label aligns with the code. */
 .gap {
   display: grid;
-  /* 7.75rem is the two gutters plus the marker column of a diff row. */
+  /* 7.75rem is the two gutters and the marker column of a diff row. */
   grid-template-columns: 7.75rem auto 1fr auto;
   align-items: center;
   column-gap: var(--yart-space-2);
@@ -811,7 +811,7 @@
   opacity: 0.6;
 }
 
-/* A held comment reads as unsent: dashed where a sent one is solid. */
+/* A held comment looks unsent: its line is dashed, and the line of a sent comment is solid. */
 .draft {
   padding: var(--yart-space-3);
   background-color: var(--yart-color-surface);
@@ -909,8 +909,8 @@
   cursor: pointer;
 }
 
-/* Drawn from the tokens rather than left to the browser, whose own checkbox is
-   a bright white box on the dark scheme. */
+/* The tokens draw this, not the browser. The checkbox of the browser is a
+   bright white box on the dark scheme. */
 .list_select {
   flex: none;
   display: inline-grid;

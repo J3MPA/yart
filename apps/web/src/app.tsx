@@ -8,10 +8,11 @@ import { SettingsPage } from '@/features/settings/settings-page'
 import styles from './app.module.css'
 
 /**
- * Reads the review id out of the path.
+ * Reads the review id from the path.
  *
- * There is no router library: the app has two views, and the daemon already
- * falls back to index.html for unknown paths, so a deep link works without one.
+ * There is no router library. The app has few views, and the daemon already
+ * sends index.html for unknown paths. Thus a link to a review works without a
+ * router.
  */
 const reviewIdFromPath = (pathname: string): string | null => {
   const match = /^\/reviews\/([^/]+)\/?$/.exec(pathname)
@@ -21,8 +22,8 @@ const reviewIdFromPath = (pathname: string): string | null => {
 export const App = () => {
   const review_id = reviewIdFromPath(window.location.pathname)
   const on_settings = /^\/settings\/?$/.test(window.location.pathname)
-  // Held here rather than in the list, because the tab has to carry the count
-  // while a single review is open too.
+  // Kept here, not in the list, because the tab must also show the count while
+  // one review is open.
   const unseen = useUnseenReviews()
   useUnseenSignal(unseen.count)
   useDesktopSignal(unseen)

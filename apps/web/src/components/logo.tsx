@@ -1,16 +1,16 @@
 export interface LogoProps {
-  /** Rendered size in pixels. Below about 24 the marks blur together. */
+  /** The size in pixels. Below approximately 24, the marks become unclear. */
   size?: number
-  /** Hidden from assistive technology when a visible name sits beside it. */
+  /** Hidden from assistive technology when a visible name is next to it. */
   title?: string
 }
 
 /**
- * The yart mark: a caret pointing at one line among several.
+ * The mark of yart: a caret that points to one line of many.
  *
- * Fills are design tokens rather than literals, so the mark follows the theme
- * the same way the rest of the interface does. The standalone favicon cannot do
- * that — it carries its own colours in `public/favicon.svg`.
+ * The fills are design tokens, not literal values. Thus the mark follows the
+ * theme, as the rest of the interface does. The separate favicon cannot do this.
+ * It has its own colors in `public/favicon.svg`.
  */
 export const Logo = ({ size = 28, title }: LogoProps) => (
   <svg

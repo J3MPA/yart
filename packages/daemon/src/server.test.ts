@@ -246,7 +246,7 @@ describe('the review loop', () => {
     const submitted = (await (await post(`/api/reviews/${review.id}/submit`)).json()) as Review
     expect(submitted.status).toBe('submitted')
 
-    // The agent responds by inserting a line above the commented one.
+    // The agent responds. It adds a line above the line of the comment.
     repo.write('a.txt', 'inserted\nalpha\nTARGET\ngamma\ndelta\n')
     repo.commit('agent responds')
 
@@ -415,7 +415,7 @@ describe('settings', () => {
 })
 
 describe('settling an approved review', () => {
-  // No grace period, so the clean-up runs as soon as the test lets timers run.
+  // No delay. Thus the clean-up runs when the test lets timers run.
   let settling: Hono
 
   beforeEach(() => {

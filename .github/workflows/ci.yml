@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# A new push to a branch makes the run in flight for it pointless.
+# A new push to a branch makes the current run for that branch unnecessary.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Before setup-node, which needs pnpm on PATH to resolve its cache.
+      # Before setup-node, because it needs pnpm on PATH to find its cache.
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
@@ -26,8 +26,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Each step named so a failure says which part of the gate broke without
-      # anyone opening the log.
+      # Each step has a name. Thus a failure tells which part of the gate broke, and
+      # nobody must open the log.
       - name: Check formatting
         run: pnpm format:check
 

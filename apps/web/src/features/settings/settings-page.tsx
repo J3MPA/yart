@@ -21,7 +21,7 @@ const CHOICES: readonly { value: ApprovalAction; label: string; detail: string }
   },
 ]
 
-/** The daemon's settings, which apply in the app and in every browser alike. */
+/** The settings of the daemon. They apply in the same way in the app and in each browser. */
 export const SettingsPage = () => {
   const { data: settings, isLoading: is_loading, isError: is_error } = useGetSettingsQuery()
   const [updateSettings, update_state] = useUpdateSettingsMutation()

@@ -4,15 +4,16 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 /**
- * Naming rules are the project's, not stylistic defaults — see AGENTS.md.
+ * The naming rules belong to the project. They are not default styles. See
+ * AGENTS.md.
  *
- * The distinction the rule set turns on is semantic rather than syntactic: a
- * `const` holding a function is a function and stays camelCase, while a `const`
- * holding data is a variable and becomes snake_case. That requires type
- * information, which is why linting runs against the projects.
+ * The rules look at meaning, not at syntax. A `const` that holds a function is a
+ * function, and uses camelCase. A `const` that holds data is a variable, and
+ * uses snake_case. This needs type information. Thus the lint runs against the
+ * projects.
  *
- * `function_formats` exists because React components are PascalCase by
- * framework requirement, and a component is just a const holding a function.
+ * `function_formats` exists because the framework requires PascalCase for React
+ * components, and a component is a const that holds a function.
  */
 const namingRules = (function_formats) => [
   'error',
@@ -23,12 +24,12 @@ const namingRules = (function_formats) => [
   { selector: 'objectLiteralMethod', format: ['camelCase'] },
   { selector: 'classMethod', format: ['camelCase'] },
   { selector: 'variable', types: ['function'], format: function_formats },
-  // A parameter holding a function is a function too — React event props and
-  // callback arguments such as Redux Toolkit's `getDefaultMiddleware`.
+  // A parameter that holds a function is also a function. Examples are React event
+  // props, and callback arguments such as `getDefaultMiddleware` of Redux Toolkit.
   { selector: 'parameter', types: ['function'], format: ['camelCase'] },
 
-  // PascalCase is permitted here only for singletons; the linter cannot tell a
-  // singleton from any other object, so that part rests on review.
+  // PascalCase is permitted here only for singletons. The linter cannot tell a
+  // singleton from other objects. Thus the review must examine that part.
   { selector: 'variable', format: ['snake_case', 'UPPER_CASE', 'PascalCase'] },
   { selector: 'parameter', format: ['snake_case'], leadingUnderscore: 'allow' },
 
@@ -36,18 +37,19 @@ const namingRules = (function_formats) => [
   { selector: 'objectLiteralProperty', format: ['snake_case'] },
   { selector: 'classProperty', format: ['snake_case', 'UPPER_CASE'] },
 
-  // Imports and third-party shapes keep their source's casing.
+  // Imports and third-party shapes keep the case of their source.
   { selector: 'import', format: null },
   // Keys that are not valid identifiers, such as a path alias, are not names.
   { selector: 'objectLiteralProperty', modifiers: ['requiresQuotes'], format: null },
 ]
 
 /**
- * Callables are declared as const arrows.
+ * Callables are const arrows.
  *
- * `func-style` bans the declaration form, and the selector bans the remaining
- * non-arrow expression form. Class and object methods are untouched: method
- * shorthand is not a hoisting question and arrows would change `this`.
+ * `func-style` prohibits the declaration form. The selector prohibits the other
+ * form that is not an arrow. Class methods and object methods do not change.
+ * Hoisting is not a problem for method shorthand, and arrows would change
+ * `this`.
  */
 const ARROW_ONLY = {
   'func-style': ['error', 'expression'],
@@ -68,7 +70,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          // Build configs live outside the app's tsconfig include path.
+          // Build configs are outside the include path of the tsconfig of the app.
           allowDefaultProject: ['apps/web/vite.config.ts', 'apps/desktop/src/preload.cjs'],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -80,8 +82,8 @@ export default tseslint.config(
     },
   },
   {
-    // Files and directories are kebab-case, including React components — the
-    // component inside app.tsx is still PascalCase, only its file is not.
+    // Files and directories use kebab-case, also for React components. The
+    // component in app.tsx still uses PascalCase. Only its file does not.
     files: ['**/*.{ts,tsx}'],
     plugins: { 'check-file': checkFile },
     rules: {
@@ -100,7 +102,7 @@ export default tseslint.config(
   {
     files: ['apps/desktop/src/preload.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
-    // A sandboxed preload can only load what it needs with require().
+    // A preload in a sandbox can load what it needs only with require().
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {

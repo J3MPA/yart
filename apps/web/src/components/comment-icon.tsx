@@ -1,11 +1,11 @@
 import styles from './comment-icon.module.css'
 
 /**
- * Marks something as carrying conversation that is still open.
+ * Marks an item that has a conversation that is still open.
  *
- * A mark rather than a count: in a list scanned for where to look next, that
- * there is an open thread is the signal, and how many is a detail the tooltip
- * can hold without widening every row.
+ * A mark, not a count. When you look at a list to find where to go next, the
+ * signal is that an open thread exists. How many is a detail. The tooltip shows
+ * it, and the rows do not become wider.
  */
 export const CommentIcon = () => (
   <svg className={styles.icon} viewBox="0 0 16 16" aria-hidden="true" focusable="false">

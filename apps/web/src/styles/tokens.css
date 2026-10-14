@@ -1,16 +1,16 @@
 /*
- * yart design tokens.
+ * The design tokens of yart.
  *
- * The seed of the design system: every value the UI consumes resolves to one of
- * these. Components reference tokens, never raw literals, so the whole surface
- * can be re-themed from this file alone.
+ * This is the start of the design system. Each value that the UI uses comes
+ * from one of these tokens. Components refer to tokens, never to literal
+ * values. Thus this file alone can change the theme of the full interface.
  *
- * Palette leans warm (ink on paper) rather than the cool slate-and-blue that
- * most developer tooling defaults to.
+ * The colors are warm, like ink on paper. Most tools for developers use cool
+ * slate and blue colors.
  */
 
 :root {
-  /* Neutrals — warm grey, light mode */
+  /* Neutrals: warm gray, light mode */
   --yart-color-bg: #faf8f5;
   --yart-color-surface: #ffffff;
   --yart-color-surface-sunken: #f2efea;
@@ -19,7 +19,7 @@
   --yart-color-text: #1f1c18;
   --yart-color-text-muted: #6b635a;
 
-  /* Accent — muted ochre */
+  /* Accent: muted ochre */
   --yart-color-accent: #b07d2b;
   --yart-color-accent-hover: #8f6420;
   --yart-color-accent-contrast: #ffffff;
@@ -31,8 +31,8 @@
   --yart-color-remove-emphasis: #b3432f;
 
   /*
-   * Syntax — named as Shiki's CSS-variables theme emits them. Kept to the warm
-   * palette and muted enough to sit on the add and remove backgrounds.
+   * Syntax: the names come from the CSS variables theme of Shiki. The colors
+   * stay warm, and are quiet enough to show on the add and remove backgrounds.
    */
   --yart-syntax-foreground: var(--yart-color-text);
   --yart-syntax-token-comment: #8a8175;
@@ -56,7 +56,7 @@
   --yart-line-tight: 1.25;
   --yart-line-normal: 1.6;
 
-  /* Space — 4px base */
+  /* Space: 4px base */
   --yart-space-1: 0.25rem;
   --yart-space-2: 0.5rem;
   --yart-space-3: 0.75rem;

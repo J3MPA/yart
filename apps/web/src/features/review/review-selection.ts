@@ -1,6 +1,6 @@
 export type SelectionState = 'none' | 'some' | 'all'
 
-/** Which reviews are ticked in the list. */
+/** The reviews that are selected in the list. */
 export type Selection = ReadonlySet<string>
 
 export const toggleSelected = (selection: Selection, review_id: string): Selection => {
@@ -10,20 +10,21 @@ export const toggleSelected = (selection: Selection, review_id: string): Selecti
   return next
 }
 
-/** How much of the list is ticked, for the box that ticks all of it. */
+/** How much of the list is selected, for the box that selects all of it. */
 export const selectionState = (selection: Selection, ids: readonly string[]): SelectionState => {
   const ticked = ids.filter((id) => selection.has(id)).length
   if (ticked === 0) return 'none'
   return ticked === ids.length ? 'all' : 'some'
 }
 
-/** Ticks every review in the list, or clears them all when they already are. */
+/** Selects all reviews in the list, or clears them all when all are already selected. */
 export const toggleAll = (selection: Selection, ids: readonly string[]): Selection =>
   selectionState(selection, ids) === 'all' ? new Set() : new Set(ids)
 
 /**
- * Drops reviews that have left the list — deleted, archived elsewhere, or
- * moved to the other tab — so an action never reaches one nobody can see.
+ * Removes the reviews that left the list. They can be deleted, archived in a
+ * different place, or in the other tab. Thus an action never touches a review
+ * that nobody can see.
  */
 export const keepListed = (selection: Selection, ids: readonly string[]): Selection => {
   const listed = ids.filter((id) => selection.has(id))

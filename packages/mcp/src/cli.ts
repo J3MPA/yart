@@ -16,7 +16,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
   })
 
   if (values.help === true) {
-    // stdout carries the MCP protocol, so help goes to stderr.
+    // stdout carries the MCP protocol. Thus the help goes to stderr.
     process.stderr.write(
       [
         'yart-mcp — MCP server exposing yart review tools',
@@ -39,7 +39,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     port: values.port === undefined ? DEFAULT_PORT : Number(values.port),
     repo_path: values.repo ?? process.cwd(),
     autostart: values['no-autostart'] !== true,
-    // Set by the `yart-mcp` the desktop app carries, pointing at its own daemon.
+    // The `yart-mcp` in the desktop app sets this, to point to the daemon of the app.
     daemon_cli: process.env.YART_DAEMON_CLI,
   })
 

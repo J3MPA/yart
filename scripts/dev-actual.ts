@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Runs the dev environment against this repository's own current diff.
+ * Runs the development environment against the current diff of this repository.
  *
- * Reviewing a fixture repo only ever exercises the shapes the fixture happens
- * to have. Pointing yart at whatever branch you are on means every run is a
- * real diff, with real renames, deletions and long files.
+ * A review of a fixture repository tests only the shapes that the fixture has.
+ * When yart reviews your current branch, each run is a real diff, with real
+ * renames, deletions and long files.
  *
- * Re-running on the same branch advances the existing review rather than making
- * a new one, so comments left last time follow your new commits — which is the
- * behaviour most worth having under your nose while developing.
+ * A second run on the same branch moves the existing review, and does not make a
+ * new one. Thus your old comments follow your new commits. This is the most
+ * important behavior to see during development.
  *
- * With `--desktop` it opens the review in the Electron shell instead of printing
- * a URL for the browser, and quitting the shell ends the session.
+ * With `--desktop`, it opens the review in the Electron shell, and does not show
+ * a URL for the browser. When you quit the shell, the session stops.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -23,7 +23,7 @@ const execFileAsync = promisify(execFile)
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const DAEMON_CLI = fileURLToPath(new URL('../packages/daemon/src/cli.ts', import.meta.url))
 const DAEMON_CODE_DIR = fileURLToPath(new URL('../packages/daemon/', import.meta.url))
-// Not 7777: that is where an installed yart listens, serving its own code.
+// Not 7777. An installed yart listens there, and serves its own code.
 const DAEMON_PORT = 7778
 const VITE_PORT = 5173
 const STARTUP_TIMEOUT_MS = 20_000
@@ -46,10 +46,10 @@ const git = async (...args: string[]): Promise<string> => {
 }
 
 /**
- * The commit this branch diverged from its trunk.
+ * The commit where this branch started from its trunk.
  *
- * A merge base rather than the trunk's tip, so the review shows what this
- * branch did and not whatever else has landed on main meanwhile.
+ * This is a merge base, not the tip of the trunk. Thus the review shows what
+ * this branch did, not the other changes on main in that time.
  */
 const resolveBase = async (): Promise<string> => {
   const explicit = ARGS.find((arg) => !arg.startsWith('-'))
@@ -59,7 +59,7 @@ const resolveBase = async (): Promise<string> => {
     try {
       const merge_base = await git('merge-base', trunk, 'HEAD')
       const head = await git('rev-parse', 'HEAD')
-      // On the trunk itself there is nothing to review, so show the last commit.
+      // On the trunk itself, there is nothing to review. Thus show the last commit.
       if (merge_base === head) return await git('rev-parse', 'HEAD~1')
       return merge_base
     } catch {
@@ -89,7 +89,7 @@ const waitForPort = async (url: string, what: string): Promise<void> => {
       const response = await fetch(url)
       if (response.ok) return
     } catch {
-      // Not listening yet.
+      // It does not listen yet.
     }
     await delay(200)
   }
@@ -108,12 +108,12 @@ const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return (await response.json()) as T
 }
 
-/** Reuses a review over the same base, advancing it when HEAD has moved. */
+/** Uses a review with the same base again, and moves it when HEAD moved. */
 const openOrAdvanceReview = async (base_sha: string, head_sha: string): Promise<Review> => {
-  // The daemon serves every repository, so both the lookup and the new review
-  // have to say this one: a reused daemon may have been started anywhere. Asked
-  // of git rather than taken from REPO_ROOT, which ends in a slash and would
-  // never equal the path the daemon records.
+  // The daemon serves all repositories. Thus the lookup and the new review must
+  // name this repository, because a daemon that we use again can come from any
+  // place. The path comes from git, not from REPO_ROOT. REPO_ROOT ends with a
+  // slash, and would never be the same as the path that the daemon records.
   const repo_path = await git('rev-parse', '--show-toplevel')
   const existing = (await api<Review[]>('/api/reviews')).find(
     (review) => review.repo_path === repo_path && review.base_sha === base_sha,
@@ -166,11 +166,11 @@ const main = async (): Promise<void> => {
   const head_sha = await git('rev-parse', 'HEAD')
   const branch = await git('rev-parse', '--abbrev-ref', 'HEAD')
 
-  // Reuse a daemon that is already listening, but only one running this
-  // checkout's code: another checkout's would serve changes other than the ones
-  // being worked on. Spawning blindly would crash the child with EADDRINUSE
-  // while the old one kept answering, leaving this script reporting success
-  // against a daemon it does not own and cannot stop.
+  // Use a daemon that already listens again, but only if it runs the code of this
+  // checkout. A daemon of a different checkout would serve different changes. A
+  // new daemon would stop with EADDRINUSE while the old daemon still answered.
+  // Then this script would report success against a daemon that it does not own
+  // and cannot stop.
   const health_url = `http://localhost:${DAEMON_PORT}/health`
   const found = await health(health_url)
   if (found !== null && found.code_dir !== DAEMON_CODE_DIR) {
@@ -199,9 +199,9 @@ const main = async (): Promise<void> => {
 
   const review = await openOrAdvanceReview(base_sha, head_sha)
 
-  // A strict port, so a Vite already running for another checkout is an error
-  // rather than this one quietly moving to the next port while the address
-  // printed below points at the other.
+  // A strict port. Thus a Vite that already runs for a different checkout causes
+  // an error. Without it, this Vite would move to the next port with no warning,
+  // and the address below would point to the other Vite.
   start('pnpm', ['--filter', '@yart/web', 'dev', '--strictPort'], 'vite', {
     // eslint-disable-next-line @typescript-eslint/naming-convention -- an environment variable
     YART_DAEMON_PORT: String(DAEMON_PORT),

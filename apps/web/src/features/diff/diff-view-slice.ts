@@ -1,12 +1,12 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 
-/** How hunks are laid out: one column with markers, or old/new side by side. */
+/** The layout of hunks: one column with markers, or old and new next to each other. */
 export type DiffLayout = 'unified' | 'split'
 
 export interface DiffViewState {
   layout: DiffLayout
-  /** Collapse runs of unchanged lines between hunks. */
+  /** Collapse the runs of unchanged lines between hunks. */
   hide_unchanged: boolean
 }
 

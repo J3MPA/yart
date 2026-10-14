@@ -17,11 +17,11 @@ export const Store = configureStore({
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(reviewApi.middleware),
 })
 
-// Required for refetchOnFocus/refetchOnReconnect to fire.
+// refetchOnFocus and refetchOnReconnect need this to work.
 setupListeners(Store.dispatch)
 
-// Per-person state is written back only when it actually changes. Subscribing
-// to the whole store would otherwise write on every query the app makes.
+// Write the state of the person only when it changes. A subscription to all of
+// the store would write on each query that the app makes.
 let last_seen = Store.getState().seen
 let last_local = Store.getState().local_reviews
 Store.subscribe(() => {

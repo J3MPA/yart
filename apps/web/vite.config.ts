@@ -10,9 +10,10 @@ export default defineConfig({
     },
   },
   server: {
-    // The daemon owns 7777 and serves the built UI from there; in development
-    // Vite sits beside it and proxies the API across. `pnpm dev:actual` runs its
-    // own daemon on another port, so that one is given here.
+    // The daemon uses port 7777, and serves the built UI from there. During
+    // development, Vite runs next to it and sends the API requests to it.
+    // `pnpm dev:actual` runs its own daemon on a different port, and gives that
+    // port here.
     port: 5173,
     proxy: {
       '/api': `http://localhost:${process.env.YART_DAEMON_PORT ?? '7777'}`,

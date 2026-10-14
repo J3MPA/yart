@@ -25,7 +25,7 @@ const staleWarning = (count: number): string =>
     : `${count} comments were written on versions of their files that have since changed, so ` +
       'their lines may no longer be the ones they were about. Drop them to submit.'
 
-/** Where a review is finished: the summary, the verdict, and everything held for it. */
+/** Where you complete a review: the summary, the verdict, and all held comments. */
 export const SubmitPanel = ({
   review,
   files,
@@ -61,8 +61,8 @@ export const SubmitPanel = ({
         replies: replies.map(({ thread_id, body }) => ({ thread_id, body })),
         expected_head_sha: review.head_sha,
       }).unwrap()
-      // Only once the daemon has them: a draft is cleared by being sent, never
-      // by being attempted, or a failed submit would lose what was written.
+      // Only after the daemon has them. A draft clears when it is sent, never when
+      // the send starts. Otherwise a failed submit would lose what you wrote.
       dispatch(draftsSent(review.id))
       onSummaryChange('')
       onDone()

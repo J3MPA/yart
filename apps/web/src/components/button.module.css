@@ -1,5 +1,5 @@
-/* Default buttons are deliberately low contrast. Only one action in a group
-   should be filled, or a row of buttons reads as several competing emphases. */
+/* Default buttons have low contrast on purpose. Only one action in a group must
+   be filled. Otherwise a row of buttons gives too many points of attention. */
 .button {
   padding: var(--yart-space-2) var(--yart-space-3);
   font-size: var(--yart-text-sm);
@@ -50,8 +50,8 @@
   border-color: var(--yart-color-border-strong);
 }
 
-/* For an action that cannot be undone, and only where it is the one being
-   confirmed: everywhere else it stays a default button. */
+/* For an action that you cannot undo, and only where it is the action to
+   confirm. In all other places, it is a default button. */
 .danger {
   color: var(--yart-color-surface);
   background-color: var(--yart-color-remove-emphasis);

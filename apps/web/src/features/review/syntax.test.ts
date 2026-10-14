@@ -26,7 +26,7 @@ describe('languageFor', () => {
     expect(languageFor('cli.ts', '#!/usr/bin/env node\n')).toBe('ts')
   })
 
-  it('fetches a file to colour only when it may have a grammar', () => {
+  it('fetches a file to color only when it may have a grammar', () => {
     expect(mayHighlight('src/app.tsx')).toBe(true)
     expect(mayHighlight('bin/yart')).toBe(true)
     expect(mayHighlight('assets/logo.weird')).toBe(false)
@@ -47,7 +47,7 @@ describe('tokenize', () => {
     expect(tokens?.[1]?.map((token) => token.content).join('')).toBe('// done')
   })
 
-  it('colours a line by what came before it, not by the line alone', async () => {
+  it('colors a line by what came before it, not by the line alone', async () => {
     const tokens = await tokenize('/*\nstill a comment\n*/\n', 'ts')
     expect(tokens?.[1]?.[0]?.color).toBe('var(--yart-syntax-token-comment)')
   })

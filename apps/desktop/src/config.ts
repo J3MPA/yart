@@ -1,13 +1,13 @@
 export interface ShellConfig {
-  /** The port of the daemon the app uses, starting one there if none answers. */
+  /** The port of the daemon that the app uses. The app starts a daemon there if none answers. */
   daemon_port: number
-  /** The page the window opens on. */
+  /** The page that the window opens on. */
   start_url: string
-  /** The origin the window stays on; links anywhere else open in the browser. */
+  /** The origin of the window. Links to other places open in the browser. */
   origin: string
   /**
-   * The directory under the platform's app data that holds the shell's own
-   * storage, or null to keep Electron's default.
+   * The directory in the app data of the platform that holds the storage of the
+   * shell, or null for the default of Electron.
    */
   profile: string | null
 }
@@ -15,10 +15,10 @@ export interface ShellConfig {
 const DEFAULT_DAEMON_PORT = 7777
 
 /**
- * A development shell gets a profile of its own. Electron's single-instance
- * lock is held per profile, so sharing one with an installed yart would make
- * the development shell hand itself over to the installed app and quit. It
- * also keeps the two apps' seen state and drafts apart.
+ * A development shell gets its own profile. Electron holds its single-instance
+ * lock for each profile. If the shell shared a profile with an installed yart,
+ * the shell would give control to the installed app and quit. The profile also
+ * keeps the seen state and the drafts of the two apps apart.
  */
 const DEV_PROFILE = 'yart-dev'
 

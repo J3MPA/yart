@@ -21,9 +21,9 @@ const MAX_WAIT_SECONDS = 1800
 type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean }
 
 /**
- * Builds a tool config, keeping the protocol's `inputSchema` spelling in one
- * place. Generic so `registerTool` still infers the handler's argument types
- * from the schema.
+ * Makes a tool config, with the `inputSchema` spelling of the protocol in one
+ * place. It is generic, thus `registerTool` still gets the argument types of
+ * the handler from the schema.
  */
 const toolConfig = <Schema>(config: {
   title: string
@@ -39,9 +39,9 @@ const toolConfig = <Schema>(config: {
 const text = (body: string): ToolResult => ({ content: [{ type: 'text', text: body }] })
 
 /**
- * What the agent under review should know about a verdict an AI reviewer
- * passed: that the person has not seen the work yet, and when the reviewer has
- * no rounds left, that the next move is the person's rather than another fix.
+ * What the agent under review must know about a verdict of an AI reviewer. The
+ * person did not see the work yet. When the reviewer has no more rounds, the
+ * next step belongs to the person, and is not one more fix.
  */
 const reviewerNote = (review: Review, settings: Settings): string | null => {
   const verdict = latestSubmission(review)
@@ -74,9 +74,9 @@ const failure = (body: string): ToolResult => ({
 })
 
 /**
- * Every tool runs through this so a daemon or git failure reaches the model as
- * a readable message it can act on, rather than as a transport-level error that
- * ends the tool call with no explanation.
+ * Each tool runs through this function. Thus a failure of the daemon or of git
+ * gets to the model as a message that it can read and act on. Without it, an
+ * error in the transport would stop the tool call with no explanation.
  */
 const guard = async (run: () => Promise<ToolResult>): Promise<ToolResult> => {
   try {
@@ -88,11 +88,11 @@ const guard = async (run: () => Promise<ToolResult>): Promise<ToolResult> => {
 
 export interface McpServerOptions extends DaemonClientOptions {
   /**
-   * Shows a new review to the person who has to read it.
+   * Shows a new review to the person who must read it.
    *
-   * Injectable so the tests can watch it being called without a window opening
-   * on whoever is running them. Whether it is called at all is the
-   * environment's business, not this option's.
+   * Tests can replace it, and see the calls with no window on the screen of the
+   * person who runs them. The environment decides if it is called, not this
+   * option.
    */
   openBrowser?: (url: string) => void
 }
@@ -157,8 +157,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           )
         }
 
-        // An empty review is not worth a window, which is why this sits after
-        // the check above rather than beside the call that created it.
+        // An empty review does not need a window. Thus this comes after the check
+        // above, not next to the call that made the review.
         if (opening_enabled) openBrowser(url)
 
         return text(
@@ -377,9 +377,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       }),
   )
 
-  // The reviewing side. One MCP server serves both, so these say plainly that
-  // they are for reviewing someone else's work: an agent asked to have its own
-  // change reviewed must not pass a verdict on it.
+  // The side of the reviewer. One MCP server serves the two sides. Thus these
+  // tools say clearly that they are for a review of the work of a different
+  // agent. An agent whose own change is under review must not give a verdict.
 
   server.registerTool(
     'get_reviewer_settings',
