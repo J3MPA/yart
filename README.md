@@ -4,74 +4,80 @@
 
 # yart
 
-**Y**et **A**nother **R**eview **T**ool — local, GitHub-style code review for
-AI-generated diffs, with inline comments that loop back to your agent over MCP.
+**Y**et **A**nother **R**eview **T**ool. Local code review for diffs that AI
+agents make, in the style of GitHub. Your comments on lines go back to the agent
+over MCP.
 
 [![CI](https://github.com/J3MPA/yart/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/J3MPA/yart/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/J3MPA/yart?sort=semver&label=release)](https://github.com/J3MPA/yart/releases/latest)
 [![Latest pre-release](https://img.shields.io/github/v/release/J3MPA/yart?include_prereleases&sort=semver&label=pre-release)](https://github.com/J3MPA/yart/releases)
-[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#using-yart)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](#use-yart)
 [![License: MIT](https://img.shields.io/github/license/J3MPA/yart)](LICENSE)
 
-[Quick start](#quick-start) · [Using yart](#using-yart) ·
-[Developing yart](#developing-yart) · [How it works](#how-it-works)
+[Quick start](#quick-start) · [Use yart](#use-yart) ·
+[Develop yart](#develop-yart) · [How it works](#how-it-works)
 
 </div>
 
 ## Quick start
 
 ```sh
-# Install the app and its two commands (during the beta, see Installing below)
+# Install the app and its two commands. During the beta, see "Install" below.
 curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
 
-# Let Claude Code use it
+# Let Claude Code use yart.
 claude mcp add -s user yart -- ~/.local/bin/yart-mcp
 ```
 
-Then tell your agent you want to review its changes. A review opens in the yart
-window; comment on lines, submit, and the agent answers, fixes, and asks you to
-look again — with every comment following the line it was on.
+Then tell your agent that you want to review its changes. A review opens in the
+yart window. Write comments on lines and submit the review. The agent answers,
+makes the fixes and asks you to look again. Each comment stays on its line.
 
 ## Why
 
-Coding agents produce large diffs quickly. Reviewing them in terminal scrollback or
-a flat `git diff` is painful: there is no file tree, no hunk navigation, and nowhere
-to say "this line, specifically, is wrong."
+Agents that write code make large diffs quickly. These diffs are difficult to review in
+terminal output or in a flat `git diff`. You get no file tree and no easy move
+between hunks. You also have no place to say "this line is wrong".
 
-Local diff viewers solve the reading half of that problem and then stop at a
-**Copy prompt** button. yart closes the loop. Your comments travel back to the agent
-as structured data over the Model Context Protocol, so the agent can act on them,
-reply to them, and mark threads resolved — without anything being pushed to GitHub.
+Local diff viewers help you read a diff, but they stop at a **Copy prompt**
+button. yart completes the loop. Your comments go back to the agent as
+structured data over the Model Context Protocol (MCP). The agent can act on
+them, reply to them and resolve them. Nothing goes to GitHub.
 
-|                           | Copy-paste diff viewers | yart                            |
-| ------------------------- | ----------------------- | ------------------------------- |
-| Who starts the review     | You, manually           | The agent, via a tool call      |
-| How comments travel       | Prose blob, pasted      | Structured `{file, line, side}` |
-| Agent can reply / resolve | No                      | Yes                             |
-| State across rounds       | None                    | Threads persist                 |
+|                                | Copy-paste diff viewers | yart                            |
+| ------------------------------ | ----------------------- | ------------------------------- |
+| Who starts the review          | You, by hand            | The agent, with a tool call     |
+| How comments go to the agent   | Text that you paste     | Structured `{file, line, side}` |
+| The agent can reply or resolve | No                      | Yes                             |
+| State between rounds           | None                    | Threads stay                    |
 
-The last row is the point. Review is a _loop_ — change, review, comment, fix,
-re-review showing only what is still open — and a clipboard has no memory.
+The last row is the most important. Review is a _loop_: change, review, comment,
+fix, and review again. The second review shows only the comments that are still
+open. A clipboard keeps no record of the first round.
 
 ## Features
 
-- **Reviews your agent opens and answers.** The agent starts a review with a
-  tool call, waits for your verdict, replies on each comment, resolves what it
-  fixed, and moves the review onto its new commits.
-- **Comments that survive change.** Each comment is anchored to the content it
-  was written on, so it follows its line through edits and is marked outdated
-  only when that line is gone.
-- **A diff made for reading.** A file tree, collapsed context that opens in
-  place, syntax highlighting, files marked reviewed, and comments held for one
-  submission with a verdict.
-- **Knowing when to look.** A notification and a dock badge when the agent has
-  answered, and a sign of how far it has got.
-- **Every repository, one place.** One daemon serves them all, with reviews kept
-  in each repository's own `.git`, so nothing appears in `git status`.
-- **A desktop app**, installed, updated and removed with one command each, and
-  needing neither Node nor npm.
+- **Reviews that your agent opens and answers.** The agent starts a review with
+  a tool call and waits for your verdict. It replies to each comment, resolves
+  the comments that it fixed, and moves the review to its new commits.
+- **Comments that stay correct when the code changes.** Each comment is attached
+  to the content that it is about. Thus it follows its line through edits. yart
+  marks it outdated only when that line is gone.
+- **AI review before your review.** An AI reviewer can review the work first. The
+  two agents go back and forth until the reviewer approves. Then you get the
+  review, with all of their comments and answers.
+- **A diff that is easy to read.** It has a file tree and syntax highlights. You
+  can open hidden context in place, and mark each file as reviewed. You can also
+  hold comments until you submit a verdict.
+- **A signal when you must look.** A notification and a dock badge when the agent
+  answers, and a label that shows how far the agent is.
+- **All repositories in one place.** One daemon serves all repositories. Each
+  repository keeps its reviews in its own `.git`, thus nothing shows in
+  `git status`.
+- **A desktop app.** One command installs it, one command updates it and one
+  command removes it. It does not need Node or npm.
 
-Planned: exporting a review to the clipboard, for agents that do not speak MCP.
+Planned: export a review to the clipboard, for agents that do not use MCP.
 
 ## How it works
 
@@ -79,6 +85,7 @@ Planned: exporting a review to the clipboard, for agents that do not speak MCP.
 flowchart LR
     CC["Claude Code"]
     CD["Claude Desktop"]
+    REV["AI reviewer<br/>(subagent or session)"]
     MCP["MCP server<br/>@yart/mcp"]
     DAEMON["Review daemon<br/>@yart/daemon"]
     UI["Review UI<br/>apps/web"]
@@ -88,6 +95,7 @@ flowchart LR
 
     CC -- stdio --> MCP
     CD -- stdio --> MCP
+    REV -- stdio --> MCP
     MCP -- HTTP --> DAEMON
     HUMAN --> UI
     UI -- "HTTP /api" --> DAEMON
@@ -96,16 +104,15 @@ flowchart LR
     DAEMON -- threads --> STORE
 ```
 
-The daemon is a separate, long-lived process from the MCP server. MCP servers live
-and die with their client, while a review has to outlast a session and be shared by
-more than one agent at once — so the state belongs in a process neither client owns.
-Both agents talk to the same daemon, and the first tool call starts one if none is
-listening.
+The daemon and the MCP server are two different processes. An MCP server starts
+and stops with its client. A review must stay after a session stops, and more
+than one agent can use it at the same time. Thus the review state is in a
+process that no client owns. All agents use the same daemon. The first tool call
+starts a daemon if no daemon is on its port.
 
 ### The loop
 
-Review is a loop rather than a single pass, which is the whole reason the anchoring
-model exists:
+Review is a loop, not one pass. The comment anchors exist because of this loop.
 
 ```mermaid
 sequenceDiagram
@@ -133,285 +140,372 @@ sequenceDiagram
     Daemon-->>Agent: what shifted, what went outdated
 ```
 
-## Using yart
+## Use yart
 
-yart runs on macOS, as an app carrying the two commands an agent and a terminal
-need. Installing it needs neither Node, npm nor `sudo`.
+yart runs on macOS. It is an app that has the two commands that an agent and a
+terminal need. You do not need Node, npm or `sudo` to install it.
 
 > yart is in beta. Until the first stable release, the command below finds
-> nothing to install: install the newest
-> [pre-release](https://github.com/J3MPA/yart/releases) from its own URL, as
-> shown after it.
+> nothing to install. Install the newest
+> [pre-release](https://github.com/J3MPA/yart/releases) from its own URL, as the
+> second example shows.
 
-### Installing
+### Install
 
 ```sh
 curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
 ```
 
-That puts `yart.app` in `~/Applications` and links `yart` and `yart-mcp` into
-`~/.local/bin`, and says so if that directory is not on your `PATH`.
+This command puts `yart.app` in `~/Applications`. It puts links to `yart` and
+`yart-mcp` in `~/.local/bin`. If that directory is not on your `PATH`, the
+command tells you.
 
-A pre-release, such as a beta, is installed from its own release rather than
-the latest — the installer attached to each release installs that release:
+To install a pre-release, such as a beta, use the URL of that release. The
+installer of each release installs that release:
 
 ```sh
-curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.1/install.sh | sh
+curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.2/install.sh | sh
 ```
 
-Install with `curl` rather than by downloading the zip in a browser. A browser
-marks what it downloads as quarantined, and macOS then refuses to open the app
-("Apple could not verify yart is free of malware"), because it carries a free
-ad-hoc signature rather than a paid, notarized one. `curl` does not mark it.
+Use `curl`. Do not download the zip in a browser. A browser marks each download
+as quarantined. macOS then does not open the app, and shows "Apple could not
+verify yart is free of malware". The reason is that the app has a free ad-hoc
+signature, not a paid signature that Apple notarized. `curl` does not mark the
+download.
 
-### Connecting your agent
+### Connect your agent
 
 ```sh
 claude mcp add -s user yart -- ~/.local/bin/yart-mcp
 ```
 
-The path is absolute because Claude Code starts MCP servers with its own
-environment, which may not include your shell's `PATH`. Claude Desktop and other
-clients are covered under [Registering it](#registering-it).
+Use the full path. Claude Code starts MCP servers with its own environment, and
+that environment can be without the `PATH` of your shell. For Claude Desktop and
+other clients, see [Register it](#register-it).
 
-Then ask for a review — saying you want to review the code is enough. An agent
-will not open one on its own, since deciding a change is ready to look at is not
-a judgement it has a reason to make.
+Then ask for a review. It is sufficient to say that you want to review the code.
+An agent does not open a review if you do not ask. It has no reason to decide
+that a change is ready for you to see.
 
-### Reviewing
+### Review a change
 
-A new review opens in the yart window. Comment on any line, hold comments to send
-with a verdict, mark files reviewed as you go, and submit: the agent reads your
-comments, answers them, and advances the review onto its fixes, with every
-comment following the line it was on. The window lists reviews from every
-repository yart has served.
+A new review opens in the yart window. Do these steps:
 
-The same reviews are at `http://localhost:7777` in a browser. The app and a
-browser keep their own seen state and drafts, so moving between them starts
-those afresh.
+1. Write comments on lines. You can hold comments and send them with your
+   verdict.
+2. Mark each file as reviewed when you finish it.
+3. Submit the review.
 
-### Cleaning up approved reviews
+The agent reads your comments and answers them. It then moves the review to its
+fixes, and each comment follows its line. The window shows the reviews of all
+repositories that yart served.
 
-**Settings**, linked from the review list, choose what happens to a review once
-you approve it: keep it, archive it, or delete it. Keeping is the default. It
-happens a minute after the approval, so that an agent waiting on the review
-reads your verdict first, and not at all if you reopen the review in that
-minute. The choice is kept by the daemon in `~/.yart/settings.json`, so it
-applies in the app and in any browser alike.
+The same reviews are at `http://localhost:7777` in a browser. The app and each
+browser keep their own seen state and drafts. When you change from one to the
+other, these start again.
 
-Reviews can also be archived or deleted in bulk: tick them in the list and use
+### Let an AI review first
+
+An AI reviewer can review the work of an agent before you do. The reviewer and
+the agent go back and forth. When the reviewer approves, or when it has no more
+rounds, the review is yours.
+
+Before you start, you can set how the reviewer runs. Open **Settings** from the
+review list, and go to the **AI reviewer** section:
+
+- **Rounds**: how many verdicts a reviewer can give on one review. The default
+  is three.
+- **Model**: the model to start the reviewer on, for example `sonnet`. Empty lets
+  the agent choose.
+- **Effort**: low, medium or high. Only a launcher that accepts an effort uses
+  it. Claude Code subagents accept a model, but not an effort.
+- **Instructions**: what the reviewer must look for, for example "look at error
+  handling and tests".
+
+yart does not run a model. The agent that starts the reviewer reads these
+settings with the `get_reviewer_settings` tool.
+
+To start the loop with a subagent, tell the agent that does the work:
+
+> Make the change. Then start a reviewer subagent to review it with yart, before
+> you give it to me.
+
+The agent then does these steps:
+
+1. It opens a review with `start_review`.
+2. It reads the reviewer settings with `get_reviewer_settings`.
+3. It starts a subagent on the model from the settings, with the instructions in
+   its brief.
+4. The subagent reads the changes with `get_diff`. It gives a verdict with its
+   line comments with `submit_verdict`.
+5. The agent reads the verdict with `await_review`. It answers the comments,
+   makes the fixes and moves the review with `advance_review`.
+6. The agent starts the reviewer again for the next round. This continues until
+   the reviewer approves or has no more rounds.
+7. The agent tells you that the review is ready for you.
+
+To use a second session as the reviewer, open a new Claude Code session and tell
+it:
+
+> Review the open yart review as an AI reviewer. Use get_diff, submit_verdict and
+> await_author.
+
+That session waits for the author with `await_author` between rounds. It
+continues when the author moves the review or replies to a comment. A reply alone can
+mean that the author disagrees, and that also needs an answer.
+
+When the review comes to you, the comments of the reviewer show its name, for
+example "reviewer claude-reviewer". The answers of the agent show "agent". A
+verdict of the reviewer shows "by reviewer". Your verdict is the last verdict.
+An approval of the reviewer does not count as yours. It does not start the
+clean-up that you set in Settings.
+
+The daemon makes sure of the round limit. It refuses a verdict of a reviewer
+that has no more rounds. Then both agents get a message that the review is yours
+to complete.
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant Agent
+    participant Reviewer as AI reviewer
+    participant Daemon
+
+    Agent->>Daemon: start_review
+    Agent->>Daemon: get_reviewer_settings
+    Agent->>Reviewer: start, with model and instructions
+    loop until approved, or no rounds are left
+        Reviewer->>Daemon: get_diff
+        Reviewer->>Daemon: submit_verdict, with comments
+        Agent->>Daemon: await_review
+        Note over Agent: answers, fixes
+        Agent->>Daemon: advance_review
+    end
+    Agent-->>You: the review is ready
+    You->>Daemon: your verdict
+```
+
+### Clean up approved reviews
+
+**Settings**, linked from the review list, sets what happens to a review after
+you approve it. You can keep it, archive it or delete it. The default is to keep
+it.
+
+yart does the action one minute after your approval. Thus an agent that waits on
+the review reads your verdict first. If you open the review again in that
+minute, yart does nothing. The daemon keeps the setting in
+`~/.yart/settings.json`. Thus the setting applies in the app and in each browser.
+
+You can also archive or delete reviews in bulk. Select them in the list, and use
 the actions above it.
-
-### Having an AI review first
-
-An AI agent can review the work before you do. Ask the agent that made the
-change to have it reviewed — by a subagent, or by a second session you open —
-and the two go back and forth: the reviewer comments and passes a verdict, the
-author answers and fixes, and the reviewer looks again. When the reviewer
-approves, or has used its rounds, the review is yours, with the whole exchange
-in front of you. Its approval is not yours: it does not count for cleaning up.
-
-The **AI reviewer** section of Settings says how a reviewer should run: how
-many verdicts it may pass on one review (three by default), and the model,
-effort and instructions to start it with. yart runs no model itself; whatever
-starts the reviewer reads these.
 
 ### Notifications and the dock badge
 
-When the agent answers on a review, yart raises a notification and its dock icon
-counts the reviews waiting for you. Only reviews already opened in the app count,
-since one never opened has nothing to have changed since.
+When the agent answers on a review, yart shows a notification. Its dock icon
+shows how many reviews wait for you. Only reviews that you opened in the app
+count. A review that you never opened has no "before" to compare with.
 
-The badge starts off. Turn on **Badge application icon** under System Settings →
-Notifications → yart, which lists yart once it has sent its first notification.
+The badge is off at first. Go to System Settings → Notifications → yart, and turn
+on **Badge application icon**. yart shows in that list after its first
+notification.
 
-### Updating
+### Update
 
 ```sh
 yart up
 ```
 
-Installs the latest release over the current one, stopping and restarting yart
-around it. Agent sessions already running keep the old `yart-mcp` until they
-restart. `yart up --pre` updates to the newest release with pre-releases
-included, which during the beta is the only kind there is. `yart --help` lists
-these commands with the daemon's own options.
+This command installs the latest release over the current release. It stops
+yart before, and starts it again after. Agent sessions that run at that time keep
+the old `yart-mcp` until they start again.
 
-### Uninstalling
+`yart up --pre` updates to the newest release, pre-releases included. During the
+beta, only pre-releases exist. `yart --help` shows these commands and the options
+of the daemon.
+
+### Uninstall
 
 ```sh
 yart uninstall
 ```
 
-Stops yart and removes the app and its two commands. Seen state and drafts are
-kept unless you pass `--purge`, since a draft is something you wrote. Reviews are
-never touched: they live in each repository's `.git/yart`. It prints the
-`claude mcp remove` command to finish with.
+This command stops yart and removes the app and its two commands. It keeps your
+seen state and drafts, because a draft is your work. Add `--purge` to remove them
+too. It does not touch reviews. Each repository keeps its reviews in its
+`.git/yart`. At the end, the command shows the `claude mcp remove` command to
+use.
 
-## Developing yart
+## Develop yart
 
-Requires Node 20+ and pnpm.
+You need Node 20 or newer and pnpm.
 
 ```sh
 pnpm install
-pnpm build      # the daemon serves the built UI, so build it first
+pnpm build      # The daemon serves the built UI. Build it first.
 ```
 
-### Using a clone as your yart
+### Use a clone as your yart
 
 ```sh
 pnpm --filter @yart/daemon link --global
 pnpm --filter @yart/mcp link --global
 ```
 
-That puts `yart` and `yart-mcp` on your `PATH`, so any repository can be reviewed
-by running `yart` inside it — no paths, no flags:
+These commands put `yart` and `yart-mcp` on your `PATH`. Thus you can review any
+repository when you run `yart` in it. You do not need paths or flags:
 
 ```sh
 cd ~/some-other-project
 yart            # http://localhost:7777
 ```
 
-There is no build step for the commands themselves: their entry points are
-TypeScript with a `#!/usr/bin/env -S node --experimental-strip-types` shebang, so
-Node strips the types as it loads them.
+The commands do not need a build step. Their entry points are TypeScript files
+with a `#!/usr/bin/env -S node --experimental-strip-types` shebang. Node removes
+the types when it loads the files.
 
-Undo with `pnpm uninstall --global @yart/daemon @yart/mcp`.
+To undo this, run `pnpm uninstall --global @yart/daemon @yart/mcp`.
 
-Alongside an installed yart, leave that one registered with Claude Code and
-register the clone in local scope from inside it, pointed at the development
-daemon. Local scope wins over user scope for a server of the same name, so
-agents in this repository talk to the clone and every other project keeps the
-installed yart:
+If you also have an installed yart, keep that one registered with Claude Code.
+Register the clone in local scope from inside the clone, with the port of the
+development daemon. For a server with the same name, local scope wins over user
+scope. Thus agents in this repository use the clone, and all other projects use
+the installed yart:
 
 ```sh
 claude mcp add -s local yart -- node --experimental-strip-types \
   "$PWD/packages/mcp/src/cli.ts" --port 7778
 ```
 
-### Running it
+### Run it
 
-Open `http://localhost:7777`, or let an agent open a review for you with the
-`start_review` tool. The daemon takes `--port` and `--repo`, and stores reviews
-under the repository's git directory so nothing appears in `git status`. Linked
-worktrees share one store, so a review opened in any worktree is visible from
-all of them and records which one it belongs to.
+Open `http://localhost:7777`, or let an agent open a review with the
+`start_review` tool. The daemon accepts `--port` and `--repo`. It keeps reviews
+in the git directory of the repository, thus nothing shows in `git status`.
+Linked worktrees share one store. Thus you can see a review from all worktrees,
+and the review records its worktree.
 
-### Developing against yart's own diff
+### Develop against the diff of yart
 
 ```sh
 pnpm dev:actual
 ```
 
-Starts the daemon and Vite, opens a review over whatever this branch changed
-against its merge base with `main`, and prints the URL. Pass a revision to review
-against something else.
+This command starts the daemon and Vite. It opens a review of the changes on
+this branch since its merge base with `main`, and shows the URL. To review
+against a different point, give a revision.
 
-It develops against a real diff rather than a fixture, because a fixture only
-ever exercises the shapes it happens to contain — the repository's own history
-supplies renames, deletions, binary files and long hunks for free. Re-running on
-the same branch advances the existing review instead of opening another, so
-comments left earlier follow your new commits and the re-anchoring is exercised
-every time you iterate.
+It uses a real diff, not a fixture. A fixture contains only the shapes that you
+put in it. The history of the repository gives renames, deletions, binary files
+and long hunks. When you run the command again on the same branch, it moves the
+review that it opened before. Thus your old comments follow your new commits, and each change
+tests the anchors again.
 
-Its daemon listens on 7778, leaving 7777 to the yart you use, so developing
-yart never talks to a daemon running some other version of its code. A daemon
-already on 7778 is reused only when it runs this checkout's code, which it
-reports on `/health`; one from another checkout is an error, and so is a Vite
-already holding 5173.
+Its daemon uses port 7778. Port 7777 stays free for the yart that you use. Thus
+the development of yart never uses a daemon with a different version of its
+code. The command uses a daemon on 7778 again only if that daemon runs the code
+of this checkout. The daemon tells this on `/health`. A daemon from a different
+checkout causes an error. A Vite that already uses port 5173 also causes an
+error.
 
 ```sh
 pnpm dev:desktop
 ```
 
-The same, but the review opens in the desktop shell from `apps/desktop` rather
-than in a browser, with the UI still hot-reloading inside it. The shell keeps
-its storage in a `yart-dev` profile, apart from an installed yart's, and
-quitting it ends the session. Changes to the shell's own main process need a
-restart.
+This command is the same, but the review opens in the desktop shell from
+`apps/desktop`, not in a browser. The UI in the shell still reloads when you
+change it. The shell keeps its data in a `yart-dev` profile, apart from the data
+of an installed yart. When you quit the shell, the session stops. A change to
+the main process of the shell needs a restart.
 
-For UI work without a review, `pnpm dev` runs Vite alone on 5173 with `/api`
-proxied to the daemon on 7777.
+For work on the UI without a review, `pnpm dev` runs only Vite on port 5173. It
+sends `/api` to the daemon on port 7777.
 
 Other scripts:
 
 ```sh
 pnpm build      # typecheck, then production build
 pnpm typecheck  # types only
-pnpm lint       # ESLint, including the naming conventions
+pnpm lint       # ESLint, with the naming conventions
 pnpm format     # Prettier
 pnpm test       # unit tests
 pnpm package:desktop [--arch arm64|x64] [--version <version>]
 ```
 
-### Packaging and releasing
+### Package and release
 
-`package:desktop` builds `yart.app` into `apps/desktop/out`, ad-hoc signed,
-with a zip and its SHA-256 checksum beside it. The daemon, the MCP server and
-the app are bundled with esbuild into a copy of the workspace's layout, so the
-daemon finds its UI and version where it would in the workspace. The app carries
-`yart` and `yart-mcp` in `Contents/Resources/bin`, which run the bundles on the
-app's own Node.
+`package:desktop` builds `yart.app` in `apps/desktop/out`, with an ad-hoc
+signature. It puts a zip and its SHA-256 checksum next to the app. esbuild
+bundles the daemon, the MCP server and the app into a copy of the workspace
+layout. Thus the daemon finds its UI and its version in the same places as in
+the workspace. The app has `yart` and `yart-mcp` in `Contents/Resources/bin`.
+These commands run the bundles on the Node of the app.
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which packages both
-architectures on one Apple Silicon runner and publishes a release with the zips,
-their checksums and the install scripts. A version with a suffix, such as
-`v0.2.0-beta.1`, is published as a pre-release: visible and installable from its
-own URL, but never what "latest" points at.
+When you push a `v*` tag, `.github/workflows/release.yml` runs. It packages the
+two architectures on one Apple Silicon runner. Then it publishes a release with
+the zips, their checksums and the install scripts. A version with a suffix, such
+as `v0.2.0-beta.1`, becomes a pre-release. You can see it and install it from
+its own URL, but "latest" never points to it.
 
 ### Project layout
 
 ```
 apps/
-  desktop/          Electron app, its packaging, and the commands it carries
+  desktop/          Electron app, its packages, and the commands in it
   web/              React UI
     src/
       app/          Redux store and typed hooks
       features/     Feature slices and components
       styles/       Design tokens and reset
 packages/
-  core/             Domain model — anchoring, threads (no I/O)
+  core/             Domain model: anchors, threads (no I/O)
   daemon/           Git adapter, review store, HTTP API, CLI
-  mcp/              MCP server — the agent's side of the loop
+  mcp/              MCP server: the side of the loop that agents use
 ```
 
 ### Conventions
 
-Naming is a project requirement rather than a preference, and is enforced by
-ESLint: variables and properties are `snake_case`, functions are `camelCase`,
-types are `PascalCase`, constants are `UPPER_SNAKE_CASE`, and files and
-directories are `kebab-case`. Callables are const arrows rather than `function`
-declarations, and Prettier owns formatting (no semicolons, single quotes, 100
-columns). Properties stay
-`snake_case` on serialized types too, so the JSON that travels over MCP matches
-the source. The full rules and their exceptions are in
-[`AGENTS.md`](AGENTS.md).
+The naming conventions are a project requirement, not a preference. ESLint makes
+sure that the code obeys them:
 
-## Comment anchoring
+- Variables and properties use `snake_case`.
+- Functions use `camelCase`.
+- Types use `PascalCase`.
+- Constants use `UPPER_SNAKE_CASE`.
+- Files and directories use `kebab-case`.
 
-Review is a loop, so a comment has to survive the code changing underneath it.
-The model that makes that possible lives in `packages/core`.
+Callables are const arrows, not `function` declarations. Prettier sets the
+format: no semicolons, single quotes and 100 columns. Properties use `snake_case`
+also on serialized types. Thus the JSON that goes over MCP is the same as the
+source. Documentation and comments use ASD-STE100 Simplified Technical English.
+[`AGENTS.md`](AGENTS.md) gives all rules and their exceptions.
 
-A comment anchors to **`(blob_sha, line)`**, not `(path, line)`. Paths move and
-line numbers shift, but a git blob's content is immutable, so a blob hash plus a
-line number always denotes the same text. Each thread keeps three things:
+## Comment anchors
 
-- `origin` — where it was created. Immutable, the audit record.
-- `context` — the commented line plus its neighbours, captured at creation. The
-  only thing that survives if the anchor dies.
-- `anchor` — where it points now, or `null` once the line is gone.
+Review is a loop. Thus a comment must stay correct when the code under it
+changes. The model that makes this possible is in `packages/core`.
 
-When the agent pushes a new revision, every thread is re-anchored against it and
-lands in one of three states:
+A comment is attached to **`(blob_sha, line)`**, not to `(path, line)`. Paths
+move and line numbers change. But the content of a git blob never changes. Thus
+a blob hash and a line number always identify the same text. Each thread keeps
+three things:
 
-| State      | Meaning                                              |
-| ---------- | ---------------------------------------------------- |
-| `current`  | Same file, same line as at creation                  |
-| `shifted`  | The line survives, but moved or the file was renamed |
-| `outdated` | The line is gone; only `context` remains             |
+- `origin`: where yart made the thread. It never changes. It is the record.
+- `context`: the line of the comment and the lines around it, at the time yart
+  made the thread. Only this stays if the anchor is gone.
+- `anchor`: where the thread points now, or `null` when the line is gone.
 
-State is _derived_ from `origin` versus `anchor` on every pass rather than
-accumulated, so a bug in one round cannot poison later ones.
+When the agent gives a new revision, yart attaches each thread to it again. Each
+thread then has one of three states:
+
+| State      | Meaning                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| `current`  | The same file and the same line as at the start                  |
+| `shifted`  | The line is still there, but it moved or the file has a new name |
+| `outdated` | The line is gone. Only `context` stays                           |
+
+yart calculates the state from `origin` and `anchor` on each pass. It does not
+add to an old state. Thus an error in one round cannot cause errors in the
+rounds after it.
 
 ```mermaid
 stateDiagram-v2
@@ -422,335 +516,360 @@ stateDiagram-v2
     shifted --> outdated: line rewritten or deleted
 
     note right of outdated
-        Terminal. Re-anchoring never revives
-        a thread, because any match would be
-        a guess. The captured context is all
-        that survives.
+        Final. A new anchor never brings
+        a thread back, because each match
+        would be a guess. Only the saved
+        context stays.
     end note
 ```
 
-Two deliberate judgment calls:
+Two decisions are on purpose:
 
-- **A rewritten line outdates its thread.** A line diff reports a modification
-  as a deletion plus an insertion, so the anchor does not survive. This is
-  correct — the comment referred to text that no longer exists — and doubles as
-  a useful "the agent probably addressed this" signal.
-- **Whitespace-only changes do not.** Line mapping ignores leading and trailing
-  whitespace by default, because agents reformat constantly and a reindent that
-  outdated every thread in a file would make review unusable. Set
-  `ignore_whitespace: false` to opt out.
+- **A changed line makes its thread outdated.** A line diff shows a change as a
+  deletion and an addition. Thus the anchor does not stay. This is correct,
+  because the comment was about text that does not exist now. It is also a
+  useful signal that the agent possibly did what the comment asked.
+- **A change to only the whitespace does not.** By default, the line map ignores
+  whitespace at the start and at the end of a line. Agents change the format
+  frequently. If a new indent made all threads in a file outdated, review would
+  not be possible. To change this, set `ignore_whitespace: false`.
 
-`reanchorThread` takes the line mapping as an _input_ rather than computing it,
-so the model is a pure lookup and does not care where the diff came from. A
-mapping can be built from text with `buildLineMap` (which uses
-[`diff`](https://github.com/kpdecker/jsdiff)), or later from `git diff` output —
-swapping one for the other does not touch the anchoring logic.
+`reanchorThread` gets the line map as an _input_. It does not calculate the map.
+Thus the model only looks up lines, and the source of the diff is not
+important. `buildLineMap` can make a map from text, with
+[`diff`](https://github.com/kpdecker/jsdiff). The daemon makes maps from the
+output of `git diff`. A change from one source to the other does not touch the
+anchor logic.
 
 ## The daemon
 
-`packages/daemon` is the long-lived process the UI and the MCP server both talk
-to. It is deliberately separate from the MCP server: MCP servers live and die
-with their client, while a review has to outlast a session and be shared by more
-than one agent at once.
+`packages/daemon` is the process that runs for a long time. The UI and the MCP
+server both use it. It is separate from the MCP server on purpose. An MCP server
+starts and stops with its client. A review must stay after a session stops, and
+more than one agent can use it at the same time.
 
-**One daemon serves every repository.** A request that opens a review names the
-repository it is for, and the MCP server sends the one it was started in. It
-used to be otherwise — a daemon was fixed to the repository it started in, and
-every client reused whichever daemon was listening, so an agent in one project
-could be handed a review of another's working tree without any error. The
-daemon keeps one service per repository, keyed by the shared git directory so
-that a repository's worktrees share one list, and remembers the repositories it
-has served in `~/.yart` (or `YART_HOME`) so that a review in any of them can be
-found by id after a restart. A request that names no repository gets the one
-the daemon was started in, which keeps an agent on an older yart working. One
-started outside any repository, as the desktop app starts it, has no such
-default, and a request that names none is refused.
+**One daemon serves all repositories.** A request that opens a review names its
+repository. The MCP server sends the repository that it started in.
 
-After an update, the daemon still running is the old one. The MCP server checks
-`/health`, which now carries a version, and refuses an older daemon that serves
-a different repository, with a message saying to stop it, rather than review
-the wrong one.
+This was different before. A daemon served only the repository that it started
+in. Each client used the daemon that answered on the port. Thus an agent in one
+project could get a review of the working tree of a different project, with no
+error. Now the daemon keeps one service for each repository. The key is the
+shared git directory, thus all worktrees of a repository share one list.
 
-**Writes must be JSON.** A web page on any site can send a "simple" cross-origin
-POST to `localhost` without the browser asking first, and although it cannot
-read the answer, the daemon would still act on it — in any repository a page
-could name. Requiring `application/json` on every POST and PATCH makes such a
-request one a browser must ask permission for, and the daemon never grants it.
+The daemon records the repositories that it served in `~/.yart` (or in
+`YART_HOME`). Thus it can find a review in any of them by its id after a
+restart. A request that names no repository gets the repository that the daemon
+started in. This keeps an agent with an older yart in operation. A daemon that
+started outside a repository has no default. The desktop app starts the daemon
+in this way. Such a daemon refuses a request that names no repository.
 
-**Only this machine can reach it.** The daemon listens on `127.0.0.1` rather
-than on every interface, so nothing else on the network can reach it — and it
-can read any file in any repository it has served.
+After an update, the daemon that runs is the old daemon. The MCP server examines
+`/health`, which gives a version. It refuses an older daemon that serves a
+different repository. It shows a message that tells you to stop that daemon.
+Thus it does not review the wrong repository.
 
-It owns three things.
+**Writes must be JSON.** A web page on any site can send a "simple" POST across
+origins to `localhost`. The browser does not ask first. The page cannot read
+the answer, but the daemon would do the action, in any repository that the page
+names. The daemon requires `application/json` on each POST and PATCH. Thus the
+browser must ask for permission first, and the daemon never gives it.
 
-**A git adapter.** Revision ranges, changed files with the blob on each side,
-rename detection, and blob contents. It also builds line maps from `git diff
---unified=0`, reading only hunk headers: everything outside a hunk is unchanged
-and maps across with a running offset, everything inside is replaced and maps
-nowhere. Using git rather than diffing text in process is faster and, more
-importantly, means the tool that produced the blob hashes is the one comparing
-them, so two implementations cannot disagree about what changed.
+**Only this computer can connect to it.** The daemon listens on `127.0.0.1`,
+not on all interfaces. Thus nothing else on the network can connect to it. This
+is important, because the daemon can read all files in all repositories that it
+served.
 
-**Review state**, persisted as JSON under `.git/yart/reviews/`. Per-repository,
-invisible to `git status`, and in a directory yart will never be asked to show.
+The daemon has three parts.
+
+**A git adapter.** It reads revision ranges, changed files with the blob on each
+side, renames, and the content of blobs. It also makes line maps from
+`git diff --unified=0`. It reads only the hunk headers. Each line outside a
+hunk did not change, and maps across with an offset. Each line inside a hunk
+changed, and maps to no line. Git is faster than a text diff in the process.
+More important, the tool that made the blob hashes also compares them. Thus two
+different implementations cannot disagree about what changed.
+
+**The review state.** The daemon keeps it as JSON in `.git/yart/reviews/`. Each
+repository has its own state. `git status` does not show it.
 
 **An HTTP API.**
 
-| Route                                         | Purpose                             |
-| --------------------------------------------- | ----------------------------------- |
-| `POST /api/reviews`                           | Open a review in a named repository |
-| `GET /api/reviews` · `GET /api/reviews/:id`   | List, or fetch one                  |
-| `GET /api/reviews/:id/file?path=`             | Both sides of a file, for rendering |
-| `POST /api/reviews/:id/threads`               | Comment on a line                   |
-| `POST /api/reviews/:id/threads/:tid/comments` | Reply in a thread                   |
-| `PATCH /api/reviews/:id/threads/:tid`         | Open or resolve a thread            |
-| `POST /api/reviews/:id/submit`                | Hand the review back                |
-| `POST /api/reviews/:id/advance`               | Move to a new head, re-anchoring    |
+| Route                                                | Purpose                                   |
+| ---------------------------------------------------- | ----------------------------------------- |
+| `POST /api/reviews`                                  | Open a review in a named repository       |
+| `GET /api/reviews` · `GET /api/reviews/:id`          | Get the list, or get one review           |
+| `PATCH /api/reviews/:id` · `DELETE /api/reviews/:id` | Archive or restore a review, or delete it |
+| `GET /api/reviews/:id/diff`                          | The hunks of each file                    |
+| `GET /api/reviews/:id/file?path=`                    | The two sides of a file                   |
+| `POST /api/reviews/:id/threads`                      | Comment on a line                         |
+| `POST /api/reviews/:id/threads/:tid/comments`        | Reply in a thread                         |
+| `PATCH /api/reviews/:id/threads/:tid`                | Open or resolve a thread                  |
+| `POST /api/reviews/:id/submit`                       | Give a verdict, with held comments        |
+| `POST /api/reviews/:id/submissions/:sid/comments`    | Reply to a verdict                        |
+| `POST /api/reviews/:id/advance`                      | Move to a new head, and attach again      |
+| `GET /api/settings` · `PATCH /api/settings`          | Read or change the settings               |
 
-`advance` is where the loop closes: it diffs the old head against the new one,
-builds a line map per changed file, and re-anchors every thread, so the next
-round shows what is still open rather than starting over.
+`advance` completes the loop. It compares the old head with the new head, makes
+a line map for each changed file, and attaches each thread again. Thus the next
+round shows the comments that are still open. It does not start again.
 
 ## The review UI
 
-`apps/web` is what a human actually uses. The daemon serves it, so there is one
-address for both the API and the pages, and a deep link to a review works
-because unknown paths fall back to `index.html`.
+`apps/web` is the part that a person uses. The daemon serves it. Thus one
+address serves the API and the pages. A link to a review works, because the
+daemon sends `index.html` for each path that it does not know.
 
-The diff is rendered unified, with a gutter per side: a line has a number in the
-base, in the head, or in both, and a comment attaches to whichever side the row
-actually exists on — a removed line is addressed in the base, an added or
-context line in the head. Hovering a row reveals a control to comment on it, and
-threads open inline beneath the line they belong to.
+The diff is unified, with a gutter for each side. A line has a number in the
+base, in the head, or in the two. A comment goes on the side where the row
+exists. A removed line uses the base. An added line or a context line uses the
+head. When you move the pointer over a row, a control to comment on it shows.
+Threads open below their line.
 
-**Hunks come from the daemon, not from diffing in the browser.** The temptation
-is to send both file contents and diff them client-side, but then the rendered
-diff and the anchors are computed by two different implementations, and when
-they disagree a comment lands on the wrong line. The daemon parses `git diff`
-and sends hunks with a line number already on each side.
+**The hunks come from the daemon. The browser does not make a diff.** You could
+send the two files to the browser and compare them there. But then two different
+implementations calculate the diff and the anchors. When they disagree, a
+comment goes on the wrong line. The daemon reads `git diff` and sends hunks with
+a line number on each side.
 
-Comments whose line no longer exists cannot sit anywhere in the diff, so the
-file header lists them instead, above the hunks, with the text they were written
-against. They are the record of a conversation and dropping them would be worse
-than showing them out of place.
+A comment whose line does not exist now cannot have a place in the diff. Thus
+the file header shows these comments above the hunks, with the text that they
+were about. They are the record of a conversation. It is better to show them out
+of place than to remove them.
 
-A sidebar lists the changed files as a tree, folding directory chains that hold
-nothing but one child, with each file's added and removed totals and a count of
-the threads still open on it. Clicking one brings it into view, and the file
-being read is marked as you scroll, measured from the sections themselves so
-that opening a run of context mid-page cannot put the mark out of step. Paths
-are not safe as URL fragments, so the tree scrolls rather than links.
+A sidebar shows the changed files as a tree. A chain of directories that each
+hold only one child shows as one entry. Each file shows the lines that were added
+and removed, and how many threads are still open on it. When you click a file,
+the page moves to it. When you scroll, the sidebar marks the file that you read.
+The sidebar measures the sections themselves. Thus a run of context that opens
+in the middle of the page cannot move the mark to the wrong file. Paths are not
+safe as URL fragments, thus the tree scrolls the page and does not link.
 
-**Unchanged lines are recovered from the head blob, not from a wider diff.**
-git describes only what changed, so everything between two hunks is absent from
-the diff entirely. Rather than asking git for more context than anyone will
-read, each run of hidden lines is drawn as a band where the `@@` header used to
-be — carrying the enclosing function git named for the hunk below — and opening
-one fetches the file's full text once and slices the lines out of it. Twenty at
-a time from either end, or all of them when few enough remain. A line revealed
-this way is an ordinary row and can be commented on like any other. Knowing
-whether a file continues past its last hunk takes the file's length, which is
-why the diff carries `head_line_count`.
+**yart gets unchanged lines from the head blob, not from a larger diff.** Git
+shows only what changed. All lines between two hunks are not in the diff. yart
+does not ask git for more context than a person reads. yart shows each run of
+hidden lines as a band in the place of the `@@` header. The band shows the
+function that git found for the hunk below it. When you open a band, yart gets
+the full text of the file one time and takes the lines from it. You can open 20
+lines at a time from each end, or all lines when few remain. A line that you
+open in this way is a usual row, and you can comment on it. To know if a file
+continues after its last hunk, yart needs the length of the file. Thus the diff
+has `head_line_count`.
 
-## Drafting a review
+yart highlights the syntax of each file. It reads the full file on the two sides,
+because the color of a line depends on the lines before it. For example, the
+middle of a block comment is not code. yart loads a grammar only for the
+languages in a review. It colors a file only when the file comes near the screen.
+The colors come from the design tokens, for the light theme and the dark theme.
 
-A review is drafted, not dictated: a comment written on file 3 is often
-withdrawn by the time file 20 explains it. So each comment form offers two
-actions, as on GitHub. **Start a review** (or **Add to review** once one has
-started) holds the comment; **Comment now** sends it on its own. Holding is the
-primary action and the one Cmd+Enter takes, because it is the common case.
+## Draft a review
 
-Held comments are drawn in place as Pending, and can be edited or dropped. They
-live in the browser, per person and per device, and never reach the daemon
-until the review is submitted — so an agent calling `get_review` cannot see a
-comment its author has not sent. Submitting sends them all with the verdict in
-one request, and the daemon writes them in one go or not at all: half a review,
-some comments posted and the verdict not, would leave the agent reading
-something its author had not finished.
+You draft a review. You do not dictate it. Frequently, file 20 explains a
+comment that you wrote on file 3. Thus each comment form has two actions, as on
+GitHub:
 
-**A held line comment is tied to its file, not to the review.** Its line number
-was counted in one version of one file, so it records that file's blob and stays
-good through any number of rounds that leave the file alone. If the file does
-change, the comment is shown as stale in the submit panel, kept out of the diff,
-and has to be dropped before submitting — drawing it at its old line number
-would put it beside code it was never about. Replies are never stale, because
-threads are re-anchored when a review moves. The daemon checks the same thing,
-and also refuses a submission made against a head that is no longer current,
-since a verdict passed on it says nothing about code the reviewer has not seen.
+- **Start a review**, or **Add to review** after the first, holds the comment.
+- **Comment now** sends the comment alone.
 
-## Marking files reviewed
+To hold is the main action, and Cmd+Enter does it, because it is the usual case.
 
-Each file has a **Reviewed** checkbox. Ticking it collapses the file and marks it
-in the tree, whose header counts how many are done. File headers stick to the
-top of the window, so the box is in reach at the end of a long file, where the
-decision is made. A file can also be collapsed by hand without being reviewed.
+Held comments show in place as Pending. You can edit or remove them. They are in
+the browser, for each person and each device. They do not go to the daemon until
+you submit the review. Thus an agent that calls `get_review` cannot see a comment
+that you did not send. When you submit, all held comments go with the verdict in
+one request. The daemon writes all of them or none of them. Half a review, with
+some comments sent but no verdict, would show the agent work that you did not
+complete.
 
-**A reviewed mark is kept against the file's blob,** so if the agent changes the
-file afterwards it stops counting as reviewed on its own and opens up again. A
-tick that outlived the code it was given for would say something untrue.
+**A held comment on a line belongs to its file, not to the review.** yart counted
+its line number in one version of one file. Thus it records the blob of that
+file. It stays correct through all rounds that do not change the file. If the
+file changes, the submit panel shows the comment as stale, and the diff does not
+show it. You must remove it before you submit. At its old line number, it would
+be next to code that it is not about. Replies are never stale, because yart
+attaches threads again when a review moves. The daemon makes the same check. It
+also refuses a submission on a head that is not current. A verdict on an old
+head says nothing about code that the reviewer did not see.
 
-Directories in the tree fold away too, and a folded directory keeps the added,
-removed and open-thread counts of everything it hides. Folding a directory does
-not hide its diffs: the tree is an index, not a filter.
+## Mark files as reviewed
 
-## Answering a verdict
+Each file has a **Reviewed** check box. When you select it, the file collapses
+and the tree marks it. The header of the tree shows how many files are done.
+File headers stay at the top of the window. Thus the check box is near you at
+the end of a long file, where you decide. You can also collapse a file by hand
+and not mark it.
 
-A verdict is the one thing in a review that used to have nothing to say back to
-it. Line comments have threads; a summary left with `approved` or
-`changes_requested` was write-only, so an agent that had already done the thing
-being asked for, or disagreed with it, had to answer in whatever chat window it
-happened to be in — which is the conversation leaving the tool.
+**yart keeps a "Reviewed" mark against the blob of the file.** If the agent then
+changes the file, the mark stops and the file opens again. A mark that stays
+after its code changed would be incorrect.
 
-A submission now carries its own comments. It is not anchored to a line, so this
-is a plain list rather than a `Thread`, and it is addressed by submission id
-rather than always landing on the latest: a review that has been round several
-times has several verdicts, and a reply belongs to the one it answers.
+You can also fold directories in the tree. A folded directory keeps the counts
+of added lines, removed lines and open threads of all that it hides. A folded
+directory does not hide its diffs. The tree is an index, not a filter.
 
-## Knowing when to look again
+## Answer a verdict
 
-Once a review is handed back, the question is not whether the agent is working
-but whether it has finished. yart reports three states, derived rather than
-stored:
+Before, a verdict had no answer. Line comments have threads. But a summary with
+`approved` or `changes_requested` could not get a reply. Thus an agent that
+already did the work, or that disagreed, had to answer in its chat window. The
+conversation then went out of the tool.
 
-| State         | What it means                                                    |
-| ------------- | ---------------------------------------------------------------- |
-| `idle`        | Nothing has happened since the verdict                           |
-| `in_progress` | Answers or changes have appeared, but comments are still waiting |
-| `ready`       | Nothing is waiting on the agent; worth opening again             |
+Now a submission has its own comments. It is not attached to a line. Thus its
+comments are a list, not a `Thread`. A reply goes to a submission by its id, not
+always to the latest. A review that had many rounds has many verdicts, and a
+reply belongs to the verdict that it answers.
 
-A thread counts as answered when the agent spoke last, or when it was resolved.
-Turning on who spoke last matters: a human replying to the agent's answer puts
-the thread back in the agent's court, and a count that did not notice would
-report the same work as finished twice.
+## See when to look again
 
-`ready` deliberately does not require the code to have changed. An agent that
-answers every comment by explaining why it disagrees has finished its turn just
-as much as one that rewrote the file, and both need a person to look. Changes
-with nothing answered are `in_progress`, not `ready` — moving the code is not an
-invitation to re-read it while the questions are still open.
+After you give a review back, the question is not if the agent works. The
+question is if it is done. yart shows three states. It calculates them each time,
+and does not keep them:
 
-In the list this is one label, not two. The verdict and the agent's progress are
-the same fact read at different moments — a verdict is given, then the agent
-responds to it — so a review reads `open`, then its verdict, then `agent working`,
-then `your turn`. Once the agent has moved, whose turn it is matters more than
-what you decided, and the verdict is at the top of the page you are about to
-open. How many comments have been answered is in the label's tooltip.
+| State         | Meaning                                                 |
+| ------------- | ------------------------------------------------------- |
+| `idle`        | Nothing happened after the verdict                      |
+| `in_progress` | Answers or changes came, but some comments still wait   |
+| `ready`       | No comment waits on the agent. Look at the review again |
 
-The unseen dot below answers a different question and does not replace this.
-The dot means something is new since you looked; the label means whose turn it
-is. They come apart when the agent has answered one comment of three — new, but
-not yet your turn — and when you have glanced at a finished review and moved on,
-which clears the dot but leaves the review waiting on you.
+A thread has an answer when the agent wrote the last comment in it, or when the
+agent resolved it. Who wrote last is important. When you reply to the answer of
+the agent, the thread goes back to the agent. A count that ignored this would
+show the same work as done two times.
 
-## Noticing that the agent has answered
+`ready` does not need a change in the code. An agent can answer each comment and
+explain why it disagrees. That agent is also done, as is an agent that changed
+the file. Both need a person to look. Changes without answers are `in_progress`,
+not `ready`. Changed code is not a reason to read it again while questions are
+still open.
 
-The point of a local review tool is to work on something else while the agent
-responds, and that only pays if you find out when it has. The list shows a dot
-on a review that has moved since you last looked, the tab title carries a count,
-and the favicon grows a dot — both of the last two because neither is enough
-alone: a pinned tab shows no title, and a tab among twenty shows a favicon too
-small to read a number on.
+The list shows this as one label. The verdict and the progress of the agent are
+the same fact at different times. You give a verdict, and then the agent
+responds. Thus a review shows `open`, then its verdict, then `agent working`,
+then `your turn`. After the agent moves, it is more important whose turn it is
+than what you decided. The verdict is at the top of the page that you open. The
+tooltip of the label shows how many comments have an answer.
 
-**Seen-ness is per person and per device, so it lives in the browser** and never
-reaches the daemon. That also means an agent cannot mark its own work as read.
-Storage can be absent or throw in a private window, so a failure degrades to
-showing no dot rather than to a blank page.
+The unseen dot below answers a different question. The dot means that something
+is new since you looked. The label means whose turn it is. They are different
+when the agent answered one comment of three: new, but not yet your turn. They
+are also different when you looked at a finished review and went away. The dot
+goes, but the review still waits on you.
 
-**What is compared is not a timestamp.** `updated_at` moves when anyone touches
-a review, so writing a comment would mark the review unread to the person who
-wrote it. `agentActivity` counts what the agent has said and done — replies,
-resolves and rounds — as one number that only grows, and a review is unseen when
-that number is larger than it was when you last had the review open. Counting
-rather than hashing means a stale marker can only under-report: the worst case
-is a missed dot, never a dot that will not clear.
+## See that the agent answered
 
-A review you have never opened shows no dot. There is no "since" to measure
-from, and a list where everything shouts says nothing.
+With a local review tool, you can work on other things while the agent
+responds. This is useful only if you know when it answered. Thus yart gives
+these signals:
 
-**The list is polled rather than refetched on focus.** The rest of the app
-refetches when the window regains focus, which cannot deliver this signal: a
-page nobody is looking at never regains focus. Ten seconds against a daemon on
-localhost costs nothing, and browsers throttle timers in hidden tabs anyway,
-which is exactly the case this is for.
+- The list shows a dot on a review that changed since you last looked.
+- The title of the browser tab shows a count.
+- The favicon shows a dot.
 
-## Reviewing uncommitted work
+Yart uses both the title and the favicon, because one alone is not sufficient.
+A pinned tab shows no title. In a row of twenty tabs, a favicon is too small for
+a number.
 
-A review does not need a commit. By default `start_review` reviews the working
-tree as it stands, including files git is not yet tracking, which is the state
-an agent is in the moment it finishes and says it is ready.
+**The seen state is for each person and each device. Thus it is in the browser,**
+and it never goes to the daemon. Thus an agent also cannot mark its own work as
+read. A private window can be without storage, or its storage can fail. Then the
+page shows no dot. It does not show an empty page.
 
-That works by writing the working tree into a git tree object through a
-throwaway index, so the caller's staging area is untouched, and pinning it under
-`refs/yart/reviews/<id>`. Every file then has a real blob hash for comments to
-anchor to, garbage collection cannot reap it, and the snapshot is immutable — so
-comments stay where they were put while the files underneath keep changing.
+**yart does not compare times.** `updated_at` changes when anyone touches a
+review. Thus your own comment would mark the review as unread for you.
+`agentActivity` counts what the agent and any AI reviewer said and did: replies,
+resolved threads, rounds and verdicts of a reviewer. The count only increases. A
+review is unseen when the count is larger than when you last opened the review.
+A count, not a hash, can only show too little. The worst result is a missed dot.
+It is never a dot that does not go away.
 
-Advancing such a review takes a new snapshot rather than a newer revision, so
-the whole loop runs without anything being committed: comment, edit, advance,
-and the comments follow their lines or go outdated.
+A review that you never opened shows no dot. There is no "before" to compare
+with. Also, a list where all reviews show a dot gives no information.
+
+**yart polls the list. It does not wait for the window to get focus.** The rest
+of the app gets new data when the window gets focus. That cannot give this
+signal, because nobody looks at the page, and it does not get focus. A request
+every ten seconds to a daemon on localhost costs nothing. Also, browsers slow
+the timers in hidden tabs, and this signal is for those tabs.
+
+## Review uncommitted work
+
+A review does not need a commit. By default, `start_review` reviews the working
+tree as it is now. This includes files that git does not track yet. An agent is
+in this state when it finishes and says that the work is ready.
+
+yart writes the working tree into a git tree object through a temporary index.
+Thus your staging area does not change. yart pins the tree under
+`refs/yart/reviews/<id>`. Each file then has a real blob hash for comments.
+Garbage collection cannot remove it, and the snapshot does not change. Thus
+comments stay where you put them while the files
+change.
+
+To move such a review, yart makes a new snapshot, not a newer revision. Thus the
+full loop works without a commit: comment, edit, move the review. The comments
+follow their lines or become outdated.
 
 ## The MCP server
 
-`packages/mcp` is how an agent drives a review. It is a shim: it holds no state
-and makes no decisions, it translates MCP tool calls into daemon HTTP requests.
+An agent uses `packages/mcp` to control a review. It is a shim. It keeps no state
+and makes no decisions. It changes MCP tool calls into HTTP requests to the
+daemon.
 
-The first tool call starts a daemon if none is listening, so an agent does not
-have to ask anyone to run one first. The daemon is spawned detached, because an
-MCP server dies with its client and a review has to outlive that.
+The first tool call starts a daemon if no daemon is on its port. Thus an agent
+does not have to ask for a daemon first. The daemon starts as a detached process.
+An MCP server stops with its client, but a review must stay after that.
 
-| Tool               | What the agent does with it                                 |
-| ------------------ | ----------------------------------------------------------- |
-| `start_review`     | Open a review after making changes; returns an id and a URL |
-| `await_review`     | Block until the human submits, then read their comments     |
-| `get_review`       | Read current state without blocking                         |
-| `list_reviews`     | List reviews in this repository                             |
-| `reply_to_thread`  | Explain a change, or push back on a comment                 |
-| `reply_to_verdict` | Answer the summary left with the verdict                    |
-| `resolve_thread`   | Mark a comment addressed                                    |
-| `advance_review`   | Re-anchor every comment onto new commits                    |
+| Tool               | What the agent does with it                           |
+| ------------------ | ----------------------------------------------------- |
+| `start_review`     | Open a review after changes. It gives an id and a URL |
+| `await_review`     | Wait until you submit, then read your comments        |
+| `get_review`       | Read the current state, and do not wait               |
+| `list_reviews`     | Show the reviews in this repository                   |
+| `reply_to_thread`  | Explain a change, or disagree with a comment          |
+| `reply_to_verdict` | Answer the summary of the verdict                     |
+| `resolve_thread`   | Mark a comment as done                                |
+| `advance_review`   | Attach each comment to the new commits                |
 
-An AI reviewer has tools of its own, for reviewing work it did not write:
+An AI reviewer has its own tools, to review work that it did not write:
 
-| Tool                    | What the reviewer does with it                               |
-| ----------------------- | ------------------------------------------------------------ |
-| `get_reviewer_settings` | Read the model, effort, instructions and rounds to run with  |
-| `get_diff`              | Read the changes, with base and head line numbers            |
-| `submit_verdict`        | Pass a verdict with its line comments and replies, in one go |
-| `await_author`          | Block until the author advances or answers                   |
+| Tool                    | What the reviewer does with it                                 |
+| ----------------------- | -------------------------------------------------------------- |
+| `get_reviewer_settings` | Read the model, effort, instructions and rounds to use         |
+| `get_diff`              | Read the changes, with the base and head line numbers          |
+| `submit_verdict`        | Give a verdict with its line comments and replies, in one call |
+| `await_author`          | Wait until the author moves the review or answers              |
 
-**A new review opens in the yart app**, or in your browser when the app is not
-installed — only for the daemon on 7777, since a link names a review but not
-the daemon serving it. The one step of the loop that needs a
-person is the person looking, and relying on an agent to relay a URL is how that
-step gets skipped — it did, repeatedly, before this existed. An empty review
-opens nothing, since there would be nothing to read. Set `YART_NO_BROWSER=1`
-where a window would be wrong: a container, a remote shell, or a second screen
-you did not ask to have taken over.
+**A new review opens in the yart app.** If the app is not installed, it opens in
+your browser. This applies only to the daemon on port 7777. A link names a
+review, but not the daemon that serves it. The person who looks is the one step
+of the loop that needs a person. When an agent must give you a URL, that step
+does not occur. This occurred many times before yart opened reviews itself. An
+empty review opens nothing, because there is nothing to read. Set
+`YART_NO_BROWSER=1` where a window is not correct. For example: a container, a
+remote shell, or a second screen.
 
-Comments come back rendered as text rather than JSON, because the consumer is a
-model deciding what to edit and a comment is easier to act on next to the code
-it points at:
+Comments come back as text, not as JSON. A model reads them and decides what to
+edit. A comment next to its code is easier to act on:
 
 ```
 [ce53cb3a-…] a.txt:3  (moved from a.txt:2)
       alpha
   >   TARGET
       gamma
-  human: this name is unclear
+  reviewer claude-reviewer: this name is unclear
   agent: renamed it
 ```
 
-`await_review` returns instead of hanging when its timeout passes, handing back
-whatever has been written so far — a timeout is not a failure, and the agent can
-simply call it again.
+`await_review` returns when its time limit is over, and does not wait forever.
+It gives back all comments until that time. A time limit is not a failure. The
+agent can call the tool again.
 
-### Registering it
+### Register it
 
-With Claude Code, see [Connecting your agent](#connecting-your-agent).
+For Claude Code, see [Connect your agent](#connect-your-agent).
 
-With Claude Desktop, add to its MCP configuration, with the absolute path to
-`yart-mcp` (for an installed yart, `~/.local/bin/yart-mcp` with your home
-directory written out):
+For Claude Desktop, add this to its MCP configuration. Use the full path to
+`yart-mcp`. For an installed yart, this is `~/.local/bin/yart-mcp`, with your
+home directory written out:
 
 ```json
 {
@@ -763,16 +882,16 @@ directory written out):
 }
 ```
 
-Both connect to the same daemon, which is the point of keeping it a separate
-process.
+Both clients connect to the same daemon. This is the reason that the daemon is a
+separate process.
 
 ## Design system
 
-yart does not use a component library. Every value the UI renders resolves to a
-token in [`apps/web/src/styles/tokens.css`](apps/web/src/styles/tokens.css), and
-components are styled with CSS Modules referencing those tokens rather than raw
-literals. The palette is deliberately warm — ink on paper — instead of the cool
-slate-and-blue that most developer tooling defaults to.
+yart does not use a component library. Each value in the UI comes from a token
+in [`apps/web/src/styles/tokens.css`](apps/web/src/styles/tokens.css).
+Components use CSS Modules that refer to these tokens, not to literal values.
+The colors are warm on purpose, like ink on paper. Most tools for developers
+use cool slate and blue colors.
 
 ## License
 
