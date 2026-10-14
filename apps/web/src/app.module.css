@@ -4,7 +4,7 @@
   min-height: 100vh;
   max-width: 84rem;
   margin: 0 auto;
-  padding: var(--yart-space-8) var(--yart-space-4) var(--yart-space-3);
+  padding: var(--yart-space-8) 3rem var(--yart-space-3);
 }
 
 /* It fills the free height, thus the footer stays at the bottom of a short page. */
