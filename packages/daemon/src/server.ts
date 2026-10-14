@@ -29,6 +29,8 @@ export interface ServerOptions {
   ui_dir?: string
   /** How long after an approval the daemon does the action of the settings. */
   approval_grace_ms?: number
+  /** Stops the process. Without it, the daemon refuses `POST /api/shutdown`. */
+  shutdown?: () => void
 }
 
 /**
@@ -221,6 +223,7 @@ export const createServer = ({
   ui_dir = DEFAULT_UI_DIR,
   state_dir = null,
   approval_grace_ms = APPROVAL_GRACE_MS,
+  shutdown,
 }: ServerOptions): Hono => {
   const repositories = new Repositories({ default_repo: repo_path, state_dir })
   const settings = new SettingsStore(state_dir)
@@ -313,6 +316,16 @@ export const createServer = ({
   )
 
   app.get('/api/version', (context) => context.json({ version: VERSION }))
+
+  // `yart stop` and `yart restart` use this route. The response goes out before
+  // the process stops.
+  app.post('/api/shutdown', (context) => {
+    if (shutdown === undefined) {
+      return context.json<ErrorBody>({ error: 'This daemon cannot stop on request.' }, 404)
+    }
+    setImmediate(shutdown)
+    return context.json({ ok: true })
+  })
 
   app.get('/api/reviews', async (context) => {
     const archived = context.req.query('archived') === 'true'

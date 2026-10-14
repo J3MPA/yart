@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
+import type { Server } from 'node:http'
+import { daemonHealth, startDaemon, stopDaemon } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
 import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
@@ -144,7 +146,68 @@ const reviewer = async (argv: readonly string[]): Promise<number> => {
   }
 }
 
+const CONTROL_COMMANDS: ReadonlySet<string> = new Set(['start', 'stop', 'restart', 'status'])
+
+/** `yart start`, `stop`, `restart` and `status`. They return the exit code. */
+const control = async (command: string, argv: readonly string[]): Promise<number> => {
+  const { values } = parseArgs({
+    args: [...argv],
+    options: { port: { type: 'string', short: 'p' }, repo: { type: 'string', short: 'r' } },
+  })
+  const port = parsePort(values.port)
+  const write = (line: string) => process.stdout.write(`${line}\n`)
+  const health = await daemonHealth(port)
+  const start = async (repo_path: string | null) => {
+    await startDaemon({ port, repo_path, cli_path: fileURLToPath(import.meta.url) })
+    write(`yart: the daemon runs on http://localhost:${port}.`)
+  }
+
+  switch (command) {
+    case 'status':
+      if (health === null) {
+        write(`yart: no daemon runs on port ${port}.`)
+        return 1
+      }
+      write(`yart: the daemon runs on http://localhost:${port}.`)
+      write(`  version:    ${health.version ?? 'older than 0.1.0'}`)
+      write(`  repository: ${health.repo_path ?? 'none'}`)
+      return 0
+    case 'start':
+      if (health !== null) {
+        write(`yart: a daemon already runs on port ${port}.`)
+        return 0
+      }
+      await start(await defaultRepo(values.repo))
+      return 0
+    case 'stop':
+      write(
+        (await stopDaemon(port))
+          ? 'yart: the daemon stopped.'
+          : `yart: no daemon runs on port ${port}.`,
+      )
+      return 0
+    default:
+      await stopDaemon(port)
+      // The new daemon keeps the default repository of the old one.
+      await start(
+        values.repo === undefined ? (health?.repo_path ?? null) : await findRepoRoot(values.repo),
+      )
+      return 0
+  }
+}
+
 export const main = async (argv: readonly string[]): Promise<void> => {
+  const command = argv[0]
+  if (command !== undefined && CONTROL_COMMANDS.has(command)) {
+    try {
+      process.exitCode = await control(command, argv.slice(1))
+    } catch (cause) {
+      process.stderr.write(`yart: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+      process.exitCode = 1
+    }
+    return
+  }
+
   if (argv[0] === 'reviewer') {
     try {
       process.exitCode = await reviewer(argv.slice(1))
@@ -188,6 +251,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         'yart — local code review for AI-generated diffs',
         '',
         'Usage: yart [options]',
+        '       yart start|stop|restart|status [--port <port>]',
         '       yart hook <install|uninstall|pre-commit>',
         '       yart reviewer <install|uninstall> [--user]',
         '',
@@ -208,12 +272,21 @@ export const main = async (argv: readonly string[]): Promise<void> => {
 
   const repo_path = await defaultRepo(values.repo)
   const state_dir = defaultStateDir()
-  const app = createServer({ repo_path, state_dir })
+  // The server exists only after createServer. Thus the shutdown reads it from a holder.
+  const holder: { server: Server | null } = { server: null }
+  const app = createServer({
+    repo_path,
+    state_dir,
+    shutdown: () => {
+      holder.server?.close(() => process.exit(0))
+      holder.server?.closeAllConnections()
+    },
+  })
 
-  serve({ fetch: app.fetch, port, hostname: LOOPBACK }, (info) => {
+  holder.server = serve({ fetch: app.fetch, port, hostname: LOOPBACK }, (info) => {
     process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
     process.stdout.write(`listening on http://localhost:${info.port}\n`)
-  })
+  }) as Server
 }
 
 main(process.argv.slice(2)).catch((cause: unknown) => {

@@ -619,6 +619,19 @@ After an update, the daemon that runs is the old daemon. The MCP server examines
 different repository. It shows a message that tells you to stop that daemon.
 Thus it does not review the wrong repository.
 
+**Control the daemon.** The first yart tool call starts the daemon. You do not
+have to start it. Use these commands to control it:
+
+```sh
+yart status    # Show if a daemon runs, with its version and repository.
+yart start     # Start a daemon in the background.
+yart stop      # Stop the daemon.
+yart restart   # Stop the daemon, and start it again with the same repository.
+```
+
+Each command accepts `--port`. `yart` with no command runs the daemon in the
+foreground.
+
 **Writes must be JSON.** A web page on any site can send a "simple" POST across
 origins to `localhost`. The browser does not ask first. The page cannot read
 the answer, but the daemon would do the action, in any repository that the page
