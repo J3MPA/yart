@@ -1,28 +1,28 @@
-/** Which side of a review's diff a line belongs to. */
+/** The side of the diff of a review that a line belongs to. */
 export type DiffSide = 'base' | 'head'
 
 /**
- * Points at one line of one version of one file.
+ * Points to one line of one version of one file.
  *
- * Identity is the blob hash rather than the path, because paths move and line
- * numbers shift, whereas a blob's content is immutable — so `(blob_sha, line)`
- * always denotes the same text no matter what happens to the working tree.
+ * The blob hash identifies the file, not the path. Paths move and line numbers
+ * change, but the content of a blob never changes. Thus `(blob_sha, line)`
+ * always identifies the same text, whatever happens to the working tree.
  */
 export interface LineAnchor {
-  /** Path the file had in the version this anchor was resolved against. */
+  /** The path of the file in the version of this anchor. */
   path: string
-  /** Git blob hash of that file version. */
+  /** The git blob hash of that version of the file. */
   blob_sha: string
-  /** 1-based line number within `blob_sha`. */
+  /** The line number in `blob_sha`, from 1. */
   line: number
   side: DiffSide
 }
 
 /**
- * Text surrounding an anchor, captured when the thread is created.
+ * The text around an anchor, kept when yart makes the thread.
  *
- * Kept verbatim and never updated: once an anchor goes outdated this is the
- * only remaining record of what was being discussed.
+ * It stays exactly as it was, and never changes. When an anchor becomes
+ * outdated, this is the only record of what the conversation was about.
  */
 export interface AnchorContext {
   before: string[]
@@ -31,20 +31,20 @@ export interface AnchorContext {
 }
 
 /**
- * Where a thread sits relative to where it was created.
+ * Where a thread is, compared with where yart made it.
  *
- * - `current`  — same file, same line as at creation
- * - `shifted`  — the line survives, but has moved or the file was renamed
- * - `outdated` — the line no longer exists; only `context` survives
+ * - `current`: the same file and the same line as at the start.
+ * - `shifted`: the line is still there, but it moved or the file has a new name.
+ * - `outdated`: the line does not exist now. Only `context` stays.
  */
 export type AnchorState = 'current' | 'shifted' | 'outdated'
 
-/** Conversational state, independent of whether the anchor still resolves. */
+/** The state of the conversation. It does not depend on the anchor. */
 export type ThreadStatus = 'open' | 'resolved'
 
 /**
- * Who wrote a comment: the person reviewing, the agent whose work is under
- * review, or an AI reviewer standing in for the person.
+ * Who wrote a comment: the person who reviews, the agent whose work is under
+ * review, or an AI reviewer in the place of the person.
  */
 export type CommentAuthor = 'human' | 'agent' | 'reviewer'
 
@@ -52,9 +52,9 @@ export interface Comment {
   id: string
   author: CommentAuthor
   /**
-   * The name an AI reviewer goes by, such as `claude-reviewer`, so that more
-   * than one can be told apart. Absent for the person and the agent, and on
-   * comments written before reviewers existed.
+   * The name of an AI reviewer, such as `claude-reviewer`. Thus you can tell
+   * two reviewers apart. It is not there for the person and the agent, or on
+   * comments from before reviewers existed.
    */
   author_name?: string | null
   body: string
@@ -64,11 +64,11 @@ export interface Comment {
 
 export interface Thread {
   id: string
-  /** Where the thread was created. Immutable — the audit record. */
+  /** Where yart made the thread. It never changes. It is the record. */
   origin: LineAnchor
-  /** Text captured at creation. Immutable. */
+  /** The text that yart kept when it made the thread. It never changes. */
   context: AnchorContext
-  /** Where the thread points now, or `null` once the line is gone. */
+  /** Where the thread points now, or `null` when the line is gone. */
   anchor: LineAnchor | null
   anchor_state: AnchorState
   status: ThreadStatus
@@ -76,15 +76,15 @@ export interface Thread {
 }
 
 /**
- * Maps 1-based line numbers in one version of a file to the corresponding line
- * in a later version. Lines absent from the map did not survive.
+ * Maps the line numbers in one version of a file to the same lines in a later
+ * version. The numbers start at 1. A line that is not in the map did not stay.
  *
- * How the mapping is computed is deliberately not this model's concern: it can
- * come from a text diff, from parsing `git diff` output, or from a test fixture.
+ * This model does not calculate the map, on purpose. The map can come from a
+ * text diff, from the output of `git diff`, or from a test fixture.
  */
 export type LineMap = ReadonlyMap<number, number>
 
-/** What became of an anchored file in a later revision. */
+/** What happened to the file of an anchor in a later revision. */
 export type FileResolution =
   | { kind: 'unchanged'; path: string }
   | { kind: 'modified'; path: string; blob_sha: string; line_map: LineMap }

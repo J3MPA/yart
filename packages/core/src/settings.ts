@@ -1,25 +1,25 @@
-/** What happens to a review once it is approved. */
+/** What happens to a review after its approval. */
 export type ApprovalAction = 'keep' | 'archive' | 'delete'
 
-/** How hard an AI reviewer should think, for whatever starts one to pass on. */
+/** How much effort an AI reviewer must use. The process that starts a reviewer gives it on. */
 export type ReviewerEffort = 'low' | 'medium' | 'high'
 
-/** The daemon's settings, one set for every repository it serves. */
+/** The settings of the daemon. One set applies to all repositories that it serves. */
 export interface Settings {
   on_approve: ApprovalAction
   /**
-   * How many verdicts an AI reviewer may pass on one review. Past that, two
-   * agents that will not agree stop, and the review is the person's.
+   * How many verdicts an AI reviewer can give on one review. After that, two
+   * agents that do not agree stop, and the review goes to the person.
    */
   ai_review_rounds: number
   /**
-   * The model an AI reviewer should run on, such as `sonnet` or a full model
-   * id, or null to leave it to whatever starts the reviewer. yart runs no model
-   * itself: this is read by the agent or hook that does.
+   * The model for an AI reviewer, such as `sonnet` or a full model id. Null lets
+   * the process that starts the reviewer choose. yart does not run a model. The
+   * agent or the hook that runs the reviewer reads this setting.
    */
   reviewer_model: string | null
   reviewer_effort: ReviewerEffort | null
-  /** What the person wants a reviewer to look for, added to its instructions. */
+  /** What the person wants a reviewer to look for. yart adds it to the instructions. */
   reviewer_instructions: string | null
 }
 

@@ -3,19 +3,20 @@ import type { Comment, LineAnchor, Thread } from './types.ts'
 
 export interface CreateThreadParams {
   id: string
-  /** Where the comment was made. Becomes both `origin` and the initial `anchor`. */
+  /** Where the comment is. It becomes the `origin` and the first `anchor`. */
   anchor: LineAnchor
-  /** Full text of `anchor.blob_sha`, used to capture surrounding context. */
+  /** The full text of `anchor.blob_sha`. yart keeps the context from it. */
   content: string
   comment: Comment
   context_radius?: number
 }
 
 /**
- * Creates a thread with `origin` and `anchor` in sync and its context captured.
+ * Makes a thread. Its `origin` and its `anchor` are the same, and it keeps its
+ * context.
  *
- * Ids and timestamps are supplied by the caller rather than generated here, so
- * that the model stays pure and tests stay deterministic.
+ * The caller gives the ids and the times. This function does not make them.
+ * Thus the model has no side effects, and tests always give the same result.
  */
 export const createThread = ({
   id,

@@ -4,11 +4,11 @@ import type { AnchorContext } from './types.ts'
 export const DEFAULT_CONTEXT_RADIUS = 3
 
 /**
- * Captures the text around a line so a thread stays readable after its anchor
- * dies. Near the start or end of a file the returned arrays are simply shorter.
+ * Keeps the text around a line. Thus you can still read a thread after its
+ * anchor is gone. Near the start or the end of a file, the arrays are shorter.
  *
  * @param line 1-based.
- * @throws RangeError if `line` is outside `content`.
+ * @throws RangeError if `line` is not in `content`.
  */
 export const captureContext = (
   content: string,
