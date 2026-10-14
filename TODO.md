@@ -1,478 +1,505 @@
 # TODO
 
-Planned work, roughly in the order it should happen.
+This file lists the planned work, in the approximate order to do it.
 
-Findings recorded here were verified rather than assumed, so they do not have to
-be rediscovered when the work starts.
+We examined each finding in this file. We did not assume it. Thus you do not have
+to find it again when the work starts.
 
 ## 1. An installable desktop app
 
-yart has two kinds of people using it, and today it only serves the first:
+Two groups of people use yart. Before this work, yart served only the first
+group:
 
-- **Developing yart.** Clone it, `pnpm install`, and `pnpm dev:actual` runs the
-  daemon and Vite against yart's own branch with hot reload. This stays as it is.
-- **Using yart.** One command installs it, one updates it, one removes it, and
-  nothing about the workspace, pnpm or Node is visible. This is what is missing.
+- **People who develop yart.** They clone it and run `pnpm install`. Then
+  `pnpm dev:actual` runs the daemon and Vite against the branch of yart, with hot
+  reload. This stays the same.
+- **People who use yart.** One command installs it, one command updates it and
+  one command removes it. They do not see the workspace, pnpm or Node. This was
+  missing.
 
-The user path is a desktop app, installed with `curl` from GitHub Releases. The
-reason for an app is control over the window: one window that a new review is
-shown in, rather than a browser tab opened per review, plus a dock badge and a
-notification when the agent answers. The reason for `curl` is covered under
-install below.
+For users, yart is a desktop app that they install with `curl` from GitHub
+Releases. The app gives control of the window. A new review shows in one window,
+and does not open a new browser tab. The app also gives a dock badge and a
+notification when the agent answers. The section on the install gives the
+reason for `curl`.
 
-**Done: one daemon for every repository.** Requests name their repository, the
-daemon keeps a service per repository and remembers them in `~/.yart`, and the
-MCP server refuses an older daemon that would review the wrong one. The finding
-that led to it, kept for the record:
+**Done: one daemon for all repositories.** Each request names its repository.
+The daemon keeps one service for each repository and records them in `~/.yart`.
+The MCP server refuses an older daemon that would review the wrong repository.
+This is the finding that caused the change, kept as a record:
 
-**A daemon served one repository.** Its repository is fixed by `--repo` at start, and nothing in a
-request names another. The MCP server reuses whatever daemon answers on 7777,
-without checking which repository it serves. So with yart registered for every
-project, a review asked for in repository B while a daemon started in
-repository A is still running is a review of A's working tree — with no error.
-That is a live bug today, found by reading the code rather than by hitting it,
-and an installed app with one daemon would hit it constantly.
+**A daemon served one repository.** `--repo` set its repository at the start,
+and no request could name a different one. The MCP server used the daemon that
+answered on 7777, and did not examine which repository it served. Thus this problem
+occurred when yart was registered for all projects. You asked for a review in
+repository B while a daemon from repository A still ran. You then got a
+review of the working tree of A, with no error. We found this bug when we read
+the code. An installed app with one daemon would cause it all the time.
 
-What was done about it:
+These are the changes that we made:
 
-- Requests that create a review name the repository they are for, and the MCP
-  server sends the one it was started in.
-- The daemon keeps one `ReviewService` per repository, created on first use and
-  keyed by the shared git directory so that worktrees still share one list.
-- It keeps a small registry of repositories it has seen, so the review list can
-  span all of them and a review id can be found without knowing its repository.
-- `/health` reports the daemon's version, so a client can tell when the daemon
-  it found is older than itself — which after an update it will be.
+- A request that makes a review names its repository. The MCP server sends the
+  repository that it started in.
+- The daemon keeps one `ReviewService` for each repository. It makes the service
+  on the first use. The key is the shared git directory, thus all worktrees
+  still share one list.
+- The daemon keeps a small registry of the repositories that it served. Thus the
+  list of reviews can show all of them, and the daemon can find a review by its
+  id alone.
+- `/health` gives the version of the daemon. Thus a client can see that the
+  daemon is older than the client. After an update, this is always true.
 
-**Done: the prototype.** A throwaway Electron 44 build, served from a local web
-server and fetched both with `curl` and with a browser — what decides Gatekeeper
-is which program downloads the zip, not where it is hosted. Every question it
-was built to answer has an answer, and none rules the plan out:
+**Done: the prototype.** We made a test build with Electron 44 that we did not
+keep. A local web server served it, and we got it with `curl` and with a browser.
+The program that downloads the zip decides what Gatekeeper does. The host of the
+zip does not. We got an answer to each question, and no answer stops the plan:
 
-1. **An ad-hoc signed app installed with `curl` opens with no prompt.** Zipped
-   with `ditto`, fetched with `curl`, unpacked into `~/Applications`: the app
-   carries no `com.apple.quarantine` attribute and launches straight away on
-   Apple Silicon, macOS 26.4.
-2. **The same zip downloaded in a browser is blocked.** Chrome marks the
-   download, the mark carries over to the unpacked app, and opening it gives
-   "Apple could not verify “yart” is free of malware" with only _Done_ and
-   _Move to Bin_. This is what the install instructions have to warn about.
-3. **The dock badge works, but is off by default.** With only the notification
-   banner allowed, `app.setBadgeCount` returns true and `app.dock.getBadge()`
-   reads it back while the dock shows nothing. Turning on _Badge application
-   icon_ under the app's notification settings makes it appear. Nothing reports
-   the badge as hidden, so the app has to ask for it or point the user at the
-   setting.
-4. **Notifications arrive, but not reliably as banners.** No permission prompt
-   was ever shown. A freshly built app's first notifications were refused with
-   "Notifications are not allowed for this application" while it ran from a
-   temporary directory; the same build in `~/Applications` delivered them.
-   Delivered ones sometimes showed as a banner and sometimes went only to
-   Notification Center, with every setting for the app on and the app in the
-   background. The cause is not found — a Focus mode or screen sharing holding
-   banners back is the first thing to rule out — and needs settling while
-   building the app, since a notification nobody sees does not do its job.
-5. **`yart://reviews/<id>` works both ways.** With the app running, `open-url`
-   navigates the existing window and no second process starts; with it not
-   running, the link launches it and the URL arrives before `ready`, so it has
-   to be held until the window exists. `open -g` delivers a link without
-   bringing the app forward, which is what a badge or background update wants.
-6. **The daemon and MCP server run on Electron's Node.** Bundled with esbuild and
-   started with `ELECTRON_RUN_AS_NODE=1` on the app's own binary, both run
-   straight from inside `app.asar`, the daemon spawns `git` to build a diff, and
-   the MCP server answers `list_reviews` over stdio.
-7. **What it costs.** The app is 289 MB on disk and 127 MB zipped, per
-   architecture. esbuild takes about 50 ms, `electron-packager` about 2.4 s and
-   signing 0.3 s.
+1. **An app with an ad-hoc signature that `curl` installs opens with no prompt.**
+   We made the zip with `ditto`, got it with `curl`, and unpacked it into
+   `~/Applications`. The app has no `com.apple.quarantine` attribute. It opens
+   at once on Apple Silicon, macOS 26.4.
+2. **macOS blocks the same zip from a browser.** Chrome marks the download, and
+   the mark goes to the unpacked app. When you open the app, macOS shows "Apple
+   could not verify “yart” is free of malware", with only _Done_ and _Move to
+   Bin_. The install instructions must warn about this.
+3. **The dock badge works, but it is off at first.** When only the notification
+   banner is on, `app.setBadgeCount` returns true and `app.dock.getBadge()`
+   reads the count. But the dock shows nothing. The badge shows when you turn on
+   _Badge application icon_ in the notification settings of the app. Nothing
+   tells the app that the badge is hidden. Thus the app must ask for it, or tell
+   the user about the setting.
+4. **Notifications come, but not always as banners.** macOS never showed a
+   permission prompt. The first notifications of a new build failed with
+   "Notifications are not allowed for this application" when the build ran from
+   a temporary directory. The same build in `~/Applications` sent them. Some
+   notifications showed as a banner. Others went only to Notification Center,
+   with all settings of the app on and the app in the background. We did not
+   find the cause. Examine a Focus mode or screen sharing first. A notification
+   that nobody sees does not do its work.
+5. **`yart://reviews/<id>` works in the two cases.** When the app runs, `open-url`
+   moves the window to the review, and no second process starts. When the app
+   does not run, the link starts it. The URL comes before `ready`, thus the app
+   must keep it until the window exists. `open -g` sends a link and does not
+   bring the app to the front. A badge or an update in the background needs
+   this.
+6. **The daemon and the MCP server run on the Node of Electron.** esbuild bundles
+   them, and `ELECTRON_RUN_AS_NODE=1` starts them on the binary of the app. The
+   two run from inside `app.asar`. The daemon starts `git` to make a diff. The
+   MCP server answers `list_reviews` over stdio.
+7. **The cost.** For each architecture, the app is 289 MB on the disk and 127 MB
+   in a zip. esbuild takes approximately 50 ms, `electron-packager`
+   approximately 2.4 s, and the signature 0.3 s.
 
-Found on the way, and needed by the steps below:
+We also found these things, and the steps below need them:
 
-- `electron-packager`'s output fails `codesign --verify` as it comes: the
-  binary is only linker-signed and the bundle's resources are unsealed. It has
-  to be re-signed with `codesign --force --deep --sign -` after packaging.
+- The output of `electron-packager` fails `codesign --verify`. The binary has
+  only a signature from the linker, and the resources of the bundle are not
+  sealed. You must sign it again with `codesign --force --deep --sign -` after
+  you package it.
 - The daemon finds its UI (`../../../apps/web/dist`) and its version
-  (`../package.json`) relative to `import.meta.url`, which bundling moves. The
-  prototype passed `ui_dir` in; the real bundle needs both to be options, or
-  paths that hold in the app's layout. Inside the app, `../package.json` is the
-  app's own, so the version reported is the app's version.
+  (`../package.json`) relative to `import.meta.url`. A bundle moves these files.
+  The prototype gave `ui_dir` to the daemon. The real bundle needs options for
+  the two, or paths that are correct in the layout of the app. In the app,
+  `../package.json` is the file of the app. Thus the daemon gives the version of
+  the app.
 
 **Developer mode.** The developer and the user can be the same person on the same
-machine, so the two must not reach each other's daemon.
+computer. Thus the two must not use the daemon of the other.
 
-- ~~`pnpm dev:actual` uses its own port and only ever reuses a daemon from the
-  same checkout.~~ Done: port 7778, and `/health` reports where a daemon's code
+- ~~`pnpm dev:actual` uses its own port, and uses a daemon again only from the
+  same checkout.~~ Done: port 7778. `/health` tells where the code of a daemon
   runs from.
 - ~~`pnpm dev:desktop` runs the Electron shell against the Vite dev server.~~
-  Done: `apps/desktop` is a bare shell so far, one window on a profile of its
-  own, and quitting it ends the session. Electron 44 runs its TypeScript main
-  process directly, so development needs no build step for it.
-- ~~Which `yart-mcp` an agent talks to is decided by the MCP registration.~~
-  Settled: when servers share a name, Claude Code launches exactly one, and
-  local scope beats project scope beats user scope. Checked with a probe
-  server registered under one name in all three scopes, recording which copy
-  started, on Claude Code 2.1.29. So the installed yart stays registered in user
-  scope, and a developer registers the clone in local scope from inside it,
-  pointed at the development daemon's port:
+  Done: `apps/desktop` started as a simple shell. It has one window on its own
+  profile, and the session stops when you quit it. Electron 44 runs its
+  TypeScript main process directly. Thus the development does not need a build
+  step for it.
+- ~~The MCP registration decides which `yart-mcp` an agent uses.~~ Settled. When
+  servers have the same name, Claude Code starts exactly one. Local scope wins
+  over project scope, and project scope wins over user scope. We examined this
+  with a test server under one name in the three scopes, on Claude Code 2.1.29.
+  We recorded which copy started. Thus the installed yart stays registered in
+  user scope. A developer registers the clone in local scope from inside it,
+  with the port of the development daemon:
 
   ```sh
   claude mcp add -s local yart -- node --experimental-strip-types \
     "$PWD/packages/mcp/src/cli.ts" --port 7778
   ```
 
-  Local scope rather than a committed `.mcp.json`, because that would push one
-  person's path on everyone who clones the repository.
+  We use local scope, not a `.mcp.json` in the repository. That file would give
+  the path of one person to all people who clone the repository.
 
 **The app.** A new `apps/desktop`.
 
-- One window, loading the UI the daemon serves. A second launch focuses it rather
-  than opening another.
+- One window shows the UI that the daemon serves. A second start of the app
+  brings this window to the front, and does not open a second window.
 - ~~`yart://reviews/<id>` links. `start_review` opens one when the app is
-  installed and falls back to the browser when it is not.~~ Done, and tried on a
-  packaged build: a link launches the app on the review, and switches the
-  running window between reviews without a second copy. `start_review` tries
-  the link only for the daemon on 7777, and treats `open` failing as the app
-  not being installed. macOS will not bind a scheme to an app in a temporary
-  directory, as it would not send its notifications; both work from
-  `~/Applications`.
-- ~~The app starts the daemon if none is running, with the same reuse rules the
-  MCP server uses, so either can come up first.~~ Done: it uses the MCP server's
-  own client, on `YART_DAEMON_PORT` or 7777, and the daemon it starts belongs to
-  no repository. Like the MCP server's, it outlives the app.
-- ~~The dock badge carries the unseen count the UI already computes, and a review
-  turning `your turn` raises a notification.~~ Done: a preload bridge carries
-  the count and each review that turns unseen from the page to the app, which
-  checks both before acting. Seen working end to end on an ad-hoc signed build
-  in `~/Applications`: a banner on the first notification with no permission
-  prompt, with the app in the background, so the prototype's unreliable banners
-  did not recur. What the install instructions have to say:
-  - The badge is off for a new app even once its banners show. _Badge
-    application icon_ has to be turned on in the app's notification settings,
-    and the app is only listed there after its first notification.
-  - The app keeps its own seen state, and a review only counts as unseen once
-    it has been opened in the app, so a fresh install shows no count and raises
-    nothing until reviews are opened in it.
+  installed, and opens the browser when it is not.~~ Done, and we tried it on a
+  packaged build. A link starts the app on the review. When the app runs, a link
+  moves the window to a different review, and no second copy starts.
+  `start_review` tries the link only for the daemon on 7777. If `open` fails,
+  `start_review` decides that the app is not installed. macOS does not attach a
+  scheme to an app in a temporary directory. It also does not send the
+  notifications of such an app. The two work from `~/Applications`.
+- ~~The app starts the daemon if no daemon runs, with the same rules as the MCP
+  server. Thus either one can start first.~~ Done. The app uses the client of
+  the MCP server, on `YART_DAEMON_PORT` or 7777. The daemon that it starts
+  belongs to no repository. As with the MCP server, the daemon continues after
+  the app stops.
+- ~~The dock badge shows the unseen count that the UI calculates. A review that
+  becomes `your turn` causes a notification.~~ Done. A preload bridge sends the
+  count, and each review that becomes unseen, from the page to the app. The app
+  examines the two before it acts. We saw this work from start to end on a build
+  with an ad-hoc signature in `~/Applications`. The first notification showed a
+  banner with no permission prompt, with the app in the background. The
+  unreliable banners of the prototype did not occur again. The README says these
+  things for users:
+  - For a new app, the badge is off, also when its banners show. You must turn
+    on _Badge application icon_ in the notification settings of the app. The
+    app shows in that list only after its first notification.
+  - The app keeps its own seen state. A review counts as unseen only after you
+    opened it in the app. Thus a new install shows no count and sends nothing
+    until you open reviews in it.
 
-  Not tried: clicking a notification, which should open its review the way a
-  link does.
+  Not tried: a click on a notification. It must open its review, as a link does.
 
-- ~~The app carries the command line tools inside it. `yart` and `yart-mcp` are
-  small scripts that run the bundled JavaScript on Electron's Node, so a user
-  needs neither Node nor npm.~~ Done, in `Contents/Resources/bin`. They resolve
-  their own link, so they can be linked into `~/.local/bin`, and `yart-mcp`
-  points the MCP server at the bundled daemon with `YART_DAEMON_CLI`.
-- Seen state and drafts live in the app's own storage, separate from any
-  browser's. Moving between the two starts them afresh; worth saying in the docs.
+- ~~The app has the command line tools in it. `yart` and `yart-mcp` are small
+  scripts that run the bundled JavaScript on the Node of Electron. Thus a user
+  needs no Node and no npm.~~ Done, in `Contents/Resources/bin`. The scripts
+  find their own link. Thus the install can put links to them in
+  `~/.local/bin`. `yart-mcp` gives the bundled daemon to the MCP server with
+  `YART_DAEMON_CLI`.
+- ~~Seen state and drafts are in the storage of the app, apart from each
+  browser. When you change from one to the other, they start again. The docs
+  must say this.~~ Done: the README says it.
 
 **Build and release.**
 
-- ~~The daemon and MCP entry points are bundled to JavaScript with esbuild.~~
-  Done, with the app's main process, by `pnpm package:desktop`.
-- ~~One zip per architecture, Apple Silicon and Intel, each ad-hoc signed, each
-  with a SHA-256 checksum beside it.~~ Done: 122 MB for Apple Silicon and
-  128 MB for Intel, about 15 seconds each on an M-series Mac, both built there.
-  A zip rather than a disk image: a disk image is made for dragging an app into
-  place by hand, and is awkward to script.
+- ~~esbuild bundles the entry points of the daemon and the MCP server to
+  JavaScript.~~ Done, with the main process of the app, by
+  `pnpm package:desktop`.
+- ~~One zip for each architecture, Apple Silicon and Intel. Each has an ad-hoc
+  signature and a SHA-256 checksum next to it.~~ Done: 122 MB for Apple Silicon
+  and 128 MB for Intel. Each takes approximately 15 seconds on an M-series Mac,
+  and that Mac builds the two. We use a zip, not a disk image. A disk image is
+  for a person who moves an app into place by hand. It is difficult to use in a
+  script.
 - ~~A GitHub Actions workflow on a `v*` tag builds on macOS runners and
-  publishes the release, with `install.sh` and `uninstall.sh` as assets of it
-  so each script is the one that matches its release.~~ Done: one Apple Silicon
-  runner packages both, in under a minute and a half. A version with a suffix,
-  such as `v0.2.0-rc.1`, makes a draft prerelease, which is how the workflow
-  was tried.
+  publishes the release. `install.sh` and `uninstall.sh` are assets of the
+  release, thus each script matches its release.~~ Done. One Apple Silicon
+  runner packages the two architectures in less than a minute and a half. A
+  version with a suffix, such as `v0.2.0-beta.1`, becomes a pre-release that
+  people can see and install. "latest" never points to it.
 
-**Install, update, uninstall.** Nothing needs `sudo`; everything lives in the
-user's own directories.
+**Install, update, uninstall.** Nothing needs `sudo`. All files are in the
+directories of the user.
 
-**Done**, in `apps/desktop/install`, as described below. Tried end to end with
-`HOME` set to a temporary directory and the release served from a local web
-server, which `YART_RELEASE_URL` points the scripts at: a fresh install, an
-update over it that stopped the old daemon, a corrupted checksum leaving the
-installed app untouched, `yart up`, `yart uninstall` keeping drafts, a second
-uninstall, `--purge`, and a `yart` link that was not the app's surviving.
-Not tried: reopening the app after an update when it was running, and an
-install into the real `~/Applications`.
+**Done**, in `apps/desktop/install`, as the list below tells. We tried it from
+start to end with `HOME` set to a temporary directory. A local web server served
+the release, and `YART_RELEASE_URL` pointed the scripts at it. We tried these
+cases:
 
-**The repository is public**, with a ruleset on `main` requiring a pull request,
-the `gate` check and the code owner's approval. Pre-releases are published, not
-drafted, and the installer attached to each release installs that release,
-since GitHub's "latest" skips pre-releases.
+- a new install
+- an update over it, which stopped the old daemon
+- a bad checksum, which did not change the installed app
+- `yart up`, and `yart up --pre` against the real releases
+- `yart uninstall`, which kept the drafts
+- a second uninstall
+- `--purge`
+- a `yart` link that was not a link to the app, which stayed
 
-**Every `yart.app` on a disk claims `yart://`.** macOS registers apps it comes
-across, including copies in the Bin and the build output in `apps/desktop/out`,
-so on a machine that builds yart a link can reach a stray copy. The install
-script registers the installed app explicitly, which should make it the one
-links reach, but that is not verified.
+The owner installed `v0.1.0-beta.1` from GitHub into the real `~/Applications`
+with the public command. Not tried: an update that opens the app again when it
+ran before.
+
+**The repository is public.** A ruleset on `main` requires a pull request, the
+`gate` check and the approval of the code owner. The release workflow publishes
+pre-releases. It does not make drafts. The installer of each release installs
+that release, because "latest" on GitHub ignores pre-releases.
+
+**Each `yart.app` on a disk claims `yart://`.** macOS registers the apps that it
+finds, also copies in the Bin and the build output in `apps/desktop/out`. Thus,
+on a computer that builds yart, a link can go to a wrong copy. The install
+script registers the installed app. This should make it the app that links go
+to, but we did not examine this.
 
 - `curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh`
-  detects the architecture, downloads the zip and its checksum, verifies it,
-  and puts the app in `~/Applications` and the two commands in `~/.local/bin`.
-  It says so if that directory is not on `PATH`, and prints the `claude mcp add`
-  command with an absolute path, because Claude starts MCP servers with its own
-  environment and may not share the shell's `PATH`.
-- Installing over an existing install replaces it, so the install script is
-  also the update. `yart up` runs it for the latest release, then restarts the
-  daemon and the app so neither keeps running the old code.
-- `uninstall.sh`, and `yart uninstall` which runs it, stops the app and the
-  daemon, removes the app, and removes the two commands only if they still point
-  into it. It prints the `claude mcp remove` command. It keeps the app's own
-  data — seen state and drafts — unless given `--purge`, since a draft is
-  something a person wrote. It never touches reviews: those live in each
-  repository's `.git/yart`, belong to that repository, and the script says where.
-  Running it twice is harmless.
+  finds the architecture and downloads the zip and its checksum. It examines the
+  checksum. It puts the app in `~/Applications` and the two commands in
+  `~/.local/bin`. If that directory is not on `PATH`, it tells you. It shows the
+  `claude mcp add` command with a full path. Claude starts MCP servers with its
+  own environment, which can be without the `PATH` of the shell.
+- An install over an existing install replaces it. Thus the install script is
+  also the update. `yart up` runs it for the latest release. Then it starts the
+  daemon and the app again, thus neither one continues to run the old code.
+- `uninstall.sh`, and `yart uninstall` that runs it, stops the app and the
+  daemon and removes the app. It removes the two commands only if they still
+  point into the app. It shows the `claude mcp remove` command. It keeps the
+  data of the app, the seen state and the drafts, unless you give `--purge`.
+  A draft is the work of a person. It never touches reviews. They are in the
+  `.git/yart` of each repository, and they belong to that repository. The
+  script tells where they are. A second run of the script causes no problem.
 
-Why `curl` and not a download link or Homebrew: macOS only checks an app with
-Gatekeeper when the file has been marked as quarantined, and browsers mark what
-they download while `curl` does not. So an app installed with `curl` needs only
-the free, local ad-hoc signature to open, where one downloaded in a browser
-would need a paid Developer ID and notarization. That is a long-standing
-behaviour many installers rely on, but it is a convention rather than a promise
-from Apple. Homebrew's main repository now refuses casks that fail Gatekeeper;
-a tap of our own could still carry the app later, on top of the same release.
+The reason for `curl`, not a download link or Homebrew: macOS examines an app
+with Gatekeeper only when the file has a quarantine mark. Browsers mark their
+downloads, and `curl` does not. Thus an app that `curl` installs needs only the
+free, local ad-hoc signature to open. An app from a browser would need a paid
+Developer ID and notarization. Many installers use this behavior, and it is
+old. But it is a convention, not a promise from Apple. The main repository of
+Homebrew now refuses casks that fail Gatekeeper. A tap of our own could carry
+the app later, on top of the same release.
 
 **Order of work.**
 
-1. ~~One daemon for every repository.~~ Done.
-2. ~~The prototype, and its findings written down here.~~ Done.
+1. ~~One daemon for all repositories.~~ Done.
+2. ~~The prototype, and its findings in this file.~~ Done.
 3. ~~Developer mode: its own port, and `pnpm dev:desktop`.~~ Done.
-4. The app.
-5. ~~Bundling, packaging, and the release workflow.~~ Done.
-6. ~~The install, update and uninstall scripts.~~ Done, but for making the
-   repository public.
-7. ~~The README split into using yart and developing it.~~ Done.
+4. ~~The app.~~ Done, but a click on a notification is not tried.
+5. ~~Bundles, packages and the release workflow.~~ Done.
+6. ~~The install, update and uninstall scripts.~~ Done.
+7. ~~A README with one part for users and one part for developers.~~ Done.
 
-Left out on purpose: Linux and Windows, though Electron would carry both —
-`install.sh` refuses anything but macOS for now. And the Claude Code plugin,
-which would sit on top of this rather than replace it: a plugin could register
-the MCP server pointing at the installed `yart-mcp`, and carry the slash command
-and the review-on-stop hook from the finding below.
+Not included on purpose: Linux and Windows. Electron could carry the two, but
+`install.sh` refuses all systems other than macOS for now. Also not included:
+the Claude Code plugin. A plugin would go on top of this work, and would not
+replace it. A plugin could register the MCP server with the installed
+`yart-mcp`. It could also carry the slash command and the hook from the finding
+below that opens a review when a turn stops.
 
 ## AI reviewers
 
-Requested: an AI agent should be able to review code too. Write the code, have an
-AI review it, let the two agents go back and forth, and finally review the result
-yourself, with the AI's comments and the answers to them in front of you. Some
-also want a commit hook to start that loop, so that a commit only completes once
-it passes AI review.
+The request: an AI agent must also be able to review code. One agent writes the
+code, and an AI reviews it. The two agents go back and forth. At the end, you
+review the result, with the comments of the AI and the answers to them. Some
+people also want a commit hook to start that loop. Then a commit completes only
+when it passes AI review.
 
-**Done: the reviewer role.** A comment can be written by `human`, `agent` or
-`reviewer`, an AI reviewer with an optional `author_name`, and a verdict records
-whether the person or a reviewer passed it. The daemon checks authors, a reviewer
-can pass a verdict with the comments it held, the agent under review cannot, and
-only the person's approval triggers the clean-up setting. A reviewer's comments
-and verdicts count as activity, so the person notices an AI review moving.
+**Done: the reviewer role.** A comment can come from `human`, from `agent`, or
+from `reviewer`. A `reviewer` is an AI reviewer with an optional `author_name`.
+A verdict records if the person or a reviewer gave it. The daemon examines the
+authors. A reviewer can give a verdict with the comments that it held. The agent
+under review cannot give a verdict. Only the approval of the person starts the
+clean-up that the settings set. The comments and verdicts of a reviewer count as
+activity. Thus the person sees that an AI review moves.
 
-What is left, in order:
+The work that remains, in order:
 
-1. ~~**The reviewer's tools.**~~ Done: `get_diff`, `submit_verdict` and
-   `await_author`, which returns when the author advances or replies, since a
-   reply alone may be the author disagreeing. A round limit, three by default and
-   set on the Settings page, is enforced by the daemon, and both agents are told
-   when it is reached. `get_reviewer_settings` passes on the person's preferred
-   model, effort and instructions to whatever starts the reviewer. Effort only
-   reaches a reviewer whose launcher takes one: Claude Code's subagents take a
-   model but no effort.
-2. **The person's final review.** The page shows the AI conversation round by
-   round, and the AI's approval as a step before the person's verdict.
-3. **The commit hook.** `yart hook pre-commit` reviews the staged changes —
-   `git write-tree` makes them a tree, which a review can already be opened over —
-   runs a reviewer from a command the person configures, and lets the commit
-   through on approval or cancels it on changes requested, leaving the review open
-   for the author agent. The next commit advances the same review. Opt in, since
-   it blocks the commit for a model run; `--no-verify` skips it. `yart hook
-install` sets it up.
-4. **A reviewer that ships with yart.** A Claude Code subagent definition with its
-   own instructions, so that an agent asked to have its work reviewed spawns a
-   reviewer it did not brief itself. It fits the plugin idea under the finding on
-   agents not reaching for the tools.
+1. ~~**The tools of the reviewer.**~~ Done: `get_diff`, `submit_verdict` and
+   `await_author`. `await_author` returns when the author moves the review or
+   replies. A reply alone can mean that the author disagrees. A round limit,
+   three by default, is on the Settings page. The daemon makes sure of the
+   limit, and the two agents get a message when the reviewer reaches it.
+   `get_reviewer_settings` gives the model, effort and instructions of the
+   person to the process that starts the reviewer. Only a launcher that accepts
+   an effort uses it. The subagents of Claude Code accept a model, but not an
+   effort.
+2. **The final review of the person.** The page shows the AI conversation round
+   by round. It shows the approval of the AI as a step before the verdict of the
+   person.
+3. **The commit hook.** `yart hook pre-commit` reviews the staged changes.
+   `git write-tree` makes a tree from them, and a review can already use a tree.
+   The hook runs a reviewer from a command that the person sets. On approval, it
+   lets the commit continue. On a request for changes, it stops the commit and
+   keeps the review open for the author agent. The next commit moves the same
+   review. The hook is optional, because it blocks the commit while a model
+   runs. `--no-verify` skips it. `yart hook install` sets it up.
+4. **A reviewer that comes with yart.** A Claude Code subagent definition with
+   its own instructions. Thus an agent that must have its work reviewed starts a
+   reviewer that it did not brief itself. This agrees with the plugin idea in the
+   finding about agents that do not use the tools on their own.
 
-How a reviewer is run is up to the person: a subagent the author agent spawns, a
-second session they open, or the hook. All use the same tools. None needs an MCP
-server to push to an agent, which Claude Code does not offer: each side waits in a
-tool call while the other works, and the hook learns the verdict by waiting for it.
+The person decides how a reviewer runs. It can be a subagent that the author
+agent starts, a second session that the person opens, or the hook. All use the
+same tools. None needs an MCP server that sends messages to an agent. Claude Code
+does not have that function. Each side waits in a tool call while the other side
+works. The hook gets the verdict when it waits for it.
 
-## 2. Diff any two arbitrary points
+## 2. Diff any two points
 
-A review can now be opened over any commit or tree, including a bare tree hash,
-so ad-hoc comparisons are possible through the API. What is missing is a way to
-ask for one: the UI offers no way to pick two revisions, and the MCP tools take
-them but nothing suggests the possibility.
+You can now open a review over any commit or tree, also over a bare tree hash.
+Thus the API can compare any two points. What is missing is a way to ask for it.
+The UI cannot select two revisions. The MCP tools accept them, but nothing tells
+the agent about it.
 
-## 3. Concurrent reviews: naming, tabs, and approval
+## 3. Concurrent reviews: names, tabs and approval
 
-The goal: work in several chats at once, see that an agent has answered comments
-in one of them, switch to it, resolve, and approve the diff — a local pull
-request.
+The goal: you work in many chats at the same time. You see that an agent answered
+comments in one chat. You go to it, resolve the comments and approve the diff.
+This is a local pull request.
 
-Two pieces of this are done:
+Two parts of this are done:
 
-- **Reviews are named.** A review carries a `title`, defaulting to the head
-  commit's subject, with `start_review` able to override it. The list shows that
-  plus the branch, an abbreviated range, a file count and how long ago it was
-  opened.
-- **Reviews have a verdict.** Submitting takes `commented`, `approved` or
-  `changes_requested` plus an optional summary, recorded against the head it was
-  passed on so advancing reopens the review. `await_review` leads with it,
-  because it decides what the agent does next.
+- **Reviews have names.** A review has a `title`. By default, it is the subject
+  of the head commit, and `start_review` can give a different title. The list
+  shows the title, the branch, a short range, a count of files and the age of
+  the review.
+- **Reviews have a verdict.** A submission takes `commented`, `approved` or
+  `changes_requested`, and an optional summary. The daemon records the verdict
+  against the head that it was for. Thus a move of the review opens it again.
+  `await_review` shows the verdict first, because it decides what the agent does
+  next.
 
 What remains:
 
-- **A notification that the agent has answered** now works: a dot in the list, a
-  count in the tab title and a dot on the favicon, cleared by opening the
-  review. Seen-ness is kept in the browser, keyed on `agentActivity` rather than
-  on a timestamp so that writing a comment does not mark a review unread to the
-  person who wrote it.
-- **Live updates** are done for the list, which is polled every ten seconds so
-  the signal arrives without the window being focused. The open review page is
-  not: it still refetches on focus only, so a comment answered while you are
-  reading the diff appears when you come back to the window rather than at once.
-  Server-sent events would cover both and would let the poll go; worth doing
-  when the page being stale in front of you starts to bite.
-- **Tabs themselves**, once there is something worth switching between.
-- **Replying to a submission** now works: a submission carries its own comments,
-  answered from the UI or with the `reply_to_verdict` tool.
-- **What counts as answered** is settled: a thread is answered when the agent
-  spoke last or resolved it, and a review reports `idle`, `in_progress` or
-  `ready`. What remains is surfacing it outside the page — the dot below.
-- **Tabs across worktrees** now work at the storage level: reviews are kept in
-  the repository's shared git directory, so every worktree sees one list and
-  each review records which worktree it belongs to.
+- **A notification that the agent answered** now works. The list shows a dot,
+  the tab title shows a count, and the favicon shows a dot. When you open the
+  review, they go away. The browser keeps the seen state. The key is
+  `agentActivity`, not a time. Thus your own comment does not mark the review as
+  unread for you.
+- **Live updates** are done for the list. yart polls the list every ten seconds,
+  thus the signal comes when the window does not have focus. The open review
+  page does not poll. It gets new data only when it gets focus. Thus a comment
+  that the agent answers while you read the diff shows when you come back to the
+  window, not at once. Server-sent events would solve the two problems, and the
+  poll could go. Do this when a page that is not current starts to cause
+  problems.
+- **Tabs**, when there is a reason to change between reviews.
+- **Replies to a submission** now work. A submission has its own comments. You
+  answer them in the UI, and the agent answers them with the `reply_to_verdict`
+  tool.
+- **What counts as an answer** is settled. A thread has an answer when the agent
+  wrote the last comment in it or resolved it. A review shows `idle`,
+  `in_progress` or `ready`. What remains is to show this outside the page: the
+  dot below.
+- **Tabs across worktrees** now work at the level of the storage. The daemon
+  keeps reviews in the shared git directory of the repository. Thus each worktree
+  sees one list, and each review records its worktree.
 
-## 4. Pending reviews: what is left
+## 4. Pending reviews: what remains
 
-Comments can now be held for a pending review and sent with the verdict in one
-write, and a directory in the tree folds away with its counts. Recorded here is
-only what those left open.
+You can now hold comments for a pending review, and send them with the verdict in
+one write. You can also fold a directory in the tree, and it keeps its counts.
+This section records only the problems that these changes did not solve.
 
-- **Drafts live in one browser.** They are per person and per device, as
-  decided for seen-ness, so a draft written on one machine is not on another,
-  and clearing site data loses them. Fine for a local tool; worth revisiting if
-  yart is ever used by more than one person against one daemon.
-- **A stale draft can only be dropped.** A held line comment goes stale when its
-  own file changes, and the only way on is to drop it. Carrying it across with
-  the same line map threads use when a review advances would keep most of them,
-  and is the obvious next step if dropping them starts to cost real comments.
-- **The open review page still does not poll.** A reply from the agent appears
-  when the window regains focus, not while you are reading. This is the
-  remaining half of live updates in item 3, and it shows up here too: the tab
-  title can count a review as unseen while that same review is open, because
-  the list has polled and the page has not.
+- **Drafts are in one browser.** They are for each person and each device, as is
+  the seen state. Thus a draft from one computer is not on a different computer,
+  and when you clear the data of the site, the drafts go. This is correct for a
+  local tool. Examine it again if more than one person uses one daemon.
+- **You can only remove a stale draft.** A held comment on a line becomes stale
+  when its file changes. Then you can only remove it. The line map that moves
+  threads when a review moves could also move most drafts. This is the next
+  step if people lose real comments when they remove them.
+- **The open review page still does not poll.** A reply from the agent shows when
+  the window gets focus, not while you read. This is the other half of live
+  updates in item 3. It also causes a problem here. The tab title can count a
+  review as unseen while that review is open, because the list polled and the
+  page did not.
 
-## Finding: agents use the tools, but do not reach for them
+## Finding: agents use the tools, but do not start them on their own
 
-Established by running the MCP server against real sessions rather than by
-reasoning about it.
+We found this when we ran the MCP server in real sessions. We did not only think
+about it.
 
-**The tools work and are discoverable.** Told "I want to review the code", an
-agent with no instructions about yart found `start_review`, gave it a title of
-its own, waited on `await_review`, replied to a comment, and called
-`advance_review` after fixing. The whole loop, in order, unprompted.
+**The tools work, and agents find them.** We told an agent "I want to review the
+code". It had no instructions about yart. It found `start_review` and gave the
+review a title of its own. It waited with `await_review`, replied to a comment,
+and called `advance_review` after its fix. It did the full loop in the correct
+order, with no help.
 
-**Agents do not open a review on their own.** Finishing a change and deciding
-that someone should look at it is a judgement they have no reason to make, and
-no amount of wording in a tool description appears to change that. Stating the
-intent is what triggers it.
+**Agents do not open a review on their own.** An agent has no reason to finish a
+change and decide that someone must look at it. A different text in a tool
+description does not seem to change that. A clear request from the person
+starts it.
 
-**A conflicting instruction makes the tool invisible.** Two runs failed before
-this was understood, and neither was the model's fault: a line in the user's
-global `CLAUDE.md` named a different review mechanism, and the model obeyed the
-more specific instruction it already had. Nothing surfaced the conflict — the
-tools were connected and healthy the whole time. Worth remembering that when an
-agent ignores a tool, the first thing to look for is a competing instruction,
-not a weak description.
+**A conflicting instruction makes the tool invisible.** Two runs failed before we
+understood this, and the model did not cause the failures. A line in the global
+`CLAUDE.md` of the user named a different review method. The model obeyed the
+more specific instruction that it already had. Nothing showed the conflict. The
+tools were connected and healthy all the time. When an agent ignores a tool, look
+first for a conflicting instruction. Do not look first for a weak description.
 
-The lever for proactive review is a `Stop` hook rather than better descriptions:
-a turn ends with a dirty tree, a review opens, no judgement involved. Deferred
-for now — saying "I want to review the code" works, and a hook that fires on
-every dirty turn would need care not to be noisy. If it is built, it should
-advance an existing review rather than open a second, do nothing when no files
-changed, and would mean `yart` growing a subcommand for hooks to call.
+To make agents start reviews on their own, a `Stop` hook is better than better
+descriptions. A turn stops with a changed tree, and a review opens. No judgment
+is necessary. We do not do this now. "I want to review the code" works, and a
+hook on each turn with changes must not be noisy. If we make it, it must move an
+existing review and not open a second review. It must do nothing when no files
+changed. `yart` would also need a subcommand for hooks to call.
 
-## Finding: a new tool cannot be used by the session that built it
+## Finding: the session that made a new tool cannot use it
 
-MCP servers hand over their tool list when the client connects, and that happens
-once, at session start. A tool added partway through a session does not appear
-in it, however many times the server restarts underneath.
+An MCP server gives its list of tools when the client connects. This occurs one
+time, when the session starts. A tool that you add during a session does not show
+in that session. A restart of the server does not change this.
 
-Hit while building `reply_to_verdict`: the agent that wrote the tool, and was
-best placed to try it against a real verdict, could not call it. The work-around
-is to call the HTTP route the tool wraps, which verifies the behaviour but not
-the binding — so the binding is only ever exercised by the next session.
+We found this when we made `reply_to_verdict`. The agent that wrote the tool, and
+that was the best agent to try it on a real verdict, could not call it. The
+workaround is to call the HTTP route of the tool. This examines the behavior,
+but not the binding. Thus only the next session uses the binding.
 
-Two consequences worth keeping in mind.
+Two results of this are important.
 
-Every MCP tool this project grows is unusable for the remainder of the sitting
-that adds it. That is not a reason to avoid adding them, but it does mean a tool
-should not be the only way to reach something new: keeping the HTTP route the
-plain interface and the tool a thin wrapper is what made this recoverable, and
-is worth preserving as a rule rather than an accident.
+Each new MCP tool of this project is not available for the rest of the session
+that adds it. This is not a reason to add no tools. But a tool must not be the
+only way to get to a new function. The HTTP route is the simple interface, and
+the tool is a thin wrapper. This made the problem easy to solve. Keep this as a
+rule.
 
-It also puts a floor under how much an agent can test its own MCP work. The tool
-suite in `packages/mcp` runs against a real daemon and does cover the tool
-itself, which is the thing standing in for a live session — so those tests earn
-their keep here in a way that is easy to underrate when writing them.
+It also limits how much an agent can test its own MCP work. The tests of the
+tools in `packages/mcp` run against a real daemon and test the tool itself. These
+tests take the place of a real session. Thus they are more important here than
+they seem when you write them.
 
-## Syntax highlighting
+## Syntax highlights
 
-**Done.** Shiki tokenizes both sides of each open file in full, and
-each row takes the tokens for its line: removed lines from the base, everything
-else from the head. Colours are CSS variables defined in `tokens.css` for both
-schemes, the highlighter and each grammar load only when a review needs them,
-and a file without an extension is read from its `#!` line. A row whose tokens
-do not spell out its text exactly is shown plain. The page's main bundle grows
-by 31 kB, the language list; the rest arrives on first use.
+**Done.** Shiki reads the two sides of each open file in full. Each row takes the
+tokens of its line. A removed line takes them from the base, and all other lines
+from the head. The colors are CSS variables in `tokens.css`, for the two themes.
+The highlighter and each grammar load only when a review needs them. yart reads
+a file without an extension from its `#!` line. A row whose tokens do not spell
+out its text exactly shows as plain text. The main bundle of the page becomes
+31 kB larger, because of the list of languages. The rest comes on first use.
 
-What is left:
+What remains:
 
-- ~~**Highlight as files come into view.**~~ Done: a file is fetched and
-  coloured once it comes within a couple of screens of the viewport. On a
-  review of 69 files that is 4 fetched as the page loads rather than 69, and
-  the rest as they are scrolled to.
-- **Watch the page's size.** Tokens multiply the elements per line. A review of
-  69 files came to 76,781 elements, 33,131 of them tokens, and folding a
-  directory still took about 25 ms to render, as it did before. A review much
-  larger than that is where to look first.
+- ~~**Color files when they come near the screen.**~~ Done. yart gets and colors
+  a file when it comes within approximately two screens of the viewport. On a
+  review of 69 files, the page gets 4 files when it loads, not 69. It gets the
+  rest when you scroll to them.
+- **Watch the size of the page.** Tokens increase the elements on each line. A
+  review of 69 files had 76,781 elements, and 33,131 of them were tokens. To fold
+  a directory still took approximately 25 ms, as before. Look first at a review
+  that is much larger than that.
 
-The reasoning it was built on, kept for the record:
+The reasons for the design, kept as a record:
 
-Wanted, and not simply a matter of dropping a library in.
+The highlights had to keep the structure of one row for each line. Each row of
+the diff is one line, with its own gutters and its own comment anchor. Thus the
+markup of a highlighter must stay inside one line. Some markup opens a span on
+one line and closes it on a different line. Such markup breaks the rows, or puts
+a style on the wrong lines. Shiki can give output for each line. Simple highlighters
+usually expect a full block.
 
-The constraint is that highlighting has to survive the per-line structure. Every
-diff row is a line with its own gutters and its own comment anchor, so the
-markup a highlighter produces must stay inside a line: anything that opens a
-span on one line and closes it on another will either break the rows or leak
-styling across them. Shiki can emit per-line output for this; the simpler
-highlighters generally assume they own a whole block.
+Two more decisions were necessary. yart highlights the file, not the diff. The
+`+` and `-` markers are ours, and a grammar must not read them as source. Also,
+the colors come from the design tokens in the two themes, not from a theme of
+the highlighter. Without this, the diff would look different from the rest of
+the interface.
 
-Two further things to settle. What gets highlighted is the file, not the diff —
-the `+` and `-` markers are ours and must not be fed to a grammar that will try
-to read them as source. And the theme has to come from the design tokens in both
-colour schemes, rather than importing a highlighter's own theme, or the diff will
-stop looking like the rest of the interface.
-
-Weight is worth watching: grammars and themes are large, and this is a local tool
-that should stay quick to start. Loading a grammar only for the languages a
-review actually contains would be the way to keep it honest.
+The size is important. Grammars and themes are large, and a local tool must
+start quickly. yart loads a grammar only for the languages in a review.
 
 ## Smaller things
 
-- The daemon checks nothing about who is asking. Requiring JSON on writes stops
-  a web page from making it act, but a page that rebinds its own hostname to
-  `127.0.0.1` can make same-origin requests and read the answers, including
-  file contents. Checking that the `Host` header is `localhost` or `127.0.0.1`
-  would close that. Worth doing before yart is installed by anyone else, since
-  the daemon now reaches every repository it has served.
-
-- The daemon has no crash recovery, no log file, and exits if its port is taken.
-- `GET /api/reviews/:id/diff` returns every file with no cap. Fine for
-  agent-sized changes; a large refactor will feel it.
-- Split view is unimplemented — the state exists, but only the unified layout
-  renders. `hide_unchanged` in the same slice is unused too: collapsing is now
-  per run, expanded from the band rather than from a global switch, and a switch
-  that opened every run at once would pull every file's full text over the wire.
-- `GET /api/reviews/:id/diff` now reads each text file's head blob as well as
-  diffing it, to report the file's length — without which nothing can say
-  whether a file continues past its last hunk. Two git invocations per file
-  instead of one.
-- typescript-eslint resolves TypeScript 6 while every package compiles with
-  TypeScript 7, so type-aware lint rules are evaluated against different
-  inference than the compiler uses. Nothing is broken today, and installing
-  TypeScript 7 at the workspace root makes typescript-eslint refuse to run.
+- The daemon examines nothing about who asks. JSON on each write stops a web page
+  that tries to make it act. But a page can change the address of its own host
+  name to `127.0.0.1`. Then it can make requests from the same origin and read the
+  answers, also file contents. A check that the `Host` header is `localhost` or
+  `127.0.0.1` would stop this. Do this soon, because other people now install
+  yart, and the daemon can get to all repositories that it served.
+- The daemon has no recovery after a crash and no log file. It stops if its port
+  is in use.
+- `GET /api/reviews/:id/diff` returns all files, with no limit. This is
+  sufficient for changes of the size that agents make. A large refactor will be
+  slow.
+- Split view does not exist. The state exists, but only the unified layout shows.
+  `hide_unchanged` in the same slice is also not used. Each run now opens on its
+  own, from its band, not from one switch. A switch that opened all runs at the
+  same time would get the full text of all files.
+- `GET /api/reviews/:id/diff` now reads the head blob of each text file, and also
+  makes the diff, to give the length of the file. Without the length, nothing
+  can tell if a file continues after its last hunk. This is two git commands for
+  each file, not one.
+- typescript-eslint uses TypeScript 6, but all packages compile with TypeScript 7. Thus lint rules that use types see different inference than the compiler.
+  Nothing is broken now. When TypeScript 7 is installed at the root of the
+  workspace, typescript-eslint does not run.
