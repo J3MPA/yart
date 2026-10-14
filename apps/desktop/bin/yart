@@ -1,19 +1,73 @@
 #!/bin/sh
 # Runs yart's daemon on the Node built into yart.app, so neither Node nor npm is
-# needed. Resolves its own link first: it is installed as a link elsewhere.
-#
-#   yart up          update to the latest release
-#   yart uninstall   remove yart, keeping seen state and drafts unless --purge
+# needed, and carries the commands that manage the install itself. Resolves its
+# own link first: it is installed as a link elsewhere.
 set -e
 here=$(dirname "$(readlink -f "$0")")
 contents=$(cd "$here/../.." && pwd)
 app="$contents/Resources/app.asar"
+repository=J3MPA/yart
+
+fail() {
+  printf 'yart: %s\n' "$*" >&2
+  exit 1
+}
+
+# The newest release, pre-releases included, as GitHub lists them newest first.
+newest_tag() {
+  curl -fsSL "https://api.github.com/repos/$repository/releases?per_page=1" |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+# Runs a release's own installer, since it is the one that knows how to put that
+# release in place. Fetched in full before running, so that a missing release is
+# reported rather than half a script run.
+install_from() {
+  installer=$(mktemp)
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL -o "$installer" "$1/install.sh" || return 1
+  sh "$installer"
+}
 
 case "${1:-}" in
+  -h | --help)
+    version=$(defaults read "$contents/Info" CFBundleShortVersionString 2>/dev/null || echo unknown)
+    cat <<EOF
+yart $version
+
+Commands:
+  yart up              Update to the latest release
+  yart up --pre        Update to the newest release, pre-releases included
+  yart uninstall       Remove yart, keeping seen state and drafts
+  yart uninstall --purge
+                       Remove yart and its seen state and drafts
+
+Anything else runs the review daemon:
+
+EOF
+    ELECTRON_RUN_AS_NODE=1 exec "$contents/MacOS/yart" "$app/packages/daemon/dist/cli.mjs" --help
+    ;;
   up)
-    # The latest release's own installer, since it is the one that knows how to
-    # put that release in place.
-    curl -fsSL "${YART_RELEASE_URL:-https://github.com/J3MPA/yart/releases/latest/download}/install.sh" | sh
+    case "${2:-}" in
+      '')
+        install_from "${YART_RELEASE_URL:-https://github.com/$repository/releases/latest/download}" ||
+          fail "found no release to update to. If only pre-releases are out, run: yart up --pre"
+        ;;
+      --pre)
+        if [ -n "${YART_RELEASE_URL:-}" ]; then
+          install_from "$YART_RELEASE_URL" || fail "found no release at $YART_RELEASE_URL"
+        else
+          tag=$(newest_tag) || fail "could not ask GitHub for its releases"
+          case "$tag" in
+            v[0-9]*) ;;
+            *) fail "found no release to update to" ;;
+          esac
+          install_from "https://github.com/$repository/releases/download/$tag" ||
+            fail "could not download the installer for $tag"
+        fi
+        ;;
+      *) fail "unknown option for up: $2" ;;
+    esac
     exit
     ;;
   uninstall)

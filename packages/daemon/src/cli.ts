@@ -49,10 +49,10 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         `  -p, --port <port>  Port to listen on (default: ${DEFAULT_PORT})`,
         '  -r, --repo <path>  Repository for requests that name none (default: the current one)',
+        '  -h, --help         Show this message',
         '',
         'Serves reviews for any repository a request names. Set YART_HOME to keep',
         'its list of repositories somewhere other than ~/.yart.',
-        '  -h, --help         Show this message',
         '',
       ].join('\n'),
     )
