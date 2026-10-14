@@ -526,7 +526,7 @@ sure that the code obeys them:
 Callables are const arrows, not `function` declarations. Prettier sets the
 format: no semicolons, single quotes and 100 columns. Properties use `snake_case`
 also on serialized types. Thus the JSON that goes over MCP is the same as the
-source. Documentation and comments use ASD-STE100 Simplified Technical English.
+source. Documentation, comments and MCP text use ASD-STE100 Simplified Technical English.
 [`AGENTS.md`](AGENTS.md) gives all rules and their exceptions.
 
 ## Comment anchors

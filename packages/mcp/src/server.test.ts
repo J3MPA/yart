@@ -120,6 +120,10 @@ describe('tool surface', () => {
     ])
   })
 
+  it('tells the agent to open a review when the person asks for one', () => {
+    expect(client.getInstructions()).toContain('call start_review')
+  })
+
   it('describes every tool, since the description is what the model routes on', async () => {
     const { tools } = await client.listTools()
     for (const tool of tools) {
@@ -154,7 +158,7 @@ describe('start_review', () => {
   it('opens a review and reports the changed files', async () => {
     const rendered = await call('start_review', { base, head: 'HEAD' })
     expect(rendered).toContain('modified  a.txt')
-    expect(rendered).toContain(`http://localhost:${port}/reviews/`)
+    expect(rendered).not.toContain(`http://localhost:${port}/reviews/`)
   })
 
   it('reports a bad revision as a tool error rather than throwing', async () => {
@@ -182,7 +186,7 @@ describe('get_review and list_reviews', () => {
   })
 
   it('says so when there are none', async () => {
-    expect(await call('list_reviews')).toBe('No reviews yet.')
+    expect(await call('list_reviews')).toBe('This repository has no reviews.')
   })
 
   it('reports an unknown review as a tool error', async () => {
@@ -228,7 +232,7 @@ describe('opening the review', () => {
     const rendered = await call('start_review', { base })
     const review_id = idFrom(rendered)
     expect(opened).toEqual([`http://localhost:${port}/reviews/${review_id}`])
-    expect(rendered).toContain('Opened it for them')
+    expect(rendered).toContain('yart opened the review')
   })
 
   it('does not open a window for a review with nothing in it', async () => {
@@ -252,7 +256,8 @@ describe('opening the review', () => {
 
     const result = await quiet_client.callTool({ name: 'start_review', arguments: { base } })
     const rendered = (result.content as { text: string }[])[0]?.text ?? ''
-    expect(rendered).toContain('Ask the human to open that URL')
+    expect(rendered).toContain('Ask the person to open the URL')
+    expect(rendered).toContain(`http://localhost:${port}/reviews/`)
     expect(opened).toEqual([])
 
     await quiet_client.close()
@@ -269,7 +274,7 @@ describe('reply_to_verdict', () => {
       review_id,
       body: 'Renamed in the previous turn; nothing left to do.',
     })
-    expect(rendered).toContain('Replied to the verdict')
+    expect(rendered).toContain('You answered the verdict')
 
     const back = await call('get_review', { review_id })
     expect(back).toContain('agent: Renamed in the previous turn; nothing left to do.')
@@ -278,7 +283,7 @@ describe('reply_to_verdict', () => {
   it('says so when there is no verdict to answer yet', async () => {
     const review_id = idFrom(await call('start_review', { base }))
     const rendered = await call('reply_to_verdict', { review_id, body: 'hello' })
-    expect(rendered).toContain('not been submitted yet')
+    expect(rendered).toContain('has no verdict yet')
   })
 
   it('reports an unknown verdict as a tool error rather than throwing', async () => {
@@ -297,7 +302,7 @@ describe('await_review', () => {
   it('returns rather than hanging when nothing is submitted', async () => {
     const review_id = idFrom(await call('start_review', { base }))
     const rendered = await call('await_review', { review_id, timeout_seconds: 1 })
-    expect(rendered).toContain('Not submitted yet')
+    expect(rendered).toContain('did not submit the review')
   })
 
   it('shows comments written so far when it times out', async () => {
@@ -452,7 +457,7 @@ describe('an AI reviewer', () => {
       comments: [{ path: 'a.txt', line: 2, body: 'rename this' }],
     })
     expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
-      'has not answered',
+      'did not answer',
     )
     const author_view = await call('await_review', { review_id: id, timeout_seconds: 1 })
     await call('reply_to_thread', {
@@ -461,7 +466,7 @@ describe('an AI reviewer', () => {
       body: 'I think TARGET is right here.',
     })
     expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
-      'The author has answered',
+      'The author answered',
     )
   })
 
@@ -474,7 +479,7 @@ describe('an AI reviewer', () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
     await call('submit_verdict', { review_id: id, verdict: 'approved' })
     expect(await call('await_review', { review_id: id, timeout_seconds: 1 })).toContain(
-      'the person has not looked yet',
+      'The person did not examine it yet',
     )
   })
 })

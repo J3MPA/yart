@@ -15,6 +15,16 @@ import {
 } from './render.ts'
 
 const DEFAULT_WAIT_SECONDS = 300
+
+/** The rules that the MCP client gives to the agent with the tools. */
+const INSTRUCTIONS = [
+  'yart is a local code review tool. Obey these rules:',
+  '- When the person asks to review changes, call start_review. Do not ask how they want to review.',
+  '- After start_review, call await_review at once. Do not wait for the person to tell you.',
+  '- When yart opens the review for the person, do not send the review URL.',
+  '- To review the work of a different agent, use the reviewer tools: get_reviewer_settings, ' +
+    'get_diff, submit_verdict and await_author.',
+].join('\n')
 const MAX_WAIT_SECONDS = 1800
 
 /* eslint-disable @typescript-eslint/naming-convention -- MCP wire field names */
@@ -47,12 +57,12 @@ const reviewerNote = (review: Review, settings: Settings): string | null => {
   const verdict = latestSubmission(review)
   if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return null
   if (verdict.verdict === 'approved') {
-    return 'An AI reviewer approved this; the person has not looked yet. Tell them it is ready for their review.'
+    return 'An AI reviewer approved this. The person did not examine it yet. Tell the person that it is ready for their review.'
   }
   if (reviewerRounds(review) >= settings.ai_review_rounds) {
     return (
-      'The AI reviewer has used its last round. Make no further changes for it: ' +
-      'tell the person the review is theirs to finish, and what is still open.'
+      'The AI reviewer used its last round. Do not make more changes for it. ' +
+      'Tell the person that they must complete the review, and tell them which comments are open.'
     )
   }
   return null
@@ -82,7 +92,7 @@ const guard = async (run: () => Promise<ToolResult>): Promise<ToolResult> => {
   try {
     return await run()
   } catch (cause) {
-    return failure(cause instanceof Error ? cause.message : 'Unexpected error')
+    return failure(cause instanceof Error ? cause.message : 'An unknown error occurred.')
   }
 }
 
@@ -99,45 +109,47 @@ export interface McpServerOptions extends DaemonClientOptions {
 
 export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
-  const server = new McpServer({ name: 'yart', version: VERSION })
+  const server = new McpServer({ name: 'yart', version: VERSION }, { instructions: INSTRUCTIONS })
 
   const port = options.port ?? DEFAULT_PORT
   const openBrowser = options.openBrowser ?? ((url: string) => openReview(url, port))
   const opening_enabled = browserOpeningEnabled()
+  // When yart opens the review for the person, the agent does not get the URL.
+  // An agent repeats a URL in the chat, and the person does not need it there.
+  const shownUrl = (review_id: string): string | null =>
+    opening_enabled ? null : daemon.reviewUrl(review_id)
 
   server.registerTool(
     'start_review',
     toolConfig({
       title: 'Start a review',
       description:
-        'Open a code review so a human can comment on your changes. Call this as ' +
-        'soon as you have finished making changes — they do NOT need to be ' +
-        'committed. By default this reviews the current uncommitted state of the ' +
-        'working tree, including files you have just created. Returns a review id ' +
-        'and a URL for the human to open. Follow it with await_review.',
+        'Open a code review of your changes for the person. Call this when you complete ' +
+        'your changes. You do not have to commit them. Also call this when the person asks ' +
+        'to review changes. By default, the review shows all changes in the files on disk, ' +
+        'also new files. Then call await_review.',
       input_schema: {
         base: z
           .string()
           .optional()
           .describe(
-            'Revision to compare from, such as a branch name, a commit sha, or HEAD~3. ' +
-              'Defaults to HEAD, which is right when reviewing uncommitted work.',
+            'The revision to compare from, for example a branch name, a commit sha or HEAD~3. ' +
+              'The default is HEAD. HEAD is correct for changes that are not committed.',
           ),
         head: z
           .string()
           .optional()
           .describe(
-            'What to compare to. Defaults to "working", meaning the current state of ' +
-              'the files on disk, committed or not. Pass a revision instead to review ' +
-              'work that is already committed.',
+            'The revision to compare to. The default is "working": the files on disk, ' +
+              'committed or not. For committed work, give a revision.',
           ),
         title: z
           .string()
           .optional()
           .describe(
-            'A short name for this review, shown in the list of them. ' +
-              'Defaults to the head commit subject. Give one when several reviews ' +
-              'are open at once and the commit subject would not tell them apart.',
+            'A short name for the review. The list of reviews shows it. The default is the ' +
+              'subject of the head commit. Give a name when the subject does not identify ' +
+              'the review.',
           ),
       },
     }),
@@ -149,10 +161,10 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         if (review.files.length === 0) {
           return text(
             [
-              renderReview(review, url),
+              renderReview(review, shownUrl(review.id)),
               '',
-              'Nothing differs between those two points, so there is nothing to review.',
-              'If you meant to review committed work, pass a base such as HEAD~1 or main.',
+              'The two revisions are the same. Thus there is nothing to review.',
+              'To review committed work, give a base, for example HEAD~1 or main.',
             ].join('\n'),
           )
         }
@@ -163,11 +175,13 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
 
         return text(
           [
-            renderReview(review, url),
+            renderReview(review, shownUrl(review.id)),
             '',
             opening_enabled
-              ? 'Opened it for them. Tell them it is up, then call await_review with this id.'
-              : 'Ask the human to open that URL and review. Then call await_review with this id.',
+              ? 'yart opened the review for the person. Tell them in one short sentence that ' +
+                'it is open. Do not send the URL. Then call await_review with this id.'
+              : 'Ask the person to open the URL and review the changes. Then call await_review ' +
+                'with this id.',
           ].join('\n'),
         )
       }),
@@ -176,20 +190,22 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   server.registerTool(
     'await_review',
     toolConfig({
-      title: 'Wait for the review to be submitted',
+      title: 'Wait for the verdict of the person',
       description:
-        'Block until the human submits the review, then return their open comments. ' +
-        'Returns what has been written so far if the wait times out, so a timeout is ' +
-        'not a failure — call it again to keep waiting.',
+        'Wait until the person submits the review. Then get their verdict and open comments. ' +
+        'If the time stops first, you get the comments so far. That is not an error. ' +
+        'Call it again to wait more.',
       input_schema: {
-        review_id: z.string().describe('The id returned by start_review.'),
+        review_id: z.string().describe('The id that start_review gave.'),
         timeout_seconds: z
           .number()
           .int()
           .positive()
           .max(MAX_WAIT_SECONDS)
           .optional()
-          .describe(`How long to wait before returning. Defaults to ${DEFAULT_WAIT_SECONDS}.`),
+          .describe(
+            `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
+          ),
       },
     }),
     async ({ review_id, timeout_seconds }) =>
@@ -201,7 +217,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           const pending = await daemon.getReview(review_id)
           return text(
             [
-              `Not submitted yet after ${seconds}s. Call await_review again to keep waiting.`,
+              `The person did not submit the review in ${seconds} seconds. Call await_review again to wait more.`,
               '',
               renderThreads(openThreads(pending), 'Comments so far'),
             ].join('\n'),
@@ -219,7 +235,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
               verdict,
               '',
               'No open comments.',
-              'Use reply_to_verdict to answer the summary, so it lands in the review.',
+              'To answer the summary, use reply_to_verdict. Thus the answer goes into the review.',
             ].join('\n'),
           )
         }
@@ -229,8 +245,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             '',
             renderThreads(open, 'Open comments'),
             '',
-            'Address these, commit, then call advance_review to re-anchor them onto your changes.',
-            'Reply on a comment with reply_to_thread, or on the verdict itself with reply_to_verdict.',
+            'Fix these comments. Then call advance_review, to move the comments onto your changes.',
+            'To answer a comment, use reply_to_thread. To answer the verdict, use reply_to_verdict.',
           ].join('\n'),
         )
       }),
@@ -241,14 +257,14 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     toolConfig({
       title: 'Read a review',
       description:
-        'Read a review and its open comments without waiting. Use this to check ' +
-        'progress; use await_review to block until the human is done.',
-      input_schema: { review_id: z.string().describe('The id returned by start_review.') },
+        'Read a review and its open comments at once, with no wait. To wait for the ' +
+        'verdict of the person, use await_review.',
+      input_schema: { review_id: z.string().describe('The id that start_review gave.') },
     }),
     async ({ review_id }) =>
       guard(async () => {
         const review = await daemon.getReview(review_id)
-        return text(renderReviewWithThreads(review, daemon.reviewUrl(review.id)))
+        return text(renderReviewWithThreads(review, shownUrl(review.id)))
       }),
   )
 
@@ -256,13 +272,13 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     'list_reviews',
     toolConfig({
       title: 'List reviews',
-      description: 'List reviews for this repository, newest first.',
+      description: 'List the reviews of this repository. The newest review is first.',
       input_schema: {},
     }),
     async () =>
       guard(async () => {
         const reviews = await daemon.listReviews()
-        if (reviews.length === 0) return text('No reviews yet.')
+        if (reviews.length === 0) return text('This repository has no reviews.')
         return text(reviews.map(renderReviewLine).join('\n'))
       }),
   )
@@ -270,42 +286,41 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   server.registerTool(
     'reply_to_thread',
     toolConfig({
-      title: 'Reply to a comment',
+      title: 'Answer a comment',
       description:
-        'Post a reply on a comment thread. Use this to explain what you changed, ' +
-        'or to push back when you disagree with the comment.',
+        'Answer a comment thread. Use it to tell what you changed, or to give the reason ' +
+        'when you do not agree with the comment.',
       input_schema: {
         review_id: z.string(),
         thread_id: z.string().describe('The id in brackets before each comment.'),
-        body: z.string().describe('The reply text.'),
+        body: z.string().describe('The text of the answer.'),
       },
     }),
     async ({ review_id, thread_id, body }) =>
       guard(async () => {
         await daemon.replyToThread(review_id, thread_id, body)
-        return text(`Replied to ${thread_id}.`)
+        return text(`You answered ${thread_id}.`)
       }),
   )
 
   server.registerTool(
     'reply_to_verdict',
     toolConfig({
-      title: 'Reply to the review verdict',
+      title: 'Answer the verdict',
       description:
-        'Answer the summary the human left when they submitted the review, as ' +
-        'opposed to a comment on a line. Use this to say what you did about the ' +
-        'verdict as a whole, to report work that was already finished, or to ' +
-        'disagree with it \u2014 so the answer lands in the review rather than ' +
-        'only in the chat.',
+        'Answer the summary of the verdict, not a comment on a line. Use it to tell what ' +
+        'you did about the verdict, to tell about work that you already completed, or to ' +
+        'give the reason when you do not agree. Thus the answer goes into the review, not ' +
+        'only into the chat.',
       input_schema: {
         review_id: z.string(),
-        body: z.string().describe('The reply text.'),
+        body: z.string().describe('The text of the answer.'),
         submission_id: z
           .string()
           .optional()
           .describe(
-            'The id in brackets beside the verdict. Defaults to the most recent ' +
-              'verdict, which is the one you were just given.',
+            'The id in brackets next to the verdict. The default is the newest verdict, ' +
+              'which is the verdict that you got last.',
           ),
       },
     }),
@@ -316,12 +331,12 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           const review = await daemon.getReview(review_id)
           const submission = latestSubmission(review)
           if (submission === null) {
-            return text('This review has not been submitted yet, so there is no verdict to answer.')
+            return text('This review has no verdict yet. Thus there is no verdict to answer.')
           }
           target = submission.id
         }
         await daemon.replyToVerdict(review_id, target, body)
-        return text(`Replied to the verdict on ${review_id}.`)
+        return text(`You answered the verdict on ${review_id}.`)
       }),
   )
 
@@ -330,8 +345,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     toolConfig({
       title: 'Resolve a comment',
       description:
-        'Mark a comment thread as addressed. Reply first when the change is not ' +
-        'self-evident, so the human can see what you did before it collapses.',
+        'Mark a comment thread as fixed. If the fix is not clear from the code, answer ' +
+        'the thread first. Thus the person can see what you did.',
       input_schema: {
         review_id: z.string(),
         thread_id: z.string().describe('The id in brackets before each comment.'),
@@ -340,27 +355,26 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     async ({ review_id, thread_id }) =>
       guard(async () => {
         await daemon.setThreadStatus(review_id, thread_id, 'resolved')
-        return text(`Resolved ${thread_id}.`)
+        return text(`${thread_id} is resolved.`)
       }),
   )
 
   server.registerTool(
     'advance_review',
     toolConfig({
-      title: 'Move the review onto your new commits',
+      title: 'Move the review onto your new changes',
       description:
-        'Re-anchor every comment onto your latest changes. Call this after ' +
-        'addressing the review, whether or not you committed: comments follow the ' +
-        'lines they referred to, and any whose line you rewrote are marked ' +
-        'outdated. Reopens the review so the human can look again.',
+        'Move all comments onto your newest changes. Call this after you fix the comments, ' +
+        'committed or not. Each comment follows its line. When you changed that line, the ' +
+        'comment becomes outdated. The review opens again for the person.',
       input_schema: {
         review_id: z.string(),
         head: z
           .string()
           .optional()
           .describe(
-            'What to compare to now. Defaults to the same kind of head the review ' +
-              'already had, so a review of uncommitted work re-reads the files on disk.',
+            'The revision to compare to now. The default is the same kind of head as before. ' +
+              'Thus a review of changes that are not committed reads the files on disk again.',
           ),
       },
     }),
@@ -369,9 +383,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         const review = await daemon.advanceReview(review_id, head)
         return text(
           [
-            renderReviewWithThreads(review, daemon.reviewUrl(review.id)),
+            renderReviewWithThreads(review, shownUrl(review.id)),
             '',
-            'Ask the human to look again, then call await_review.',
+            'Tell the person that the review is ready again. Then call await_review.',
           ].join('\n'),
         )
       }),
@@ -384,13 +398,12 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   server.registerTool(
     'get_reviewer_settings',
     toolConfig({
-      title: 'Read how an AI reviewer should run',
+      title: 'Read the settings of the AI reviewer',
       description:
-        'Read how the person wants an AI reviewer run: the model and effort to start it on, ' +
-        'what it should look for, and how many verdicts it gets per review. Call this before ' +
-        'starting a reviewer — a subagent or another session — for a review, start it on that ' +
-        'model and effort where the tool starting it allows, and include the instructions in ' +
-        'its brief.',
+        'Read how the person wants an AI reviewer to work: the model, the effort, the ' +
+        'instructions and the number of verdicts for each review. Call this before you start ' +
+        'a reviewer, as a subagent or as a different session. Start it on that model and ' +
+        'effort, if your tool allows it. Give it the instructions.',
       input_schema: {},
     }),
     async () =>
@@ -399,8 +412,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           [
             describeSettings(await daemon.getSettings()),
             '',
-            'The reviewer works with get_diff, submit_verdict and await_author, and must not be ' +
-              'the agent whose work is under review.',
+            'The reviewer uses get_diff, submit_verdict and await_author. The reviewer must not ' +
+              'be the agent whose work it reviews.',
           ].join('\n'),
         ),
       ),
@@ -409,11 +422,11 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   server.registerTool(
     'get_diff',
     toolConfig({
-      title: 'Read the changes under review',
+      title: 'Read the changes of a review',
       description:
-        'For an AI reviewer of someone else’s work: read a review’s changes as a diff, with ' +
-        'base and head line numbers on every line to aim comments at. Read it before each ' +
-        'submit_verdict, since the author may have advanced the review since.',
+        'For an AI reviewer of the work of a different agent. Read the changes of a review as ' +
+        'a diff. Each line has its base and head line numbers, for your comments. Read it ' +
+        'before each submit_verdict, because the author can move the review.',
       input_schema: { review_id: z.string().describe('The review to read.') },
     }),
     async ({ review_id }) =>
@@ -429,17 +442,20 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   server.registerTool(
     'submit_verdict',
     toolConfig({
-      title: 'Pass a verdict as an AI reviewer',
+      title: 'Give a verdict as an AI reviewer',
       description:
-        'For an AI reviewer only, never for reviewing your own work. Pass a verdict on a review ' +
-        'with your line comments and replies to existing comments, all in one go. approved: ' +
-        'nothing needs changing. changes_requested: the author must fix what you commented on. ' +
-        'commented: remarks that do not block. The review then waits for the author; follow ' +
-        'with await_author unless you approved.',
+        'Only for an AI reviewer. Do not use it on your own work. Give a verdict on a review, ' +
+        'with all your line comments and answers in one call. approved: nothing must change. ' +
+        'changes_requested: the author must fix your comments. commented: your comments do ' +
+        'not stop the work. Then the review waits for the author. If you did not approve, ' +
+        'call await_author.',
       input_schema: {
         review_id: z.string(),
         verdict: z.enum(['approved', 'changes_requested', 'commented']),
-        summary: z.string().optional().describe('The verdict as a whole, in a sentence or two.'),
+        summary: z
+          .string()
+          .optional()
+          .describe('The summary of the verdict, in one or two sentences.'),
         comments: z
           .array(
             z.object({
@@ -448,20 +464,22 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
               side: z
                 .enum(['base', 'head'])
                 .optional()
-                .describe('"base" for a removed line, "head" (the default) for any other.'),
+                .describe(
+                  '"base" for a removed line. "head" for all other lines. The default is "head".',
+                ),
               body: z.string(),
             }),
           )
           .optional()
-          .describe('New comments on lines, numbered as get_diff shows them.'),
+          .describe('New comments on lines. Use the line numbers that get_diff shows.'),
         replies: z
           .array(z.object({ thread_id: z.string(), body: z.string() }))
           .optional()
-          .describe('Answers to existing comments, by the id in brackets before each.'),
+          .describe('Answers to comments that exist. Use the id in brackets before each comment.'),
         reviewer_name: z
           .string()
           .optional()
-          .describe('A short name to comment under, such as "claude-reviewer".'),
+          .describe('A short name for your comments, for example "claude-reviewer".'),
       },
     }),
     async ({ review_id, verdict, summary, comments, replies, reviewer_name }) =>
@@ -477,10 +495,10 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         const used = reviewerRounds(review)
         const next =
           verdict === 'approved'
-            ? 'You approved it, so it goes to the person now. Your part is done.'
+            ? 'You approved it. Thus it goes to the person now. Your work is complete.'
             : used >= ai_review_rounds
-              ? 'That was your last round. Stop here: the person finishes the review.'
-              : 'Call await_author to wait for the author to answer or advance, then read get_diff again.'
+              ? 'That was your last round. Stop now. The person completes the review.'
+              : 'Call await_author to wait for the answer of the author. Then read get_diff again.'
         return text(
           [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
         )
@@ -492,9 +510,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     toolConfig({
       title: 'Wait for the author to answer',
       description:
-        'For an AI reviewer: block until the author has answered your last verdict — advanced ' +
-        'the review onto new work, or replied to a comment. Returns what is open if the wait ' +
-        'times out, so a timeout is not a failure: call it again to keep waiting.',
+        'For an AI reviewer. Wait until the author answers your last verdict: the author moves ' +
+        'the review onto new work, or answers a comment. If the time stops first, you get the ' +
+        'open comments. That is not an error. Call it again to wait more.',
       input_schema: {
         review_id: z.string(),
         timeout_seconds: z
@@ -503,7 +521,9 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           .positive()
           .max(MAX_WAIT_SECONDS)
           .optional()
-          .describe(`How long to wait before returning. Defaults to ${DEFAULT_WAIT_SECONDS}.`),
+          .describe(
+            `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
+          ),
       },
     }),
     async ({ review_id, timeout_seconds }) =>
@@ -512,24 +532,24 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         const verdict = latestSubmission(current)
         if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
           return failure(
-            'There is no verdict of yours on this review to answer. Read it with get_diff and ' +
-              'pass one with submit_verdict first.',
+            'You did not give a verdict on this review. Read the changes with get_diff. Then ' +
+              'give a verdict with submit_verdict.',
           )
         }
         const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
         const answered = await daemon.waitForAuthor(review_id, seconds * 1000)
         if (answered === null) {
           return text(
-            `The author has not answered after ${seconds}s. Call await_author again to keep waiting.`,
+            `The author did not answer in ${seconds} seconds. Call await_author again to wait more.`,
           )
         }
         return text(
           [
-            renderReviewWithThreads(answered, daemon.reviewUrl(answered.id)),
+            renderReviewWithThreads(answered, shownUrl(answered.id)),
             '',
-            'The author has answered. Read the changes with get_diff, check their replies above, ' +
-              'resolve the comments they fixed with resolve_thread, and pass your next verdict ' +
-              'with submit_verdict.',
+            'The author answered. Do these steps: read the changes with get_diff, and read the ' +
+              'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
+              'verdict with submit_verdict.',
           ].join('\n'),
         )
       }),
