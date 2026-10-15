@@ -150,6 +150,7 @@ export const SubmitPanel = ({
           Request changes
         </Button>
         <span className={styles.spacer} />
+        <span className={styles.markdown_note}>Markdown is supported</span>
         <AttachButton onFiles={(files) => void images.add(files)} />
       </div>
     </div>

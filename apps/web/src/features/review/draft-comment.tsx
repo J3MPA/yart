@@ -5,6 +5,7 @@ import { AttachmentList } from './attachments'
 import { CommentForm } from './comment-form'
 import type { Draft } from './local-review-state'
 import { draftDropped, draftEdited } from './local-review-slice'
+import { MarkdownBody } from './markdown-body'
 import styles from './review.module.css'
 
 export interface DraftCommentProps {
@@ -48,7 +49,7 @@ export const DraftComment = ({ review_id, draft }: DraftCommentProps) => {
           Drop
         </Button>
       </div>
-      <div className={styles.comment_body}>{draft.body}</div>
+      <MarkdownBody text={draft.body} />
       <AttachmentList review_id={review_id} attachments={draft.attachments} />
     </div>
   )

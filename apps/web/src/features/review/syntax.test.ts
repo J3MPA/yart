@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { languageFor, mayHighlight, tokenize } from './syntax'
+import { languageFor, mayHighlight, tokenize, tokenStyle } from './syntax'
 
 describe('languageFor', () => {
   it('reads the language from the extension', () => {
@@ -54,5 +54,26 @@ describe('tokenize', () => {
 
   it('leaves a very large file plain', async () => {
     expect(await tokenize('x'.repeat(300 * 1024), 'ts')).toBeNull()
+  })
+})
+
+describe('tokenStyle', () => {
+  it('gives the color and the font of a token', () => {
+    const style = tokenStyle({
+      content: 'a',
+      color: 'var(--yart-syntax-token-keyword)',
+      italic: true,
+      bold: true,
+    })
+    expect(style.color).toBe('var(--yart-syntax-token-keyword)')
+    expect(style.fontStyle).toBe('italic')
+    expect(style.fontWeight).toBe('bold')
+  })
+
+  it('sets nothing for a plain token', () => {
+    const style = tokenStyle({ content: 'a', color: null, italic: false, bold: false })
+    expect(style.color).toBeUndefined()
+    expect(style.fontStyle).toBeUndefined()
+    expect(style.fontWeight).toBeUndefined()
   })
 })

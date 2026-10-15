@@ -4,6 +4,7 @@ import { AuthorLabel } from './author-label'
 import { scrollToFile } from './file-anchors'
 import { relativeTime, VERDICT_LABEL } from './format'
 import { buildHistory, type HistoryBlock } from './review-history'
+import { MarkdownBody } from './markdown-body'
 import styles from './review.module.css'
 
 export interface ReviewHistoryPanelProps {
@@ -53,7 +54,9 @@ export const ReviewHistoryPanel = ({ review, open }: ReviewHistoryPanelProps) =>
         >
           <div className={styles.verdict_label}>{heading(block)}</div>
           {block.submission?.body !== null && block.submission?.body !== undefined && (
-            <div className={styles.verdict_body}>{block.submission.body}</div>
+            <div className={styles.verdict_body}>
+              <MarkdownBody text={block.submission.body} />
+            </div>
           )}
           <AttachmentList review_id={review.id} attachments={block.submission?.attachments} />
           {block.entries.map(({ comment, path, location }) => (
@@ -70,7 +73,7 @@ export const ReviewHistoryPanel = ({ review, open }: ReviewHistoryPanelProps) =>
                   </button>
                 )}
               </div>
-              <div className={styles.comment_body}>{comment.body}</div>
+              <MarkdownBody text={comment.body} />
               <AttachmentList review_id={review.id} attachments={comment.attachments} />
             </div>
           ))}

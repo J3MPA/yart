@@ -11,6 +11,7 @@ import { draftAdded } from './local-review-slice'
 import { describeQueryError, type QueryError } from './query-error'
 import { useAddCommentMutation, useSetThreadStatusMutation } from './review-api'
 import { unsentKey } from './unsent'
+import { MarkdownBody } from './markdown-body'
 import styles from './review.module.css'
 
 export interface CommentThreadProps {
@@ -67,7 +68,7 @@ export const CommentThread = ({ review_id, thread, drafting }: CommentThreadProp
       {thread.comments.map((comment) => (
         <div key={comment.id} className={styles.comment}>
           <AuthorLabel author={comment.author} author_name={comment.author_name} />
-          <div className={styles.comment_body}>{comment.body}</div>
+          <MarkdownBody text={comment.body} />
           <AttachmentList review_id={review_id} attachments={comment.attachments} />
         </div>
       ))}

@@ -15,6 +15,7 @@
     "@yart/core": "workspace:^",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
     "react-redux": "^9.3.0",
     "shiki": "^4.5.0"
   },

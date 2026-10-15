@@ -135,6 +135,7 @@ export const CommentForm = ({
         )}
         {onCancel !== undefined && <Button onClick={onCancel}>Cancel</Button>}
         <span className={styles.spacer} />
+        <span className={styles.markdown_note}>Markdown is supported</span>
         <AttachButton disabled={pending} onFiles={(files) => void images.add(files)} />
       </div>
     </div>

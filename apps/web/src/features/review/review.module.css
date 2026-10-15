@@ -290,11 +290,6 @@
   color: var(--yart-color-accent);
 }
 
-.comment_body {
-  white-space: pre-wrap;
-  font-size: var(--yart-text-sm);
-}
-
 .form {
   display: flex;
   flex-direction: column;
@@ -325,6 +320,12 @@
 .form_actions {
   display: flex;
   gap: var(--yart-space-2);
+}
+
+.markdown_note {
+  align-self: center;
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-text-muted);
 }
 
 .outdated {
@@ -569,8 +570,6 @@
 
 .verdict_body {
   margin-top: var(--yart-space-2);
-  white-space: pre-wrap;
-  font-size: var(--yart-text-sm);
 }
 
 .verdict_reply {

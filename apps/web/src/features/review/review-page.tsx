@@ -39,6 +39,7 @@ import { defaultRange, headSideOnly, roundOf, sinceHead, type DiffRange } from '
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import { useAiRoundLimit } from './use-ai-round-limit'
+import { MarkdownBody } from './markdown-body'
 import styles from './review.module.css'
 
 const VERDICT_CLASS: Record<ReviewVerdict, string> = {
@@ -250,13 +251,17 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
               <div className={styles.verdict_next}>{describeAiVerdict(phase)}</div>
             </>
           )}
-          {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
+          {submission.body !== null && (
+            <div className={styles.verdict_body}>
+              <MarkdownBody text={submission.body} />
+            </div>
+          )}
           <AttachmentList review_id={review_id} attachments={submission.attachments} />
 
           {submission.comments.map((comment) => (
             <div key={comment.id} className={styles.verdict_reply}>
               <AuthorLabel author={comment.author} author_name={comment.author_name} />
-              <div className={styles.comment_body}>{comment.body}</div>
+              <MarkdownBody text={comment.body} />
               <AttachmentList review_id={review_id} attachments={comment.attachments} />
             </div>
           ))}
