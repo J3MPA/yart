@@ -31,6 +31,20 @@ export interface HistoryBlock {
 export const hasAiReview = (review: Review): boolean =>
   review.submissions.some((submission) => submissionAuthor(submission) === 'reviewer')
 
+/**
+ * Tells if the history opens when the page opens. It opens when an AI reviewer
+ * took part, and when the agent wrote after the last verdict. Then the history
+ * has an exchange that the person did not read yet.
+ */
+export const historyOpens = (review: Review): boolean => {
+  if (hasAiReview(review)) return true
+  const last = review.submissions[review.submissions.length - 1]
+  if (last === undefined) return false
+  return [...review.threads.flatMap((thread) => thread.comments), ...last.comments].some(
+    (comment) => comment.author === 'agent' && comment.created_at > last.created_at,
+  )
+}
+
 const sameParty = (author: CommentAuthor, submission: ReviewSubmission): boolean =>
   author === submissionAuthor(submission)
 
@@ -85,4 +99,15 @@ export const buildHistory = (review: Review): HistoryBlock[] => {
   return [before, ...verdicts, since]
     .map((block) => ({ ...block, entries: [...block.entries].sort(byTime) }))
     .filter((block) => block.kind === 'verdict' || block.entries.length > 0)
+}
+
+/**
+ * Tells if the page shows the history. With one verdict and no line comments,
+ * the history would only repeat the verdict banner above it.
+ */
+export const showsHistory = (review: Review): boolean => {
+  const blocks = buildHistory(review)
+  return (
+    blocks.length > 1 || blocks.some((block) => block.entries.some((entry) => entry.path !== null))
+  )
 }
