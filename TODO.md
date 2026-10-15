@@ -289,8 +289,9 @@ activity. Thus the person sees that an AI review moves.
 The work that remains, in order:
 
 1. ~~**The tools of the reviewer.**~~ Done: `get_diff`, `submit_verdict` and
-   `await_author`. `await_author` returns when the author moves the review or
-   replies. A reply alone can mean that the author disagrees. A round limit,
+   `await_author`. `await_author` returns when the author moves the review, or
+   answers each open comment of the reviewer. An answer alone can mean that the
+   author disagrees. A round limit,
    three by default, is on the Settings page. The daemon makes sure of the
    limit, and the two agents get a message when the reviewer reaches it.
    `get_reviewer_settings` gives the model, effort and instructions of the

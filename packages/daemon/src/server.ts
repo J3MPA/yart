@@ -558,11 +558,17 @@ export const createServer = ({
     return context.json<FileContents>({ ...file, base_content, head_content })
   })
 
-  /** The hunks of each file. git makes them, thus the display agrees with the anchors. */
+  /**
+   * The hunks of each file. git makes them, thus the display agrees with the anchors.
+   * With `since`, the head of an earlier round, only the changes after that round.
+   */
   app.get('/api/reviews/:id/diff', async (context) => {
-    const service = await repositories.locate(context.req.param('id'))
-    const review = await service.get(context.req.param('id'))
-    return context.json(await buildReviewDiff(review.repo_path, review.files))
+    const id = context.req.param('id')
+    const service = await repositories.locate(id)
+    const review = await service.get(id)
+    const since = context.req.query('since')
+    const files = since === undefined ? review.files : await service.filesSince(id, since)
+    return context.json(await buildReviewDiff(review.repo_path, files))
   })
 
   app.post('/api/reviews/:id/threads', async (context) => {

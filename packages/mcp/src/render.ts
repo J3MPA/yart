@@ -27,24 +27,46 @@ import type { Review } from '@yart/daemon'
  * Numbers the images of one tool result, in the order that the text shows them.
  * The text gives each comment the numbers of its images, and the images follow
  * the text with the same numbers.
+ *
+ * An image that the agent already has is not sent again. Each image costs many
+ * tokens, and the agent gets nothing new from an image that it saw or that it
+ * uploaded. The label says that such an image was sent before.
  */
 export class ImageNumbers {
   private readonly order: Attachment[] = []
+  private readonly sent: ReadonlySet<string>
+
+  /** `sent` has the ids of the images that the agent already has. */
+  constructor(sent: ReadonlySet<string> = new Set()) {
+    this.sent = new Set(sent)
+  }
 
   /** The label for the images of one comment, or an empty string when it has none. */
   label(attachments: readonly Attachment[] | undefined): string {
     if (attachments === undefined || attachments.length === 0) return ''
-    const numbers = attachments.map((attachment) => {
-      const index = this.order.findIndex((known) => known.id === attachment.id)
-      if (index !== -1) return index + 1
-      this.order.push(attachment)
-      return this.order.length
+    const labels = attachments.map((attachment) => {
+      let index = this.order.findIndex((known) => known.id === attachment.id)
+      if (index === -1) {
+        this.order.push(attachment)
+        index = this.order.length - 1
+      }
+      return this.sent.has(attachment.id)
+        ? `image ${index + 1} (sent before)`
+        : `image ${index + 1}`
     })
-    return `  [${numbers.map((number) => `image ${number}`).join(', ')}]`
+    return `  [${labels.join(', ')}]`
   }
 
+  /** All images in the text, with their numbers in this order. */
   get attachments(): readonly Attachment[] {
     return this.order
+  }
+
+  /** The images in the text that the agent does not have yet, with their numbers. */
+  get fresh(): { number: number; attachment: Attachment }[] {
+    return this.order
+      .map((attachment, index) => ({ number: index + 1, attachment }))
+      .filter(({ attachment }) => !this.sent.has(attachment.id))
   }
 }
 
@@ -225,51 +247,117 @@ export const renderReviewWithThreads = (
 }
 
 /**
- * After this count of lines, the diff stops. A reviewer reads it into its
- * context. For a change this large, it is better to read each file with git.
+ * The most characters of one diff result, about 15,000 tokens. An MCP client
+ * can cut a larger result. Claude Code cuts at 25,000 tokens by default. Then
+ * the reviewer would not see what the result leaves out.
  */
-export const MAX_DIFF_LINES = 3000
+export const MAX_DIFF_CHARS = 60_000
+
+/** A longer line, such as minified code, is cut. One line must not fill the result. */
+export const MAX_DIFF_LINE_CHARS = 400
 
 const MARKER: Record<DiffLine['kind'], string> = { context: ' ', added: '+', removed: '-' }
 
-const renderDiffLine = (line: DiffLine): string =>
-  `${MARKER[line.kind]} ${String(line.base_line ?? '').padStart(5)} ${String(line.head_line ?? '').padStart(5)}  ${codeText(line.text)}`
+const renderDiffLine = (line: DiffLine): string => {
+  const text = codeText(line.text)
+  const shown =
+    text.length > MAX_DIFF_LINE_CHARS
+      ? `${text.slice(0, MAX_DIFF_LINE_CHARS)} [${text.length - MAX_DIFF_LINE_CHARS} more characters]`
+      : text
+  return `${MARKER[line.kind]} ${String(line.base_line ?? '').padStart(5)} ${String(line.head_line ?? '').padStart(5)}  ${shown}`
+}
+
+const renderFileDiff = (file: FileDiff): string[] => {
+  const renamed = file.old_path === null ? '' : ` (was ${quotePath(file.old_path)})`
+  const lines = ['', `=== ${quotePath(file.path)}  [${file.status}]${renamed}`]
+  if (file.is_binary) return [...lines, '  (binary file, not shown)']
+  for (const hunk of file.hunks) {
+    lines.push(codeText(hunk.header))
+    for (const line of hunk.lines) lines.push(renderDiffLine(line))
+  }
+  return lines
+}
+
+export interface DiffOptions {
+  /**
+   * The head of an earlier round. The files then show only the changes after
+   * it, and the first number of each line is a line of that round.
+   */
+  since_sha?: string | null
+  max_chars?: number
+}
 
 /**
  * The diff of a review, for an AI reviewer to read. Each line has the two line
  * numbers. Thus a comment can go on the side that it is about.
+ *
+ * The result stops at `max_chars`. Then a note at the start, not at the end,
+ * names each file that the result does not show. A client that cuts the end of
+ * a large result does not cut the note.
  */
-export const renderDiff = (files: readonly FileDiff[], review: Review): string => {
-  const out: string[] = [
-    `Diff of ${escapeControl(review.title)} (${review.base_sha.slice(0, 8)}..${review.head_sha.slice(0, 8)}), ` +
-      `${files.length} file${files.length === 1 ? '' : 's'}.`,
-    'The columns are: marker, base line, head line and text. For a removed (-) line, use ' +
-      'side "base" and the base line. For all other lines, use side "head" and the head line.',
+export const renderDiff = (
+  files: readonly FileDiff[],
+  review: Review,
+  { since_sha = null, max_chars = MAX_DIFF_CHARS }: DiffOptions = {},
+): string => {
+  const from = since_sha ?? review.base_sha
+  const count = `${files.length} file${files.length === 1 ? '' : 's'}`
+  const range = `${from.slice(0, 8)}..${review.head_sha.slice(0, 8)}`
+  const header = [
+    since_sha === null
+      ? `Diff of ${escapeControl(review.title)} (${range}), ${count}.`
+      : `Changes of ${escapeControl(review.title)} after your last verdict (${range}), ${count}.`,
+    since_sha === null
+      ? 'The columns are: marker, base line, head line and text. For a removed (-) line, use ' +
+        'side "base" and the base line. For all other lines, use side "head" and the head line.'
+      : 'The columns are: marker, line in your last round, head line and text. Comment only ' +
+        'with side "head" and the head line. To comment on a removed line of the base, read ' +
+        'get_diff without since_last_verdict.',
   ]
-  let written = 0
-  for (const [index, file] of files.entries()) {
-    if (written >= MAX_DIFF_LINES) {
-      const left = files.slice(index).map((rest) => quotePath(rest.path))
-      out.push(
-        '',
-        `The diff stops at ${MAX_DIFF_LINES} lines. These files are not shown: ${left.join(', ')}. ` +
-          `Read them with: git diff ${review.base_sha} ${review.head_sha} -- <path>`,
-      )
-      break
-    }
-    const renamed = file.old_path === null ? '' : ` (was ${quotePath(file.old_path)})`
-    out.push('', `=== ${quotePath(file.path)}  [${file.status}]${renamed}`)
-    if (file.is_binary) {
-      out.push('  (binary file, not shown)')
+
+  const body: string[] = []
+  let used = header.join('\n').length
+  let cut: string | null = null
+  const left: string[] = []
+  for (const file of files) {
+    if (cut !== null || left.length > 0) {
+      left.push(quotePath(file.path))
       continue
     }
-    for (const hunk of file.hunks) {
-      out.push(codeText(hunk.header))
-      for (const line of hunk.lines) {
-        out.push(renderDiffLine(line))
-        written += 1
-      }
+    const lines = renderFileDiff(file)
+    const size = lines.join('\n').length + 1
+    if (used + size <= max_chars) {
+      body.push(...lines)
+      used += size
+      continue
+    }
+    // A file that does not fit shows its start, if the result has space for
+    // more than its name. Then the files after it are left out.
+    const fits: string[] = []
+    for (const line of lines) {
+      if (used + line.length + 1 > max_chars) break
+      fits.push(line)
+      used += line.length + 1
+    }
+    if (fits.length > 2) {
+      body.push(...fits)
+      cut = quotePath(file.path)
+    } else {
+      left.push(quotePath(file.path))
     }
   }
-  return out.join('\n')
+
+  const note: string[] = []
+  if (cut !== null || left.length > 0) {
+    note.push(
+      `This result stops at ${max_chars} characters.` +
+        (cut === null ? '' : ` It shows only the start of ${cut}.`) +
+        (left.length === 0
+          ? ''
+          : ` It does not show ${left.length} file${left.length === 1 ? '' : 's'}: ${left.join(', ')}.`) +
+        ' Read them with get_diff and the paths parameter, or with: ' +
+        `git diff ${from} ${review.head_sha} -- <path>`,
+    )
+  }
+  return [...header, ...note, ...body].join('\n')
 }

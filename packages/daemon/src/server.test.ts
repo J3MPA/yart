@@ -469,6 +469,20 @@ describe('GET /api/reviews/:id/diff', () => {
   it('returns 404 for an unknown review', async () => {
     expect((await app.request('/api/reviews/nope/diff')).status).toBe(404)
   })
+
+  it('gives only the changes after an earlier round, and refuses other revisions', async () => {
+    const created = await openReview()
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    const advanced = (await (
+      await post(`/api/reviews/${created.id}/advance`, { head: 'HEAD' })
+    ).json()) as Review
+    const since = await app.request(
+      `/api/reviews/${created.id}/diff?since=${advanced.rounds[0] as string}`,
+    )
+    expect(((await since.json()) as { path: string }[]).map((file) => file.path)).toEqual(['b.txt'])
+    expect((await app.request(`/api/reviews/${created.id}/diff?since=${base}`)).status).toBe(400)
+  })
 })
 
 describe('serving the web UI', () => {

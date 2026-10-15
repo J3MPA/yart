@@ -619,6 +619,21 @@ export class ReviewService {
     })
   }
 
+  /**
+   * The files that changed from the head of an earlier round to the current
+   * head. An AI reviewer reads this diff in a later round, in place of the full
+   * diff again. The earlier head must be a head of the review, thus a caller
+   * cannot read other parts of the repository through it.
+   */
+  async filesSince(id: string, since_sha: string): Promise<ReviewFile[]> {
+    const review = await this.get(id)
+    if (!review.rounds.includes(since_sha)) {
+      throw new ReviewError(`${since_sha} is not the head of a round of this review`, 400)
+    }
+    const changes = await listChangedFiles(review.repo_path, since_sha, review.head_sha)
+    return changes.map(toReviewFile)
+  }
+
   /** Tells if the store of this repository keeps a review. */
   async holds(id: string): Promise<boolean> {
     return (await this.store.load(id)) !== null
