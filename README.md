@@ -967,6 +967,18 @@ An MCP server stops with its client, but a review must stay after that.
 | `resolve_thread`   | Mark a comment as done                                |
 | `advance_review`   | Attach each comment to the new commits                |
 
+`start_review` accepts `base`, `head`, `title` and `description`.
+`advance_review` accepts `review_id`, `head` and `description`.
+
+**The agent describes its change.** The `description` tells what changed, what
+the agent tested, and what needs the most attention. It is Markdown, with
+10,000 characters at most. Each round keeps its own description. The review
+page shows it under the header. In round 2 and later, the page shows the
+description of the current round as "What changed in this round". The
+description of the review stays available below it. An AI reviewer gets the
+descriptions from `get_review`, and the description of a new round from
+`await_author`. The agent under review does not get its own text back.
+
 An AI reviewer has its own tools, to review work that it did not write. Only a
 server that runs with `--role reviewer` has them. It also has `get_review`,
 `list_reviews` and `resolve_thread`:

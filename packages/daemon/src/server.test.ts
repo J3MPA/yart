@@ -358,6 +358,76 @@ describe('the review loop', () => {
   })
 })
 
+describe('descriptions', () => {
+  it('keeps a description for each round', async () => {
+    const created = (await (
+      await post('/api/reviews', { base, description: '  Adds TARGET.\n\nTested by hand.  ' })
+    ).json()) as Review
+    expect(created.round_descriptions).toEqual(['Adds TARGET.\n\nTested by hand.'])
+
+    repo.write('a.txt', 'alpha\nTARGET\ngamma\nDELTA\n')
+    repo.commit('round two')
+    const advanced = (await (
+      await post(`/api/reviews/${created.id}/advance`, { description: 'Changes delta.' })
+    ).json()) as Review
+    expect(advanced.rounds).toHaveLength(2)
+    expect(advanced.round_descriptions).toEqual([
+      'Adds TARGET.\n\nTested by hand.',
+      'Changes delta.',
+    ])
+
+    repo.write('a.txt', 'alpha\nTARGET\nGAMMA\nDELTA\n')
+    repo.commit('round three')
+    const third = (await (await post(`/api/reviews/${created.id}/advance`, {})).json()) as Review
+    expect(third.round_descriptions).toEqual([
+      'Adds TARGET.\n\nTested by hand.',
+      'Changes delta.',
+      null,
+    ])
+  })
+
+  it('stores an empty description as none', async () => {
+    const created = (await (
+      await post('/api/reviews', { base, description: '  ' })
+    ).json()) as Review
+    expect(created.round_descriptions).toEqual([null])
+  })
+
+  it('ignores the description when the head did not move', async () => {
+    const created = await openReview()
+    const same = (await (
+      await post(`/api/reviews/${created.id}/advance`, { description: 'Nothing.' })
+    ).json()) as Review
+    expect(same.rounds).toHaveLength(1)
+    expect(same.round_descriptions).toEqual([null])
+  })
+
+  it('refuses a description that is not a string, or that is too long', async () => {
+    expect((await post('/api/reviews', { base, description: 42 })).status).toBe(400)
+    const long = 'x'.repeat(10_001)
+    expect((await post('/api/reviews', { base, description: long })).status).toBe(400)
+
+    const created = await openReview()
+    repo.write('a.txt', 'alpha\nTARGET\ngamma\nDELTA\n')
+    repo.commit('round two')
+    const response = await post(`/api/reviews/${created.id}/advance`, { description: ['x'] })
+    expect(response.status).toBe(400)
+    const unchanged = (await (await app.request(`/api/reviews/${created.id}`)).json()) as Review
+    expect(unchanged.rounds).toHaveLength(1)
+  })
+
+  it('reads a review from before descriptions existed', async () => {
+    const created = await openReview()
+    const file = join(repo.path, '.git', 'yart', 'reviews', `${created.id}.json`)
+    const old = JSON.parse(readFileSync(file, 'utf8')) as Partial<Review>
+    delete old.round_descriptions
+    writeFileSync(file, JSON.stringify(old))
+
+    const loaded = (await (await app.request(`/api/reviews/${created.id}`)).json()) as Review
+    expect(loaded.round_descriptions).toEqual([null])
+  })
+})
+
 describe('writes at the same time', () => {
   const current = async (id: string): Promise<Review> =>
     (await (await app.request(`/api/reviews/${id}`)).json()) as Review

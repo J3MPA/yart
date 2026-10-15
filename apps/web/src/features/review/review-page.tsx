@@ -8,6 +8,7 @@ import { aiPhase, personSubmittedOnHead } from './ai-review'
 import { AuthorLabel } from './author-label'
 import { historyOpens, showsHistory } from './review-history'
 import { ReviewHistoryPanel } from './review-history-panel'
+import { ReviewDescription } from './review-description'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
 import { unsentKey } from './unsent'
@@ -226,6 +227,8 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           {!submitting && held > 0 && ` (${held})`}
         </Button>
       </header>
+
+      <ReviewDescription review={review} />
 
       {submission !== null && (
         <div

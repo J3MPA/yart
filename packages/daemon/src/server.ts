@@ -7,6 +7,7 @@ import { parse as parseCookies } from 'hono/utils/cookie'
 import {
   hasControlCharacters,
   latestSubmission,
+  MAX_DESCRIPTION_LENGTH,
   submissionAuthor,
   type CommentAuthor,
   type SubmissionAuthor,
@@ -140,6 +141,21 @@ const parseSpeaker = (
     throw new ReviewError(`author_name must be at most ${MAX_AUTHOR_NAME} characters`, 400)
   }
   return { author: 'reviewer', author_name }
+}
+
+/**
+ * The description of a round, or null when the request gives none. A
+ * description can have many lines. The text for an agent puts such a body into
+ * a block, thus a line break is safe.
+ */
+const parseDescription = (value: unknown): string | null => {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') throw new ReviewError('description must be a string', 400)
+  const description = value.trim()
+  if (description.length > MAX_DESCRIPTION_LENGTH) {
+    throw new ReviewError(`description must be at most ${MAX_DESCRIPTION_LENGTH} characters`, 400)
+  }
+  return description === '' ? null : description
 }
 
 /** Only the person or an AI reviewer gives a verdict. The agent under review does not. */
@@ -501,6 +517,7 @@ export const createServer = ({
       base?: string
       head?: string
       title?: string
+      description?: unknown
       repo_path?: string
     }>()
     if (body.repo_path !== undefined && typeof body.repo_path !== 'string') {
@@ -513,6 +530,7 @@ export const createServer = ({
     ) {
       throw new ReviewError('title must be one line, with no control characters', 400)
     }
+    const description = parseDescription(body.description)
     const { service, repo_root } = await repositories.resolve(body.repo_path)
     // The default is uncommitted work against HEAD. An agent that just finished
     // its edits wants this, and cannot give it as a revision range.
@@ -521,6 +539,7 @@ export const createServer = ({
       base: body.base === undefined || body.base === '' ? 'HEAD' : body.base,
       head: body.head,
       title: body.title,
+      description,
     })
     return context.json(review, 201)
   })
@@ -751,8 +770,11 @@ export const createServer = ({
 
   app.post('/api/reviews/:id/advance', async (context) => {
     const service = await repositories.locate(context.req.param('id'))
-    const body = await context.req.json<{ head?: string }>().catch(() => ({ head: undefined }))
-    return context.json(await service.advanceHead(context.req.param('id'), body.head))
+    const body = await context.req
+      .json<{ head?: string; description?: unknown }>()
+      .catch(() => ({ head: undefined, description: undefined }))
+    const description = parseDescription(body.description)
+    return context.json(await service.advanceHead(context.req.param('id'), body.head, description))
   })
 
   /**

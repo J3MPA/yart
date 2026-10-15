@@ -51,6 +51,11 @@ export {
   type ReviewProgress,
 } from './progress.ts'
 export { agentActivity } from './activity.ts'
+export {
+  MAX_DESCRIPTION_LENGTH,
+  reviewDescriptions,
+  type ReviewDescriptions,
+} from './description.ts'
 export { splitLines } from './lines.ts'
 export { buildLineMap, type LineMapOptions } from './line-map.ts'
 export { captureContext, DEFAULT_CONTEXT_RADIUS } from './context.ts'

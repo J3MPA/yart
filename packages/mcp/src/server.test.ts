@@ -481,6 +481,67 @@ describe('advance_review', () => {
   })
 })
 
+describe('descriptions', () => {
+  it('keeps the description of each round for the review page', async () => {
+    const id = idFrom(
+      await call('start_review', { base, head: 'HEAD', description: '- Adds TARGET.\n- Tested.' }),
+    )
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    await call('advance_review', { review_id: id, head: 'HEAD', description: 'Adds b.txt.' })
+
+    const stored = (await (await daemon.asPerson(`/api/reviews/${id}`)).json()) as {
+      round_descriptions: (string | null)[]
+    }
+    expect(stored.round_descriptions).toEqual(['- Adds TARGET.\n- Tested.', 'Adds b.txt.'])
+  })
+
+  it('does not give the author its own description again', async () => {
+    const started = await call('start_review', { base, head: 'HEAD', description: 'Adds TARGET.' })
+    expect(started).not.toContain('Adds TARGET.')
+    expect(await call('get_review', { review_id: idFrom(started) })).not.toContain('Adds TARGET.')
+  })
+
+  it('gives the reviewer the description of the review and of the current round', async () => {
+    const id = idFrom(
+      await call('start_review', { base, head: 'HEAD', description: '- Adds TARGET.\n- Tested.' }),
+    )
+    const first = await review('get_review', { review_id: id })
+    expect(first).toContain('Description of the review:\n  | - Adds TARGET.\n  | - Tested.')
+    expect(first).not.toContain('What changed in round')
+
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    await call('advance_review', { review_id: id, head: 'HEAD', description: 'Adds b.txt.' })
+    const second = await review('get_review', { review_id: id })
+    expect(second).toContain('Description of the review:')
+    expect(second).toContain('What changed in round 2: Adds b.txt.')
+  })
+
+  it('gives the reviewer only the description of a new round when the author answers', async () => {
+    const id = idFrom(
+      await call('start_review', { base, head: 'HEAD', description: 'Adds TARGET.' }),
+    )
+    await review('submit_verdict', { review_id: id, verdict: 'changes_requested' })
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    await call('advance_review', { review_id: id, head: 'HEAD', description: 'Adds b.txt.' })
+
+    const answered = await review('await_author', { review_id: id, timeout_seconds: 1 })
+    expect(answered).toContain('What changed in round 2: Adds b.txt.')
+    expect(answered).not.toContain('Description of the review')
+  })
+
+  it('reports a description that is too long as a tool error', async () => {
+    const error = await callExpectingError('start_review', {
+      base,
+      head: 'HEAD',
+      description: 'x'.repeat(10_001),
+    })
+    expect(error).toContain('description must be at most 10000 characters')
+  })
+})
+
 describe('an AI reviewer', () => {
   const settle = (changes: Record<string, unknown>) =>
     daemon.asPerson('/api/settings', { method: 'PATCH', body: JSON.stringify(changes) })

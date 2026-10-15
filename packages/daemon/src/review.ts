@@ -58,6 +58,8 @@ export interface CreateReviewParams {
   head?: string
   /** Replaces the default, which is the subject of the head commit. */
   title?: string
+  /** What the agent changed, what it tested, and where the risk is. */
+  description?: string | null
 }
 
 /**
@@ -232,6 +234,7 @@ export class ReviewService {
     base,
     head = WORKING_TREE,
     title,
+    description = null,
   }: CreateReviewParams): Promise<Review> {
     const id = randomUUID()
     const base_sha = await resolveRev(repo_path, base)
@@ -262,6 +265,7 @@ export class ReviewService {
       files: changes.map(toReviewFile),
       threads: [],
       rounds: [head_sha],
+      round_descriptions: [description],
       created_at,
       updated_at: created_at,
       archived_at: null,
@@ -519,8 +523,11 @@ export class ReviewService {
    * That function uses only the blob hash as the key. Two files with the same
    * content have the same hash, thus one resolution could not describe the two.
    * The service keeps the line maps in a cache, which gives the same saving.
+   *
+   * The description belongs to the new round. When the head did not move, there
+   * is no new round, and the service ignores the description.
    */
-  advanceHead(id: string, head?: string): Promise<Review> {
+  advanceHead(id: string, head?: string, description: string | null = null): Promise<Review> {
     return this.writes.run(id, async () => {
       const review = await this.get(id)
 
@@ -602,6 +609,7 @@ export class ReviewService {
         files: from_base.map(toReviewFile),
         threads,
         rounds: [...review.rounds, head_sha],
+        round_descriptions: [...review.round_descriptions, description],
       })
     })
   }
