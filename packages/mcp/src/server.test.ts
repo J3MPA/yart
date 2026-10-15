@@ -439,6 +439,7 @@ describe('advance_review', () => {
 
     const rendered = await call('advance_review', { review_id })
     expect(rendered).toContain('a.txt:3  (moved from a.txt:2)')
+    expect(rendered).toContain('Files that changed in this round (1): a.txt')
     expect(rendered).toContain('round 2')
     expect(rendered).toContain('status:  open')
   })

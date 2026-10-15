@@ -24,8 +24,10 @@ import { describeRange, relativeTime, repositoryName, VERDICT_LABEL } from './fo
 import {
   useAddSubmissionCommentMutation,
   useGetReviewDiffQuery,
+  useGetReviewDiffSinceQuery,
   useGetReviewQuery,
 } from './review-api'
+import { defaultRange, headSideOnly, roundOf, sinceHead, type DiffRange } from './round-range'
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import styles from './review.module.css'
@@ -76,7 +78,27 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   // The order is set here, not in the sidebar. Thus the tree and the diffs below
   // it are one list, in the same order.
   const files = useMemo(() => orderFilesByTree(diff_query.data ?? []), [diff_query.data])
-  const paths = useMemo(() => files.map((file) => file.path), [files])
+
+  // The diff can show only the work after an earlier round. The page keeps the
+  // first choice. Without this, the page would change the view under the person
+  // when they submit a verdict.
+  const since_sha = review === undefined ? null : sinceHead(review)
+  const [range_choice, setRangeChoice] = useState<DiffRange | null>(null)
+  useEffect(() => {
+    if (review !== undefined && range_choice === null) setRangeChoice(defaultRange(review))
+  }, [review, range_choice])
+  const range: DiffRange =
+    since_sha === null
+      ? 'all'
+      : (range_choice ?? (review === undefined ? 'all' : defaultRange(review)))
+  const since_query = useGetReviewDiffSinceQuery(
+    { review_id, since: since_sha ?? '' },
+    { skip: since_sha === null },
+  )
+  const since_files = useMemo(() => orderFilesByTree(since_query.data ?? []), [since_query.data])
+  const changed = useMemo(() => new Set(since_files.map((file) => file.path)), [since_files])
+  const shown = range === 'since' ? since_files : files
+  const paths = useMemo(() => shown.map((file) => file.path), [shown])
   const active_path = useActiveFile(paths)
 
   const local = useAppSelector((state) => localFor(state.local_reviews, review_id))
@@ -103,7 +125,11 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
     [files, local],
   )
 
-  if (review_query.isLoading || diff_query.isLoading) {
+  if (
+    review_query.isLoading ||
+    diff_query.isLoading ||
+    (range === 'since' && since_query.isLoading)
+  ) {
     return <p className={styles.notice}>Loading review…</p>
   }
 
@@ -125,6 +151,14 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const submitted = submission !== null
 
   const held = local.drafts.length
+  const diff_error = range === 'since' ? since_query.error : diff_query.error
+  // In the view of the new work, the base side of a row is a line of an earlier
+  // round. Thus only the anchors on the head side can show there.
+  const shown_threads = range === 'since' ? headSideOnly(threads_by_anchor) : threads_by_anchor
+  const shown_drafting: Drafting =
+    range === 'since' ? { ...drafting, by_anchor: headSideOnly(drafting.by_anchor) } : drafting
+  const tab = (value: DiffRange) =>
+    [styles.tab, range === value ? styles.tab_selected : ''].filter(Boolean).join(' ')
 
   return (
     <>
@@ -141,6 +175,30 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           {review.head_branch === null ? '' : `${review.head_branch} · `}
           {describeRange(review)} · round {review.rounds.length} · {relativeTime(review.created_at)}
         </span>
+        {since_sha !== null && (
+          <div
+            className={[styles.list_tabs, styles.range_tabs].join(' ')}
+            role="group"
+            aria-label="Which changes to show"
+          >
+            <button
+              type="button"
+              className={tab('all')}
+              aria-pressed={range === 'all'}
+              onClick={() => setRangeChoice('all')}
+            >
+              All changes
+            </button>
+            <button
+              type="button"
+              className={tab('since')}
+              aria-pressed={range === 'since'}
+              onClick={() => setRangeChoice('since')}
+            >
+              Since round {roundOf(review, since_sha)}
+            </button>
+          </div>
+        )}
         <span className={styles.spacer} />
         <span className={styles.badge}>
           {open_count} open / {review.threads.length}
@@ -217,30 +275,31 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         />
       )}
 
-      {diff_query.isError ? (
+      {diff_error !== undefined ? (
         <p className={styles.notice}>
-          Could not load the diff: {describeQueryError(diff_query.error).message}
+          Could not load the diff: {describeQueryError(diff_error).message}
         </p>
       ) : (
-        files.length === 0 && <p className={styles.notice}>Nothing changed in this range.</p>
+        shown.length === 0 && <p className={styles.notice}>Nothing changed in this range.</p>
       )}
 
-      {files.length > 0 && (
+      {shown.length > 0 && (
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <FileSidebar
-              files={files}
+              files={shown}
               threads={review.threads}
               active_path={active_path}
               folded={folded}
               reviewed={reviewed}
+              changed={range === 'all' ? changed : new Set()}
               onSelect={scrollToFile}
               onToggleDirectory={(path) => dispatch(directoryToggled({ review_id, path }))}
             />
           </aside>
 
           <div className={styles.diffs}>
-            {files.map((file) => {
+            {shown.map((file) => {
               const blob = reviewBlob(file)
               return (
                 <DiffFile
@@ -248,11 +307,13 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
                   review_id={review_id}
                   file={file}
                   threads={review.threads}
-                  threads_by_anchor={threads_by_anchor}
-                  drafting={drafting}
+                  threads_by_anchor={shown_threads}
+                  drafting={shown_drafting}
                   composing={composing}
                   reviewed={reviewed.has(file.path)}
                   can_review={blob !== null}
+                  since={range === 'since' ? since_sha : null}
+                  changed_in_round={range === 'all' && changed.has(file.path)}
                   onComposingChange={setComposing}
                   onReviewedChange={(next) =>
                     dispatch(

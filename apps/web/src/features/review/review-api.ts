@@ -136,12 +136,23 @@ export const reviewApi = createApi({
       query: (review_id) => `/reviews/${review_id}/diff`,
       providesTags: ['Diff'],
     }),
+    /** Only the changes after `since`, the head of an earlier round. */
+    getReviewDiffSince: builder.query<FileDiff[], { review_id: string; since: string }>({
+      query: ({ review_id, since }) =>
+        `/reviews/${review_id}/diff?since=${encodeURIComponent(since)}`,
+      providesTags: ['Diff'],
+    }),
     // Requested for each file, not with the diff. The page asks for a file when
     // someone opens a collapsed run, or when the file comes near the screen and
     // gets syntax highlights. Full files for all of a large review would be a
     // lot of text to send at the start.
-    getReviewFile: builder.query<FileContents, { review_id: string; path: string }>({
-      query: ({ review_id, path }) => `/reviews/${review_id}/file?path=${encodeURIComponent(path)}`,
+    getReviewFile: builder.query<
+      FileContents,
+      { review_id: string; path: string; since?: string | null }
+    >({
+      query: ({ review_id, path, since }) =>
+        `/reviews/${review_id}/file?path=${encodeURIComponent(path)}` +
+        (since === undefined || since === null ? '' : `&since=${encodeURIComponent(since)}`),
       providesTags: ['Diff'],
     }),
     addThread: builder.mutation<Review, AddThreadArgs>({
@@ -203,6 +214,7 @@ export const {
   useDeleteReviewMutation,
   useGetReviewQuery,
   useGetReviewDiffQuery,
+  useGetReviewDiffSinceQuery,
   useGetReviewFileQuery,
   useAddThreadMutation,
   useAddCommentMutation,

@@ -137,6 +137,16 @@
   color: var(--yart-color-text-muted);
 }
 
+.file_new {
+  font-size: var(--yart-text-xs);
+  color: var(--yart-color-accent);
+}
+
+/* The control for the range of the diff. It sits in the header, thus it has no top margin. */
+.range_tabs {
+  margin-top: 0;
+}
+
 .row {
   display: grid;
   grid-template-columns: 3rem 3rem 1.75rem 1fr;
@@ -737,6 +747,15 @@
 
 .tree_removed {
   color: var(--yart-color-remove-emphasis);
+}
+
+.tree_new {
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--yart-color-accent);
 }
 
 .tree_threads {

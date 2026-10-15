@@ -39,6 +39,13 @@ export interface DiffFileProps {
   reviewed: boolean
   /** False when the file has no blob for a review mark. Then you cannot mark it. */
   can_review: boolean
+  /**
+   * The head of an earlier round when the diff shows only the changes after it.
+   * Then the base side is a line of that round, and gets no comments.
+   */
+  since: string | null
+  /** Tells if this file changed after the round that "Since round N" names. */
+  changed_in_round: boolean
   onComposingChange: (composing: ComposeTarget | null) => void
   onReviewedChange: (reviewed: boolean) => void
 }
@@ -60,6 +67,8 @@ export const DiffFile = ({
   composing,
   reviewed,
   can_review,
+  since,
+  changed_in_round,
   onComposingChange,
   onReviewedChange,
 }: DiffFileProps) => {
@@ -87,7 +96,7 @@ export const DiffFile = ({
   const near = useNearView(section_ref)
   const wants_contents = expanded.size > 0 || (near && mayHighlight(file.path))
   const contents_query = useGetReviewFileQuery(
-    { review_id, path: file.path },
+    { review_id, path: file.path, since },
     { skip: collapsed || file.is_binary || !wants_contents },
   )
   const tokens = useFileTokens(file.path, contents_query.data)
@@ -134,6 +143,7 @@ export const DiffFile = ({
       drafting={drafting}
       composing={composing}
       adding={add_state.isLoading}
+      base_comments={since === null}
       onComposingChange={onComposingChange}
       onAddThread={addThreadAt}
     />
@@ -164,6 +174,7 @@ export const DiffFile = ({
         </button>
         <span className={styles.file_status}>{file.status}</span>
         <span className={styles.file_path}>{file.path}</span>
+        {changed_in_round && <span className={styles.file_new}>changed in this round</span>}
         {file.old_path !== null && <span className={styles.file_status}>was {file.old_path}</span>}
         <span className={styles.spacer} />
         <label className={styles.file_reviewed}>

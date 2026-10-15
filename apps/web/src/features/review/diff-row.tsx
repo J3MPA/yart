@@ -36,6 +36,8 @@ export interface DiffRowProps {
   drafting: Drafting
   composing: ComposeTarget | null
   adding: boolean
+  /** False when the base side of a row is not the base of the review. Then it gets no comments. */
+  base_comments: boolean
   onComposingChange: (composing: ComposeTarget | null) => void
   /** Sends a comment on a line. It rejects when the daemon did not save it. */
   onAddThread: (target: RowTarget, body: string, attachments: Attachment[]) => Promise<void>
@@ -58,11 +60,12 @@ const isSelecting = (): boolean => (window.getSelection()?.toString() ?? '') !==
 /**
  * A comment goes on the side of the diff where the row exists. A removed line
  * exists only in the base. An added line exists only in the head. A context line
- * uses the head, because that is the version under review.
+ * uses the head, because that is the version under review. In the view of
+ * one round, a removed line is a line of an earlier round, and gets no comment.
  */
-const targetFor = (line: DiffLine): RowTarget | null => {
+const targetFor = (line: DiffLine, base_comments: boolean): RowTarget | null => {
   if (line.kind === 'removed') {
-    return line.base_line === null ? null : { side: 'base', line: line.base_line }
+    return line.base_line === null || !base_comments ? null : { side: 'base', line: line.base_line }
   }
   return line.head_line === null ? null : { side: 'head', line: line.head_line }
 }
@@ -78,11 +81,12 @@ export const DiffRow = ({
   drafting,
   composing,
   adding,
+  base_comments,
   onComposingChange,
   onAddThread,
 }: DiffRowProps) => {
   const dispatch = useAppDispatch()
-  const target = targetFor(line)
+  const target = targetFor(line, base_comments)
   const key = target === null ? null : anchorKey(file_path, target.side, target.line)
   const at_line = key === null ? [] : (threads_by_anchor.get(key) ?? [])
   const held = key === null ? [] : (drafting.by_anchor.get(key) ?? [])
