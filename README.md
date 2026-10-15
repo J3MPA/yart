@@ -944,6 +944,10 @@ An agent uses `packages/mcp` to control a review. It is a shim. It keeps no stat
 and makes no decisions. It changes MCP tool calls into HTTP requests to the
 daemon.
 
+The MCP server reviews the directory where it started. An agent that works in a
+different directory, for example a git worktree, gives that path as `repo_path`
+to `start_review`.
+
 The first tool call starts a daemon if no daemon is on its port. Thus an agent
 does not have to ask for a daemon first. The daemon starts as a detached process.
 An MCP server stops with its client, but a review must stay after that.

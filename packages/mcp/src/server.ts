@@ -47,6 +47,8 @@ const INSTRUCTIONS: Record<McpRole, string> = {
     '- After start_review and advance_review, wait for the verdict at once. Do not wait for the ' +
       'person to tell you. Their results tell you how to wait.',
     '- When yart opens the review for the person, do not send the review URL.',
+    '- If you work in a different directory than the one where the session started, for ' +
+      'example a git worktree, give its path as repo_path to start_review.',
     '- When you fix a problem that the person can see, such as a UI change, attach a ' +
       'screenshot of the fix with image_paths.',
     '- For an AI review of your work, read get_reviewer_settings. Then start the yart-reviewer ' +
@@ -243,11 +245,19 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                 'subject of the head commit. Give a name when the subject does not identify ' +
                 'the review.',
             ),
+          repo_path: z
+            .string()
+            .optional()
+            .describe(
+              'The absolute path of the repository or worktree to review. The default is the ' +
+                'directory where the yart MCP server started. Give it when you work in a ' +
+                'different directory, for example a git worktree.',
+            ),
         },
       }),
-      async ({ base, head, title }) =>
+      async ({ base, head, title, repo_path }) =>
         guard(async () => {
-          const review = await daemon.createReview(base, head, title)
+          const review = await daemon.createReview(base, head, title, repo_path)
           const url = daemon.reviewUrl(review.id)
 
           if (review.files.length === 0) {
