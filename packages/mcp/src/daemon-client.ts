@@ -230,10 +230,18 @@ export class DaemonClient {
     return this.request<Review>(`/api/reviews/${encodeURIComponent(review_id)}`)
   }
 
-  createReview(base?: string, head?: string, title?: string): Promise<Review> {
+  /**
+   * Opens a review. The default repository is the directory where this server
+   * started. A client can start the server in a different directory than the
+   * agent works in, for example the main checkout for an agent in a worktree.
+   * Then the agent gives `repo_path`.
+   */
+  createReview(base?: string, head?: string, title?: string, repo_path?: string): Promise<Review> {
     // Each request names the repository. One daemon serves all repositories, and
     // only this tells it which repository the agent works in.
-    return this.post<Review>('/api/reviews', { base, head, title, repo_path: this.repo_path })
+    const repository =
+      repo_path === undefined ? this.repo_path : resolve(this.repo_path ?? process.cwd(), repo_path)
+    return this.post<Review>('/api/reviews', { base, head, title, repo_path: repository })
   }
 
   advanceReview(review_id: string, head?: string): Promise<Review> {
@@ -250,8 +258,10 @@ export class DaemonClient {
   ): Promise<string[] | undefined> {
     if (paths === undefined || paths.length === 0) return undefined
     const ids: string[] = []
+    // The repository of the review, which can be a worktree, not the start directory.
+    const { repo_path } = await this.getReview(review_id)
     for (const path of paths) {
-      const full = resolve(this.repo_path ?? process.cwd(), path)
+      const full = resolve(repo_path, path)
       const size = (await stat(full).catch(() => null))?.size
       if (size === undefined) throw new DaemonError(`No file at ${full}.`, null)
       if (size > MAX_IMAGE_BYTES) {

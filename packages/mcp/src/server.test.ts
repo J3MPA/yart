@@ -232,6 +232,29 @@ describe('get_review and list_reviews', () => {
 })
 
 describe('an agent in another repository', () => {
+  it('reviews the worktree that it names, not the start directory of the server', async () => {
+    const worktree = join(repo.path, '..', `${repo.path.split('/').at(-1)}-worktree`)
+    repo.git('worktree', 'add', '-q', '-b', 'feature', worktree)
+    try {
+      writeFileSync(join(worktree, 'feature.txt'), 'new\n')
+      writeFileSync(
+        join(worktree, 'fix.png'),
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]),
+      )
+
+      const rendered = await call('start_review', { repo_path: worktree })
+      expect(rendered).toContain('feature.txt')
+      expect(rendered).not.toContain('a.txt')
+
+      const review_id = idFrom(rendered)
+      await humanSubmits(review_id, 'changes_requested')
+      await call('reply_to_verdict', { review_id, body: 'Done.', image_paths: ['fix.png'] })
+      expect(await call('get_review', { review_id })).toContain('agent: Done.  [image 1]')
+    } finally {
+      repo.git('worktree', 'remove', '--force', worktree)
+    }
+  })
+
   it('reviews its own repository through a daemon started in a different one', async () => {
     // The daemon in beforeEach started for `repo`. An agent in a second
     // repository uses it, as each agent uses the daemon on the port. Before, that
