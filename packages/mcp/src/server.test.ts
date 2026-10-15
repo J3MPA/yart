@@ -249,7 +249,9 @@ describe('an agent in another repository', () => {
       const review_id = idFrom(rendered)
       await humanSubmits(review_id, 'changes_requested')
       await call('reply_to_verdict', { review_id, body: 'Done.', image_paths: ['fix.png'] })
-      expect(await call('get_review', { review_id })).toContain('agent: Done.  [image 1]')
+      expect(await call('get_review', { review_id })).toContain(
+        'agent: Done.  [image 1 (sent before)]',
+      )
     } finally {
       repo.git('worktree', 'remove', '--force', worktree)
     }
