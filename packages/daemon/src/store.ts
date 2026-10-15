@@ -46,6 +46,15 @@ const withDefaults = (review: Review): Review => ({
   head_is_snapshot: review.head_is_snapshot ?? false,
 })
 
+/** Tells if a parsed file has the fields that the list and the pages read. */
+const hasReviewShape = (review: Review): boolean =>
+  typeof review.id === 'string' &&
+  typeof review.created_at === 'string' &&
+  typeof review.base_sha === 'string' &&
+  typeof review.head_sha === 'string' &&
+  Array.isArray(review.files) &&
+  Array.isArray(review.threads)
+
 export class ReviewStore {
   private readonly repo_path: string
   /** Found one time. A repository does not move while the daemon runs. */
@@ -94,12 +103,30 @@ export class ReviewStore {
       throw cause
     }
 
+    // One file that cannot be read must not stop the list. The list of all
+    // repositories comes from these lists, thus one bad file would hide each
+    // review of each repository. The daemon logs the file, and skips it.
+    const dir = await this.dir()
     const reviews = await Promise.all(
       entries
         .filter((entry) => entry.endsWith('.json'))
         .map((entry) => entry.slice(0, -'.json'.length))
         .filter((id) => isReviewId(id))
-        .map((id) => this.load(id)),
+        .map(async (id) => {
+          const path = join(dir, `${id}.json`)
+          try {
+            const review = await this.load(id)
+            if (review !== null && !hasReviewShape(review)) {
+              throw new Error('it does not have the fields of a review')
+            }
+            return review
+          } catch (cause) {
+            console.error(
+              `yart: skipped ${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+            )
+            return null
+          }
+        }),
     )
 
     return reviews

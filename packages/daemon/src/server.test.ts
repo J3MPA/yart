@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, mkdirSy
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { healthProof } from './auth.ts'
 import type { Review } from './types.ts'
 import { createServer, hostName, type ServerOptions } from './server.ts'
@@ -155,6 +155,22 @@ describe('GET /api/reviews', () => {
     const created = await openReview()
     const listed = (await (await app.request('/api/reviews')).json()) as Review[]
     expect(listed.map((review) => review.id)).toContain(created.id)
+  })
+
+  it('skips a review file that it cannot read, and lists the others', async () => {
+    const created = await openReview()
+    const store = join(repo.path, '.git', 'yart', 'reviews')
+    writeFileSync(join(store, '00000000-0000-4000-8000-000000000001.json'), '{"id": "trunc')
+    writeFileSync(join(store, '00000000-0000-4000-8000-000000000002.json'), '{"title": "x"}')
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const response = await app.request('/api/reviews')
+      expect(response.status).toBe(200)
+      expect(((await response.json()) as Review[]).map((review) => review.id)).toEqual([created.id])
+      expect(errors).toHaveBeenCalledTimes(2)
+    } finally {
+      errors.mockRestore()
+    }
   })
 
   it('returns the review by id', async () => {
