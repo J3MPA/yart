@@ -4,6 +4,7 @@ import {
   describeAuthor,
   escapeControl,
   quotePath,
+  reviewDescriptions,
   submissionAuthor,
 } from '@yart/core'
 import type { Attachment, Comment, DiffLine, FileDiff, ReviewVerdict, Thread } from '@yart/core'
@@ -230,16 +231,44 @@ export const renderReviewLine = (review: Review): string => {
   ].join('\n')
 }
 
+/**
+ * Which descriptions of the author a result shows. `all` gives the description
+ * of the review and of the current round. `round` gives only the description of
+ * the current round.
+ */
+export type DescriptionScope = 'none' | 'round' | 'all'
+
+/**
+ * The descriptions that the author agent gave, for a reviewer agent. The author
+ * wrote them, thus they need no copy in the results of the author.
+ */
+export const renderDescriptions = (review: Review, scope: DescriptionScope): string[] => {
+  if (scope === 'none') return []
+  const descriptions = reviewDescriptions(review)
+  const parts: string[] = []
+  if (scope === 'all' && descriptions.review !== null) {
+    parts.push(renderBody('Description of the review: ', descriptions.review, '', ''))
+  }
+  if (descriptions.round !== null) {
+    parts.push(
+      renderBody(`What changed in round ${review.rounds.length}: `, descriptions.round, '', ''),
+    )
+  }
+  return parts
+}
+
 export const renderReviewWithThreads = (
   review: Review,
   url: string | null,
   images = new ImageNumbers(),
+  descriptions: DescriptionScope = 'none',
 ): string => {
   // The verdict and its replies also belong here. An agent that examines the
   // progress must see its conversation, not only the counts.
   const verdict = currentSubmission(review) === null ? [] : ['', renderVerdict(review, images)]
   return [
     renderReview(review, url),
+    ...renderDescriptions(review, descriptions).flatMap((part) => ['', part]),
     ...verdict,
     '',
     renderThreads(openThreads(review), 'Open comments', images),

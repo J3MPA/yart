@@ -70,6 +70,15 @@ export interface ReviewerRound {
   reviewer_name?: string
 }
 
+export interface CreateReviewOptions {
+  base?: string
+  head?: string
+  title?: string
+  description?: string
+  /** The repository or worktree to review. A relative path starts at the repository of this client. */
+  repo_path?: string
+}
+
 export interface WaitOptions {
   poll_ms?: number
   /** Tells if the wait is over. */
@@ -236,16 +245,19 @@ export class DaemonClient {
    * agent works in, for example the main checkout for an agent in a worktree.
    * Then the agent gives `repo_path`.
    */
-  createReview(base?: string, head?: string, title?: string, repo_path?: string): Promise<Review> {
+  createReview({ repo_path, ...params }: CreateReviewOptions = {}): Promise<Review> {
     // Each request names the repository. One daemon serves all repositories, and
     // only this tells it which repository the agent works in.
     const repository =
       repo_path === undefined ? this.repo_path : resolve(this.repo_path ?? process.cwd(), repo_path)
-    return this.post<Review>('/api/reviews', { base, head, title, repo_path: repository })
+    return this.post<Review>('/api/reviews', { ...params, repo_path: repository })
   }
 
-  advanceReview(review_id: string, head?: string): Promise<Review> {
-    return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/advance`, { head })
+  advanceReview(review_id: string, head?: string, description?: string): Promise<Review> {
+    return this.post<Review>(`/api/reviews/${encodeURIComponent(review_id)}/advance`, {
+      head,
+      description,
+    })
   }
 
   /**

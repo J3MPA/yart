@@ -43,6 +43,9 @@ const withDefaults = (review: Review): Review => ({
     comments: submission.comments ?? [],
   })),
   archived_at: review.archived_at ?? null,
+  round_descriptions: (review.rounds ?? []).map(
+    (_round, index) => review.round_descriptions?.[index] ?? null,
+  ),
   head_is_snapshot: review.head_is_snapshot ?? false,
 })
 

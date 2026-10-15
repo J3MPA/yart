@@ -100,6 +100,15 @@ export interface Review {
   threads: Thread[]
   /** The head shas of all rounds of this review, the oldest first. */
   rounds: string[]
+  /**
+   * The text that the agent gave for each round, in the order of `rounds`. The
+   * first tells what the review is about. Each later one tells what changed in
+   * that round. A round without a text has null.
+   *
+   * This is a list of its own, not a field of each round. Thus `rounds` keeps its
+   * form, and an older file stays valid.
+   */
+  round_descriptions: (string | null)[]
   created_at: string
   updated_at: string
   /**

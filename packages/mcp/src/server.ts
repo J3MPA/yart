@@ -238,7 +238,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           'Open a code review of your changes for the person. Call this when you complete ' +
           'your changes. You do not have to commit them. Also call this when the person asks ' +
           'to review changes. By default, the review shows all changes in the files on disk, ' +
-          'also new files. Then wait for the verdict, as the result tells you.',
+          'also new files. Give a description: tell what you changed, what you tested, and what ' +
+          'needs the most attention. Then wait for the verdict, as the result tells you.',
         input_schema: {
           base: z
             .string()
@@ -270,11 +271,19 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                 'directory where the yart MCP server started. Give it when you work in a ' +
                 'different directory, for example a git worktree.',
             ),
+          description: z
+            .string()
+            .optional()
+            .describe(
+              'A description of the change for the person, in Markdown. The review page shows ' +
+                'it under the title. Tell what you changed and why. Tell what you tested. Tell ' +
+                'which parts have the most risk. Keep it short.',
+            ),
         },
       }),
-      async ({ base, head, title, repo_path }) =>
+      async ({ base, head, title, repo_path, description }) =>
         guard(async () => {
-          const review = await daemon.createReview(base, head, title, repo_path)
+          const review = await daemon.createReview({ base, head, title, repo_path, description })
           const url = daemon.reviewUrl(review.id)
 
           if (review.files.length === 0) {
@@ -415,9 +424,16 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         const review = await daemon.getReview(review_id)
         delivered.addThreads(openThreads(review))
         const images = new ImageNumbers(include_images === true ? new Set() : delivered.images)
+        // A reviewer agent needs the descriptions to know the intent of the change.
+        // The author wrote them, thus its results do not repeat them.
         return withImages(
           review_id,
-          renderReviewWithThreads(review, shownUrl(review.id), images),
+          renderReviewWithThreads(
+            review,
+            shownUrl(review.id),
+            images,
+            role === 'reviewer' ? 'all' : 'none',
+          ),
           images,
         )
       }),
@@ -533,7 +549,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         description:
           'Move all comments onto your newest changes. Call this after you fix the comments, ' +
           'committed or not. Each comment follows its line. When you changed that line, the ' +
-          'comment becomes outdated. The review opens again for the person.',
+          'comment becomes outdated. The review opens again for the person. Give a description ' +
+          'of this round: tell what you changed, what you tested, and what needs the most attention.',
         input_schema: {
           review_id: z.string(),
           head: z
@@ -543,11 +560,19 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
               'The revision to compare to now. The default is the same kind of head as before. ' +
                 'Thus a review of changes that are not committed reads the files on disk again.',
             ),
+          description: z
+            .string()
+            .optional()
+            .describe(
+              'What you changed in this round, in Markdown. The review page shows it as "What ' +
+                'changed in this round". Tell which comments you fixed and what you tested. ' +
+                'Tell which parts have the most risk. Keep it short.',
+            ),
         },
       }),
-      async ({ review_id, head }) =>
+      async ({ review_id, head, description }) =>
         guard(async () => {
-          const review = await daemon.advanceReview(review_id, head)
+          const review = await daemon.advanceReview(review_id, head, description)
           delivered.addThreads(openThreads(review))
           // The person sees the work of this round apart from the rest. The agent
           // gets the same list of files, to tell the person what it changed.
@@ -808,7 +833,14 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           return withImages(
             review_id,
             [
-              renderReviewWithThreads(answered, shownUrl(answered.id), images),
+              // The reviewer read the description of the review before its verdict.
+              // Only a new round has a new description.
+              renderReviewWithThreads(
+                answered,
+                shownUrl(answered.id),
+                images,
+                answered.head_sha === verdict.head_sha ? 'none' : 'round',
+              ),
               '',
               'The author answered. Do these steps: read the new changes with get_diff and ' +
                 'since_last_verdict, and read the ' +
