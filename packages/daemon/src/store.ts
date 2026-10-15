@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { findGitCommonDir } from './git.ts'
 import { checkInside, checkReviewId, isReviewId } from './review-id.ts'
+import { writeFileAtomic } from './serial.ts'
 import type { Review } from './types.ts'
 
 /**
@@ -69,7 +70,8 @@ export class ReviewStore {
     await mkdir(await this.dir(), { recursive: true })
     // Write the full review, not a part of it. A review is small. A partial write
     // would leave threads that point to a revision that the file does not record.
-    await writeFile(await this.pathFor(review.id), `${JSON.stringify(review, null, 2)}\n`, 'utf8')
+    // The rename makes sure that a reader at the same time never sees half a file.
+    await writeFileAtomic(await this.pathFor(review.id), `${JSON.stringify(review, null, 2)}\n`)
   }
 
   async load(id: string): Promise<Review | null> {
@@ -94,6 +96,7 @@ export class ReviewStore {
 
     const reviews = await Promise.all(
       entries
+        .filter((entry) => entry.endsWith('.json'))
         .map((entry) => entry.slice(0, -'.json'.length))
         .filter((id) => isReviewId(id))
         .map((id) => this.load(id)),

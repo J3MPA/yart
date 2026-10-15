@@ -1,9 +1,10 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { findGitCommonDir, findRepoRoot, GitError } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
 import { checkReviewId } from './review-id.ts'
+import { KeyedQueue, writeFileAtomic } from './serial.ts'
 
 /**
  * Where a daemon keeps the information that is not about one repository.
@@ -51,6 +52,8 @@ export class Repositories {
   /** The service of each review, found on the first lookup. Reviews never move. */
   private readonly owners = new Map<string, ReviewService>()
   private known: Set<string> | null = null
+  /** Two new repositories at the same time must both get into the file. */
+  private readonly writes = new KeyedQueue()
 
   constructor({ default_repo, state_dir }: RepositoriesOptions) {
     this.default_repo = default_repo
@@ -84,7 +87,11 @@ export class Repositories {
    * directory. It writes to a temporary file first. Thus a crash during the
    * write cannot leave half of the list.
    */
-  private async remember(repo_root: string): Promise<void> {
+  private remember(repo_root: string): Promise<void> {
+    return this.writes.run('registry', () => this.add(repo_root))
+  }
+
+  private async add(repo_root: string): Promise<void> {
     const known = await this.knownRepositories()
     if (known.has(repo_root)) return
     known.add(repo_root)
@@ -93,9 +100,7 @@ export class Repositories {
     const on_disk = await this.readRegistry()
     const merged: RegistryFile = { repositories: [...new Set([...on_disk, ...known])].sort() }
     await mkdir(join(this.registry_path, '..'), { recursive: true })
-    const temporary = `${this.registry_path}.${process.pid}.tmp`
-    await writeFile(temporary, `${JSON.stringify(merged, null, 2)}\n`, 'utf8')
-    await rename(temporary, this.registry_path)
+    await writeFileAtomic(this.registry_path, `${JSON.stringify(merged, null, 2)}\n`)
   }
 
   private async serviceAt(repo_root: string): Promise<ReviewService> {

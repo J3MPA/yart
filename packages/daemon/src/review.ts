@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   createThread,
   reanchorThread,
+  reviewerRounds,
   type Attachment,
   type Comment,
   type CommentAuthor,
@@ -25,6 +26,7 @@ import {
 } from './git.ts'
 import { AttachmentStore } from './attachments.ts'
 import { ReviewError } from './review-error.ts'
+import { KeyedQueue } from './serial.ts'
 import { placeholderTitle, ReviewStore } from './store.ts'
 import type {
   Review,
@@ -145,6 +147,12 @@ export interface SubmitParams {
    * it says nothing about code that the submitter did not see.
    */
   expected_head_sha?: string
+  /**
+   * The most verdicts that AI reviewers can give on this review. The service
+   * checks it in the queue of the review. Thus two verdicts at the same time
+   * cannot both pass the limit.
+   */
+  reviewer_round_limit?: number
 }
 
 export interface AddThreadParams {
@@ -183,6 +191,13 @@ export class ReviewService {
   private readonly repo_path: string
   private readonly store: ReviewStore
   private readonly attachments: AttachmentStore
+  /**
+   * The writes of each review, one after the other. Each write reads the full
+   * review, waits for git, and writes the full review. Without the queue, the
+   * last of two writes at the same time would remove the change of the first,
+   * and both callers would get success.
+   */
+  private readonly writes = new KeyedQueue()
 
   constructor(repo_path: string) {
     this.repo_path = repo_path
@@ -285,10 +300,12 @@ export class ReviewService {
     return updated
   }
 
-  async addThread(id: string, params: AddThreadParams): Promise<Review> {
-    const review = await this.get(id)
-    const thread = await this.buildThread(review, params)
-    return this.persist({ ...review, threads: [...review.threads, thread] })
+  addThread(id: string, params: AddThreadParams): Promise<Review> {
+    return this.writes.run(id, async () => {
+      const review = await this.get(id)
+      const thread = await this.buildThread(review, params)
+      return this.persist({ ...review, threads: [...review.threads, thread] })
+    })
   }
 
   /** Finds the line of a comment in the review, and keeps its context. */
@@ -346,22 +363,26 @@ export class ReviewService {
     return this.persist({ ...review, threads })
   }
 
-  async addComment(
+  addComment(
     id: string,
     thread_id: string,
     body: string,
     { author = 'human', author_name = null, attachments }: CommentOptions = {},
   ): Promise<Review> {
-    const resolved = await this.attachments.resolve(id, attachments)
-    const comment = newComment(body, author, author_name, resolved)
-    return this.withThread(id, thread_id, (thread) => ({
-      ...thread,
-      comments: [...thread.comments, comment],
-    }))
+    return this.writes.run(id, async () => {
+      const resolved = await this.attachments.resolve(id, attachments)
+      const comment = newComment(body, author, author_name, resolved)
+      return this.withThread(id, thread_id, (thread) => ({
+        ...thread,
+        comments: [...thread.comments, comment],
+      }))
+    })
   }
 
-  async setThreadStatus(id: string, thread_id: string, status: Thread['status']): Promise<Review> {
-    return this.withThread(id, thread_id, (thread) => ({ ...thread, status }))
+  setThreadStatus(id: string, thread_id: string, status: Thread['status']): Promise<Review> {
+    return this.writes.run(id, async () => {
+      return this.withThread(id, thread_id, (thread) => ({ ...thread, status }))
+    })
   }
 
   /**
@@ -371,23 +392,25 @@ export class ReviewService {
    * that had many rounds has many verdicts, and a reply belongs to the verdict
    * that it answers.
    */
-  async addSubmissionComment(
+  addSubmissionComment(
     id: string,
     submission_id: string,
     body: string,
     { author = 'human', author_name = null, attachments }: CommentOptions = {},
   ): Promise<Review> {
-    const review = await this.get(id)
-    const index = review.submissions.findIndex((submission) => submission.id === submission_id)
-    if (index === -1) throw new ReviewError(`No submission with id ${submission_id}`, 404)
+    return this.writes.run(id, async () => {
+      const review = await this.get(id)
+      const index = review.submissions.findIndex((submission) => submission.id === submission_id)
+      if (index === -1) throw new ReviewError(`No submission with id ${submission_id}`, 404)
 
-    const resolved = await this.attachments.resolve(id, attachments)
-    const comment = newComment(body, author, author_name, resolved)
-    const submissions = [...review.submissions]
-    const submission = submissions[index] as ReviewSubmission
-    submissions[index] = { ...submission, comments: [...submission.comments, comment] }
+      const resolved = await this.attachments.resolve(id, attachments)
+      const comment = newComment(body, author, author_name, resolved)
+      const submissions = [...review.submissions]
+      const submission = submissions[index] as ReviewSubmission
+      submissions[index] = { ...submission, comments: [...submission.comments, comment] }
 
-    return this.persist({ ...review, submissions })
+      return this.persist({ ...review, submissions })
+    })
   }
 
   /**
@@ -397,71 +420,86 @@ export class ReviewService {
    * goes as one unit. Half a review, with some comments sent but no verdict,
    * would show the agent a review that its author did not complete.
    */
-  async submit(id: string, params: SubmitParams = {}): Promise<Review> {
-    const review = await this.get(id)
-    const {
-      verdict = 'commented',
-      author = 'human',
-      author_name = null,
-      body = null,
-      attachments: attachment_ids,
-      threads: drafts = [],
-      replies = [],
-      expected_head_sha,
-    } = params
+  submit(id: string, params: SubmitParams = {}): Promise<Review> {
+    return this.writes.run(id, async () => {
+      const review = await this.get(id)
+      const {
+        verdict = 'commented',
+        author = 'human',
+        author_name = null,
+        body = null,
+        attachments: attachment_ids,
+        threads: drafts = [],
+        replies = [],
+        expected_head_sha,
+        reviewer_round_limit,
+      } = params
 
-    if (expected_head_sha !== undefined && expected_head_sha !== review.head_sha) {
-      throw new ReviewError(
-        'The review has moved on to a newer round since you loaded it. ' +
-          'Reload to see what changed before submitting.',
-        409,
-      )
-    }
-
-    const threads = [...review.threads]
-    for (const draft of drafts) {
-      if (draft.blob_sha !== undefined) {
-        const file = review.files.find((candidate) => candidate.path === draft.path)
-        const current =
-          (draft.side ?? 'head') === 'head' ? file?.head_blob_sha : file?.base_blob_sha
-        if (current !== draft.blob_sha) {
-          throw new ReviewError(
-            `The comment on ${draft.path}:${draft.line} was written on a version of the file ` +
-              'that has since changed, so its line may no longer be the one it was about.',
-            409,
-          )
-        }
+      if (
+        author === 'reviewer' &&
+        reviewer_round_limit !== undefined &&
+        reviewerRounds(review) >= reviewer_round_limit
+      ) {
+        throw new ReviewError(
+          `An AI reviewer has passed all ${reviewer_round_limit} of its verdicts on this review. ` +
+            'It is the person’s to finish now.',
+          409,
+        )
       }
-      threads.push(await this.buildThread(review, { ...draft, author, author_name }))
-    }
 
-    for (const reply of replies) {
-      const index = threads.findIndex((thread) => thread.id === reply.thread_id)
-      if (index === -1) throw new ReviewError(`No thread with id ${reply.thread_id}`, 404)
-      const thread = threads[index] as Thread
-      const attachments = await this.attachments.resolve(id, reply.attachments)
-      const comment = newComment(reply.body, author, author_name, attachments)
-      threads[index] = { ...thread, comments: [...thread.comments, comment] }
-    }
+      if (expected_head_sha !== undefined && expected_head_sha !== review.head_sha) {
+        throw new ReviewError(
+          'The review has moved on to a newer round since you loaded it. ' +
+            'Reload to see what changed before submitting.',
+          409,
+        )
+      }
 
-    const summary_attachments = await this.attachments.resolve(id, attachment_ids)
-    const submission: ReviewSubmission = {
-      id: randomUUID(),
-      verdict,
-      author,
-      ...(author_name === null ? {} : { author_name }),
-      body: body === null || body.trim() === '' ? null : body.trim(),
-      ...(summary_attachments.length === 0 ? {} : { attachments: summary_attachments }),
-      comments: [],
-      head_sha: review.head_sha,
-      created_at: nowIso(),
-    }
+      const threads = [...review.threads]
+      for (const draft of drafts) {
+        if (draft.blob_sha !== undefined) {
+          const file = review.files.find((candidate) => candidate.path === draft.path)
+          const current =
+            (draft.side ?? 'head') === 'head' ? file?.head_blob_sha : file?.base_blob_sha
+          if (current !== draft.blob_sha) {
+            throw new ReviewError(
+              `The comment on ${draft.path}:${draft.line} was written on a version of the file ` +
+                'that has since changed, so its line may no longer be the one it was about.',
+              409,
+            )
+          }
+        }
+        threads.push(await this.buildThread(review, { ...draft, author, author_name }))
+      }
 
-    return this.persist({
-      ...review,
-      threads,
-      status: 'submitted',
-      submissions: [...review.submissions, submission],
+      for (const reply of replies) {
+        const index = threads.findIndex((thread) => thread.id === reply.thread_id)
+        if (index === -1) throw new ReviewError(`No thread with id ${reply.thread_id}`, 404)
+        const thread = threads[index] as Thread
+        const attachments = await this.attachments.resolve(id, reply.attachments)
+        const comment = newComment(reply.body, author, author_name, attachments)
+        threads[index] = { ...thread, comments: [...thread.comments, comment] }
+      }
+
+      const summary_attachments = await this.attachments.resolve(id, attachment_ids)
+      const submission: ReviewSubmission = {
+        id: randomUUID(),
+        verdict,
+        author,
+        ...(author_name === null ? {} : { author_name }),
+        body: body === null || body.trim() === '' ? null : body.trim(),
+        ...(summary_attachments.length === 0 ? {} : { attachments: summary_attachments }),
+        comments: [],
+        head_sha: review.head_sha,
+        created_at: nowIso(),
+      }
+
+      return this.persist({
+        ...review,
+        threads,
+        status: 'submitted',
+        submissions: [...review.submissions, submission],
+      })
     })
   }
 
@@ -473,87 +511,89 @@ export class ReviewService {
    * content have the same hash, thus one resolution could not describe the two.
    * The service keeps the line maps in a cache, which gives the same saving.
    */
-  async advanceHead(id: string, head?: string): Promise<Review> {
-    const review = await this.get(id)
+  advanceHead(id: string, head?: string): Promise<Review> {
+    return this.writes.run(id, async () => {
+      const review = await this.get(id)
 
-    // A snapshot review makes a new snapshot, unless the request names a
-    // revision. Only "the working tree now" moved.
-    const target = head ?? (review.head_is_snapshot ? WORKING_TREE : 'HEAD')
-    const is_snapshot = target === WORKING_TREE
-    const head_sha = is_snapshot
-      ? await snapshotWorkingTree(review.repo_path)
-      : await resolveRev(review.repo_path, target)
+      // A snapshot review makes a new snapshot, unless the request names a
+      // revision. Only "the working tree now" moved.
+      const target = head ?? (review.head_is_snapshot ? WORKING_TREE : 'HEAD')
+      const is_snapshot = target === WORKING_TREE
+      const head_sha = is_snapshot
+        ? await snapshotWorkingTree(review.repo_path)
+        : await resolveRev(review.repo_path, target)
 
-    if (head_sha === review.head_sha) return review
+      if (head_sha === review.head_sha) return review
 
-    const [since_last, from_base] = await Promise.all([
-      listChangedFiles(review.repo_path, review.head_sha, head_sha),
-      listChangedFiles(review.repo_path, review.base_sha, head_sha),
-    ])
+      const [since_last, from_base] = await Promise.all([
+        listChangedFiles(review.repo_path, review.head_sha, head_sha),
+        listChangedFiles(review.repo_path, review.base_sha, head_sha),
+      ])
 
-    const by_old_path = new Map<string, ChangedFile>()
-    for (const change of since_last) {
-      by_old_path.set(change.old_path ?? change.path, change)
-    }
-
-    const line_maps = new Map<string, LineMap>()
-    const threads: Thread[] = []
-
-    for (const thread of review.threads) {
-      const { anchor } = thread
-      // The base side of the range never moves. Thus its anchors stay correct.
-      if (anchor === null || anchor.side === 'base') {
-        threads.push(thread)
-        continue
+      const by_old_path = new Map<string, ChangedFile>()
+      for (const change of since_last) {
+        by_old_path.set(change.old_path ?? change.path, change)
       }
 
-      const change = by_old_path.get(anchor.path)
-      if (change === undefined) {
-        threads.push(thread)
-        continue
-      }
+      const line_maps = new Map<string, LineMap>()
+      const threads: Thread[] = []
 
-      let resolution: FileResolution
-      if (change.head_blob_sha === null) {
-        resolution = { kind: 'deleted' }
-      } else if (change.head_blob_sha === anchor.blob_sha) {
-        resolution = { kind: 'unchanged', path: change.path }
-      } else {
-        const cache_key = `${anchor.blob_sha}..${change.head_blob_sha}`
-        let line_map = line_maps.get(cache_key)
-        if (line_map === undefined) {
-          line_map = await buildLineMapFromGit(
-            review.repo_path,
-            anchor.blob_sha,
-            change.head_blob_sha,
-          )
-          line_maps.set(cache_key, line_map)
+      for (const thread of review.threads) {
+        const { anchor } = thread
+        // The base side of the range never moves. Thus its anchors stay correct.
+        if (anchor === null || anchor.side === 'base') {
+          threads.push(thread)
+          continue
         }
-        resolution = {
-          kind: 'modified',
-          path: change.path,
-          blob_sha: change.head_blob_sha,
-          line_map,
+
+        const change = by_old_path.get(anchor.path)
+        if (change === undefined) {
+          threads.push(thread)
+          continue
         }
+
+        let resolution: FileResolution
+        if (change.head_blob_sha === null) {
+          resolution = { kind: 'deleted' }
+        } else if (change.head_blob_sha === anchor.blob_sha) {
+          resolution = { kind: 'unchanged', path: change.path }
+        } else {
+          const cache_key = `${anchor.blob_sha}..${change.head_blob_sha}`
+          let line_map = line_maps.get(cache_key)
+          if (line_map === undefined) {
+            line_map = await buildLineMapFromGit(
+              review.repo_path,
+              anchor.blob_sha,
+              change.head_blob_sha,
+            )
+            line_maps.set(cache_key, line_map)
+          }
+          resolution = {
+            kind: 'modified',
+            path: change.path,
+            blob_sha: change.head_blob_sha,
+            line_map,
+          }
+        }
+
+        threads.push(reanchorThread(thread, resolution))
       }
 
-      threads.push(reanchorThread(thread, resolution))
-    }
+      // Pin the new snapshot after the line maps exist. Thus the old snapshot stays
+      // reachable while the threads that point into it get their new anchors.
+      if (is_snapshot) await pinSnapshot(review.repo_path, review.id, head_sha)
 
-    // Pin the new snapshot after the line maps exist. Thus the old snapshot stays
-    // reachable while the threads that point into it get their new anchors.
-    if (is_snapshot) await pinSnapshot(review.repo_path, review.id, head_sha)
-
-    return this.persist({
-      ...review,
-      head: target,
-      head_sha,
-      head_is_snapshot: is_snapshot,
-      head_branch: await branchAt(review.repo_path, is_snapshot ? 'HEAD' : head_sha),
-      status: 'open',
-      files: from_base.map(toReviewFile),
-      threads,
-      rounds: [...review.rounds, head_sha],
+      return this.persist({
+        ...review,
+        head: target,
+        head_sha,
+        head_is_snapshot: is_snapshot,
+        head_branch: await branchAt(review.repo_path, is_snapshot ? 'HEAD' : head_sha),
+        status: 'open',
+        files: from_base.map(toReviewFile),
+        threads,
+        rounds: [...review.rounds, head_sha],
+      })
     })
   }
 
@@ -561,18 +601,22 @@ export class ReviewService {
    * An archived review keeps all its comments. Only the default list does not
    * show it. A deletion is the action that you cannot undo.
    */
-  async setArchived(id: string, archived: boolean): Promise<Review> {
-    const review = await this.get(id)
-    if ((review.archived_at !== null) === archived) return review
-    return this.persist({ ...review, archived_at: archived ? nowIso() : null })
+  setArchived(id: string, archived: boolean): Promise<Review> {
+    return this.writes.run(id, async () => {
+      const review = await this.get(id)
+      if ((review.archived_at !== null) === archived) return review
+      return this.persist({ ...review, archived_at: archived ? nowIso() : null })
+    })
   }
 
-  async remove(id: string): Promise<void> {
-    // The snapshot ref exists only to keep the blobs of this review.
-    const review = await this.store.load(id)
-    if (review !== null) await unpinSnapshot(review.repo_path, id)
-    await this.store.remove(id)
-    await this.attachments.removeAll(id)
+  remove(id: string): Promise<void> {
+    return this.writes.run(id, async () => {
+      // The snapshot ref exists only to keep the blobs of this review.
+      const review = await this.store.load(id)
+      if (review !== null) await unpinSnapshot(review.repo_path, id)
+      await this.store.remove(id)
+      await this.attachments.removeAll(id)
+    })
   }
 
   /** Tells if the store of this repository keeps a review. */

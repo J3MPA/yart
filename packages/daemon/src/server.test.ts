@@ -312,6 +312,102 @@ describe('the review loop', () => {
   })
 })
 
+describe('writes at the same time', () => {
+  const current = async (id: string): Promise<Review> =>
+    (await (await app.request(`/api/reviews/${id}`)).json()) as Review
+
+  it('keeps each of many comments on one review', async () => {
+    const review = await openReview()
+    const responses = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        post(`/api/reviews/${review.id}/threads`, { path: 'a.txt', line: 2, body: `n${index}` }),
+      ),
+    )
+    expect(responses.map((response) => response.status)).toEqual(Array(20).fill(201))
+    expect((await current(review.id)).threads).toHaveLength(20)
+  })
+
+  it('keeps a comment of the person and a reply of the agent', async () => {
+    const { review, thread_id } = await openReviewWithThread()
+    await Promise.all([
+      post(`/api/reviews/${review.id}/threads`, { path: 'a.txt', line: 3, body: 'and this' }),
+      post(`/api/reviews/${review.id}/threads/${thread_id}/comments`, {
+        body: 'renamed it',
+        author: 'agent',
+      }),
+    ])
+    const after = await current(review.id)
+    expect(after.threads).toHaveLength(2)
+    expect(after.threads.find((thread) => thread.id === thread_id)?.comments).toHaveLength(2)
+  })
+
+  it('keeps a comment that comes during an advance, and the advance', async () => {
+    const review = await openReview()
+    repo.write('a.txt', 'alpha\nTARGET\ngamma\ndelta\nepsilon\n')
+    repo.commit('agent responds')
+    const [advanced, commented] = await Promise.all([
+      post(`/api/reviews/${review.id}/advance`, { head: 'HEAD' }),
+      post(`/api/reviews/${review.id}/threads`, { path: 'a.txt', line: 2, body: 'why?' }),
+    ])
+    expect([advanced.status, commented.status]).toEqual([200, 201])
+    const after = await current(review.id)
+    expect(after.rounds).toHaveLength(2)
+    expect(after.threads).toHaveLength(1)
+  })
+
+  it('keeps a verdict that comes during an advance, and the advance', async () => {
+    const review = await openReview()
+    repo.write('a.txt', 'alpha\nTARGET\ngamma\ndelta\nepsilon\n')
+    repo.commit('agent responds')
+    await Promise.all([
+      post(`/api/reviews/${review.id}/advance`, { head: 'HEAD' }),
+      post(`/api/reviews/${review.id}/submit`, { verdict: 'commented' }),
+    ])
+    const after = await current(review.id)
+    expect(after.rounds).toHaveLength(2)
+    expect(after.submissions).toHaveLength(1)
+  })
+
+  it('lets only one of two reviewer verdicts pass the last round', async () => {
+    await patch('/api/settings', { ai_review_rounds: 1 })
+    const review = await openReview()
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        post(`/api/reviews/${review.id}/submit`, { verdict: 'approved', author: 'reviewer' }),
+      ),
+    )
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409, 409])
+    expect((await current(review.id)).submissions).toHaveLength(1)
+  })
+
+  it('keeps each of many settings changes', async () => {
+    const state_dir = mkdtempSync(join(tmpdir(), 'yart-state-'))
+    try {
+      const stored = serverFor({ repo_path: repo.path, state_dir })
+      const change = (changes: Record<string, unknown>) =>
+        stored.request('/api/settings', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(changes),
+        })
+      const responses = await Promise.all(
+        Array.from({ length: 20 }, (_, index) =>
+          change(index % 2 === 0 ? { ai_review_rounds: 2 } : { on_approve: 'archive' }),
+        ),
+      )
+      expect(responses.map((response) => response.status)).toEqual(Array(20).fill(200))
+      const settings = JSON.parse(readFileSync(join(state_dir, 'settings.json'), 'utf8')) as {
+        ai_review_rounds: number
+        on_approve: string
+      }
+      expect(settings.ai_review_rounds).toBe(2)
+      expect(settings.on_approve).toBe('archive')
+    } finally {
+      rmSync(state_dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('PATCH /api/reviews/:id', () => {
   it('archives and restores a review', async () => {
     const created = await openReview()
