@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { HighlighterCore, ThemedToken } from 'shiki/core'
 import { bundledLanguages, type BundledLanguage } from 'shiki/langs'
 
@@ -9,6 +10,15 @@ export interface SyntaxToken {
   italic: boolean
   bold: boolean
 }
+
+/** The inline style that gives a token its color and font. */
+export const tokenStyle = (token: SyntaxToken): CSSProperties => ({
+  color: token.color ?? undefined,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
+  fontStyle: token.italic ? 'italic' : undefined,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
+  fontWeight: token.bold ? 'bold' : undefined,
+})
 
 /** The lines of a file as tokens. The index starts at zero: line 1 is `lines[0]`. */
 export type FileTokens = readonly (readonly SyntaxToken[])[]

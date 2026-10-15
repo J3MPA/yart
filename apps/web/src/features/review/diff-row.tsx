@@ -6,7 +6,7 @@ import { CommentThread } from './comment-thread'
 import { DraftComment } from './draft-comment'
 import { newThreadDraft, type Drafting, type FileBlobs } from './drafts'
 import { draftAdded } from './local-review-slice'
-import type { SyntaxToken } from './syntax'
+import { tokenStyle, type SyntaxToken } from './syntax'
 import { anchorKey } from './thread-anchors'
 import { unsentKey } from './unsent'
 import styles from './review.module.css'
@@ -158,16 +158,7 @@ export const DiffRow = ({
           {tokens === null
             ? line.text
             : tokens.map((token, index) => (
-                <span
-                  key={index}
-                  style={{
-                    color: token.color ?? undefined,
-                    // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
-                    fontStyle: token.italic ? 'italic' : undefined,
-                    // eslint-disable-next-line @typescript-eslint/naming-convention -- React's style name
-                    fontWeight: token.bold ? 'bold' : undefined,
-                  }}
-                >
+                <span key={index} style={tokenStyle(token)}>
                   {token.content}
                 </span>
               ))}

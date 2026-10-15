@@ -1,0 +1,90 @@
+.markdown {
+  font-size: var(--yart-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown :where(p, ul, ol, blockquote, pre, h1, h2, h3, h4, h5, h6, hr) {
+  margin: var(--yart-space-2) 0;
+}
+
+/* A line break in a paragraph stays a line break, as in a comment on GitHub. */
+.markdown p {
+  white-space: pre-wrap;
+}
+
+.markdown :where(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--yart-text-sm);
+  font-weight: 600;
+}
+
+.markdown :where(h1, h2) {
+  font-size: var(--yart-text-md);
+}
+
+.markdown :where(ul, ol) {
+  padding-left: var(--yart-space-6);
+}
+
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
+.markdown li + li {
+  margin-top: var(--yart-space-1);
+}
+
+.markdown blockquote {
+  padding-left: var(--yart-space-3);
+  color: var(--yart-color-text-muted);
+  border-left: 3px solid var(--yart-color-border-strong);
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--yart-color-border);
+}
+
+.markdown a {
+  color: var(--yart-color-accent);
+  text-decoration: underline;
+}
+
+.markdown a:hover {
+  color: var(--yart-color-accent-hover);
+}
+
+.markdown code {
+  font-family: var(--yart-font-mono);
+  font-size: 0.9em;
+}
+
+.markdown :not(pre) > code {
+  padding: 0.1em 0.3em;
+  background-color: var(--yart-color-surface-sunken);
+  border-radius: var(--yart-radius-sm);
+}
+
+.code_block {
+  padding: var(--yart-space-2) var(--yart-space-3);
+  overflow-x: auto;
+  color: var(--yart-syntax-foreground);
+  background-color: var(--yart-color-surface-sunken);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-sm);
+}
+
+.code_block code {
+  white-space: pre;
+}
