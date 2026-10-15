@@ -53,6 +53,15 @@ const openOutside = (url: string) => {
 const reviewUrl = (review_id: string): string =>
   new URL(`/reviews/${review_id}`, config.origin).href
 
+/**
+ * Loads a page through a one-time sign-in link. The link gives the window the
+ * cookie of the person. Only that cookie can give a verdict as the person.
+ */
+const loadSignedIn = async (target: BrowserWindow, url: string): Promise<void> => {
+  const signed = await daemon.signInUrl(url).catch(() => url)
+  await target.loadURL(signed)
+}
+
 const createWindow = (url: string = config.start_url) => {
   const created = new BrowserWindow({
     width: 1280,
@@ -77,7 +86,7 @@ const createWindow = (url: string = config.start_url) => {
     window = null
   })
 
-  void created.loadURL(url)
+  void loadSignedIn(created, url)
   window = created
 }
 
@@ -90,7 +99,7 @@ const showReview = (review_id: string) => {
     createWindow(reviewUrl(review_id))
     return
   }
-  void window.loadURL(reviewUrl(review_id))
+  void loadSignedIn(window, reviewUrl(review_id))
   if (window.isMinimized()) window.restore()
   window.show()
   window.focus()
@@ -108,6 +117,19 @@ ipcMain.on('unseen-changed', (event, value: unknown) => {
   const count = parseCount(value)
   if (!fromYart(event) || count === null) return
   app.setBadgeCount(count)
+})
+
+// The daemon makes a new secret when it starts again. Then the page asks for a
+// new sign-in, and the window loads the same page through a new link.
+// At most one time in some seconds. If a sign-in fails, the page asks again
+// after the load, and the window must not load in a loop.
+let last_sign_in = 0
+const SIGN_IN_INTERVAL_MS = 5000
+ipcMain.on('sign-in', (event) => {
+  if (!fromYart(event) || window === null) return
+  if (Date.now() - last_sign_in < SIGN_IN_INTERVAL_MS) return
+  last_sign_in = Date.now()
+  void loadSignedIn(window, event.senderFrame?.url ?? config.start_url)
 })
 
 ipcMain.on('notify', (event, value: unknown) => {

@@ -1,11 +1,17 @@
 import { spawn } from 'node:child_process'
-import { realpathSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { resolve, sep } from 'node:path'
+import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
 import { authorHasAnswered, type FileDiff, type ReviewVerdict, type Settings } from '@yart/core'
-import type { Review } from '@yart/daemon'
+import {
+  authHeaders,
+  daemonUrl,
+  defaultStateDir,
+  foreignMessage,
+  probeDaemon,
+  type Review,
+} from '@yart/daemon'
 
 export const DEFAULT_PORT = 7777
 
@@ -23,14 +29,6 @@ export class DaemonError extends Error {
   }
 }
 
-/** The answer of `/health`. A daemon that is older than `version` does not send it. */
-interface DaemonHealth {
-  ok: boolean
-  repo_path?: string
-  version?: string
-  code_dir?: string
-}
-
 export interface DaemonClientOptions {
   port?: number
   /** The repository of this client, or null for none, as in the desktop app. */
@@ -43,6 +41,8 @@ export interface DaemonClientOptions {
    * entry point.
    */
   daemon_cli?: string
+  /** Where the token file of the daemon is. The default is the home of yart. */
+  state_dir?: string
 }
 
 const resolveDaemonCli = (): string => {
@@ -76,51 +76,28 @@ export class DaemonClient {
   private readonly repo_path: string | null
   private readonly autostart: boolean
   private readonly daemon_cli: string | undefined
-  private started: boolean
+  private readonly state_dir: string
+  /** The token of the daemon, after it proved that it is the daemon. Null before. */
+  private token: string | null
 
   constructor(options: DaemonClientOptions = {}) {
     this.port = options.port ?? DEFAULT_PORT
     this.repo_path = options.repo_path === undefined ? process.cwd() : options.repo_path
     this.autostart = options.autostart ?? true
     this.daemon_cli = options.daemon_cli
-    this.base_url = `http://localhost:${this.port}`
-    this.started = false
-  }
-
-  private async health(): Promise<DaemonHealth | null> {
-    try {
-      const response = await fetch(`${this.base_url}/health`)
-      return response.ok ? ((await response.json()) as DaemonHealth) : null
-    } catch {
-      return null
-    }
-  }
-
-  private async isHealthy(): Promise<boolean> {
-    return (await this.health()) !== null
+    this.state_dir = options.state_dir ?? defaultStateDir()
+    this.base_url = daemonUrl(this.port)
+    this.token = null
   }
 
   /**
-   * Refuses a daemon that would review the wrong repository.
-   *
-   * A daemon from before `version` existed serves only the repository that it
-   * started in. It ignores the repository that a request names. Thus from a
-   * different place, it would review its own working tree, with no warning.
-   * After an update, such a daemon still runs for some time, and then this check
-   * is important. A daemon that started in this same repository is correct.
+   * The token of the daemon, after the process on the port proves that it is
+   * the daemon. Refuses a different process. Null when no process answers.
    */
-  private checkServes(health: DaemonHealth): void {
-    if (health.version !== undefined || health.repo_path === undefined) return
-    const mine = this.repo_path === null ? null : realpathSync(this.repo_path)
-    const inside =
-      mine !== null && (mine === health.repo_path || mine.startsWith(health.repo_path + sep))
-    if (inside) return
-    throw new DaemonError(
-      `The yart daemon on port ${this.port} is from an older yart. It serves only ` +
-        `${health.repo_path}, not ${mine ?? 'the other repositories'}. Stop the process on port ` +
-        `${this.port}. The next request starts a daemon that serves all repositories.`,
-      null,
-    )
+  private async connect(): Promise<string | null> {
+    const probe = await probeDaemon(this.port, this.state_dir)
+    if (probe.state === 'foreign') throw new DaemonError(foreignMessage(this.port), null)
+    return probe.state === 'yart' ? probe.token : null
   }
 
   /**
@@ -131,14 +108,10 @@ export class DaemonClient {
    * a review must continue after that. A daemon that already runs is used again,
    * whoever started it.
    */
-  async ensureRunning(): Promise<void> {
-    if (this.started) return
-    const found = await this.health()
-    if (found !== null) {
-      this.checkServes(found)
-      this.started = true
-      return
-    }
+  async ensureRunning(): Promise<string> {
+    if (this.token !== null) return this.token
+    this.token = await this.connect()
+    if (this.token !== null) return this.token
     if (!this.autostart) {
       throw new DaemonError(
         `No yart daemon answers on ${this.base_url}. Start one with \`yart\`.`,
@@ -169,21 +142,34 @@ export class DaemonClient {
     const deadline = Date.now() + STARTUP_TIMEOUT_MS
     while (Date.now() < deadline) {
       await delay(STARTUP_POLL_MS)
-      if (await this.isHealthy()) {
-        this.started = true
-        return
-      }
+      this.token = await this.connect()
+      if (this.token !== null) return this.token
     }
     throw new DaemonError(`The yart daemon did not start in ${STARTUP_TIMEOUT_MS} ms.`, null)
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    await this.ensureRunning()
+  /**
+   * Sends a request with the token. The daemon makes a new token when it starts
+   * again. Thus a refused token makes the client prove the daemon again, one time.
+   */
+  private async send(path: string, init?: RequestInit): Promise<Response> {
+    const attempt = async () =>
+      fetch(`${this.base_url}${path}`, {
+        ...init,
+        headers: {
+          'content-type': 'application/json',
+          ...init?.headers,
+          ...authHeaders(await this.ensureRunning()),
+        },
+      })
+    const response = await attempt()
+    if (response.status !== 401) return response
+    this.token = null
+    return attempt()
+  }
 
-    const response = await fetch(`${this.base_url}${path}`, {
-      ...init,
-      headers: { 'content-type': 'application/json', ...init?.headers },
-    })
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await this.send(path, init)
 
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null
@@ -204,9 +190,8 @@ export class DaemonClient {
 
   /** An image of a review, as base64. */
   async getAttachment(review_id: string, attachment_id: string): Promise<string> {
-    await this.ensureRunning()
-    const response = await fetch(
-      `${this.base_url}/api/reviews/${encodeURIComponent(review_id)}/attachments/${encodeURIComponent(attachment_id)}`,
+    const response = await this.send(
+      `/api/reviews/${encodeURIComponent(review_id)}/attachments/${encodeURIComponent(attachment_id)}`,
     )
     if (!response.ok) {
       throw new DaemonError(`The yart daemon has no image ${attachment_id}.`, response.status)
@@ -216,6 +201,19 @@ export class DaemonClient {
 
   reviewUrl(review_id: string): string {
     return `${this.base_url}/reviews/${review_id}`
+  }
+
+  /**
+   * A one-time link that signs the window of the person in, and then opens a
+   * page. The link has the origin of the page, because a development UI has a
+   * different origin than the daemon. Only the window of the person can give a
+   * verdict as the person. Do not give this link to an agent.
+   */
+  async signInUrl(url: string): Promise<string> {
+    const { code } = await this.post<{ code: string }>('/api/sign-in-codes', {})
+    const page = new URL(url)
+    const next = `${page.pathname}${page.search}`
+    return new URL(`/sign-in?code=${code}&next=${encodeURIComponent(next)}`, page).href
   }
 
   listReviews(): Promise<Review[]> {

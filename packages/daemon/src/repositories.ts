@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { findGitCommonDir, findRepoRoot, GitError } from './git.ts'
 import { ReviewError, ReviewService } from './review.ts'
+import { checkReviewId } from './review-id.ts'
 
 /**
  * Where a daemon keeps the information that is not about one repository.
@@ -147,6 +148,7 @@ export class Repositories {
 
   /** The service that holds a review, in any repository. */
   async locate(review_id: string): Promise<ReviewService> {
+    checkReviewId(review_id)
     const cached = this.owners.get(review_id)
     if (cached !== undefined) return cached
 

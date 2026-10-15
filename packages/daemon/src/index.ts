@@ -20,5 +20,8 @@ export {
   type AddThreadParams,
   type CreateReviewParams,
 } from './review.ts'
-export { createServer, type ServerOptions } from './server.ts'
+export { createServer, type ServerAuth, type ServerOptions } from './server.ts'
+export { daemonUrl, LOOPBACK } from './auth.ts'
+export { authHeaders, foreignMessage, probeDaemon, type DaemonHealth, type Probe } from './probe.ts'
+export { defaultStateDir } from './repositories.ts'
 export { VERSION } from './version.ts'

@@ -58,6 +58,8 @@ const fromStored = (stored: Record<string, unknown>): Settings => {
   }
 }
 
+export const settingsPath = (state_dir: string): string => join(state_dir, 'settings.json')
+
 /**
  * Where the settings of the daemon are kept.
  *
@@ -70,7 +72,7 @@ export class SettingsStore {
   private in_memory: Settings = DEFAULT_SETTINGS
 
   constructor(state_dir: string | null) {
-    this.path = state_dir === null ? null : join(state_dir, 'settings.json')
+    this.path = state_dir === null ? null : settingsPath(state_dir)
   }
 
   /** The settings. A missing value, or a value that cannot be read, gets its default. */
@@ -150,9 +152,11 @@ export class SettingsStore {
     }
     // Write through a temporary file. Thus a crash during the write cannot leave
     // half of the settings.
-    await mkdir(join(this.path, '..'), { recursive: true })
+    await mkdir(join(this.path, '..'), { recursive: true, mode: 0o700 })
     const temporary = `${this.path}.${process.pid}.tmp`
-    await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+    // Only the user can write it. The commit hook runs the reviewer command from
+    // this file, and refuses a file that other users can write.
+    await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
     await rename(temporary, this.path)
     return next
   }

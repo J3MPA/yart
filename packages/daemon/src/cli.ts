@@ -5,23 +5,31 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import type { Server } from 'node:http'
 import { authorHasAnswered, latestSubmission, submissionAuthor } from '@yart/core'
-import { daemonHealth, startDaemon, stopDaemon, waitForReview } from './control.ts'
+import { daemonUrl, LOOPBACK, makeToken, writeToken } from './auth.ts'
+import { daemonHealth, signInUrl, startDaemon, stopDaemon, waitForReview } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
 import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
 import { defaultStateDir } from './repositories.ts'
+import { foreignMessage } from './probe.ts'
 import { createServer } from './server.ts'
 import { VERSION } from './version.ts'
 
 const DEFAULT_PORT = 7777
 
-/**
- * The daemon can read all files in all repositories that it served. Thus other
- * computers must not connect to it. Without a value, Node listens on all
- * interfaces. Clients still use `localhost`, which also goes to this address.
- * The seen state and the drafts in the browser use that origin as their key.
- */
-const LOOPBACK = '127.0.0.1'
+/** Opens a URL in the browser. When that fails, the URL is still in the output. */
+const openUrl = (url: string): void => {
+  const command =
+    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? null : 'xdg-open'
+  if (command === null) return
+  try {
+    const child = spawn(command, [url], { detached: true, stdio: 'ignore' })
+    child.on('error', () => undefined)
+    child.unref()
+  } catch {
+    // The URL is in the output. The person can open it.
+  }
+}
 
 /**
  * A path that `--repo` names must be a repository. Without `--repo`, the
@@ -91,6 +99,7 @@ const hook = async (argv: readonly string[]): Promise<number> => {
       return preCommit({
         repo_path,
         port,
+        state_dir: defaultStateDir(),
         write,
         // Starts this same program as a daemon, with the same Node and flags.
         // In the desktop app, this process is Electron in the mode of Node, and
@@ -147,51 +156,81 @@ const reviewer = async (argv: readonly string[]): Promise<number> => {
   }
 }
 
-const CONTROL_COMMANDS: ReadonlySet<string> = new Set(['start', 'stop', 'restart', 'status'])
+const CONTROL_COMMANDS: ReadonlySet<string> = new Set([
+  'start',
+  'stop',
+  'restart',
+  'status',
+  'open',
+])
 
-/** `yart start`, `stop`, `restart` and `status`. They return the exit code. */
+/** `yart start`, `stop`, `restart`, `status` and `open`. They return the exit code. */
 const control = async (command: string, argv: readonly string[]): Promise<number> => {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     args: [...argv],
     options: { port: { type: 'string', short: 'p' }, repo: { type: 'string', short: 'r' } },
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Node's option name
+    allowPositionals: true,
   })
   const port = parsePort(values.port)
+  const state_dir = defaultStateDir()
   const write = (line: string) => process.stdout.write(`${line}\n`)
-  const health = await daemonHealth(port)
+  const health = await daemonHealth(port, state_dir)
   const start = async (repo_path: string | null) => {
-    await startDaemon({ port, repo_path, cli_path: fileURLToPath(import.meta.url) })
-    write(`yart: the daemon runs on http://localhost:${port}.`)
+    await startDaemon({ port, state_dir, repo_path, cli_path: fileURLToPath(import.meta.url) })
+    write(`yart: the daemon runs on ${daemonUrl(port)}.`)
   }
 
   switch (command) {
     case 'status':
-      if (health === null) {
-        write(`yart: no daemon runs on port ${port}.`)
+      if (health.state !== 'yart') {
+        write(
+          health.state === 'none' ? `yart: no daemon runs on port ${port}.` : foreignMessage(port),
+        )
         return 1
       }
-      write(`yart: the daemon runs on http://localhost:${port}.`)
-      write(`  version:    ${health.version ?? 'older than 0.1.0'}`)
-      write(`  repository: ${health.repo_path ?? 'none'}`)
+      write(`yart: the daemon runs on ${daemonUrl(port)}.`)
+      write(`  version:    ${health.health.version ?? 'older than 0.1.0'}`)
+      write(`  repository: ${health.health.repo_path ?? 'none'}`)
       return 0
     case 'start':
-      if (health !== null) {
+      if (health.state === 'foreign') throw new Error(foreignMessage(port))
+      if (health.state === 'yart') {
         write(`yart: a daemon already runs on port ${port}.`)
         return 0
       }
       await start(await defaultRepo(values.repo))
       return 0
+    case 'open': {
+      if (health.state === 'foreign') throw new Error(foreignMessage(port))
+      if (health.state === 'none') await start(await defaultRepo(values.repo))
+      const review_id = positionals[0]
+      const url = await signInUrl(
+        port,
+        state_dir,
+        review_id === undefined ? '/' : `/reviews/${encodeURIComponent(review_id)}`,
+      )
+      write('yart: open this link to sign in. It works one time, for 5 minutes:')
+      write(`  ${url}`)
+      openUrl(url)
+      return 0
+    }
     case 'stop':
       write(
-        (await stopDaemon(port))
+        (await stopDaemon(port, state_dir))
           ? 'yart: the daemon stopped.'
           : `yart: no daemon runs on port ${port}.`,
       )
       return 0
     default:
-      await stopDaemon(port)
+      await stopDaemon(port, state_dir)
       // The new daemon keeps the default repository of the old one.
       await start(
-        values.repo === undefined ? (health?.repo_path ?? null) : await findRepoRoot(values.repo),
+        values.repo === undefined
+          ? health.state === 'yart'
+            ? health.health.repo_path
+            : null
+          : await findRepoRoot(values.repo),
       )
       return 0
   }
@@ -225,17 +264,30 @@ const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
   if (minutes !== null && !(minutes > 0)) throw new Error(`Invalid timeout: ${values.timeout}`)
 
   const port = parsePort(values.port)
+  const state_dir = defaultStateDir()
   const timeout_ms = minutes === null ? null : minutes * 60_000
 
   if (values.author === true) {
-    const current = await waitForReview({ port, review_id, timeout_ms: 0, done: () => true })
+    const current = await waitForReview({
+      port,
+      state_dir,
+      review_id,
+      timeout_ms: 0,
+      done: () => true,
+    })
     const verdict = current === null ? null : latestSubmission(current)
     if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
       throw new Error(
         `No AI reviewer gave a verdict on ${review_id}. Give one with submit_verdict.`,
       )
     }
-    const answered = await waitForReview({ port, review_id, timeout_ms, done: authorHasAnswered })
+    const answered = await waitForReview({
+      port,
+      state_dir,
+      review_id,
+      timeout_ms,
+      done: authorHasAnswered,
+    })
     if (answered === null) {
       process.stdout.write(
         `yart: the author did not answer on ${review_id} in ${minutes} minutes.\n`,
@@ -249,7 +301,7 @@ const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
     return 0
   }
 
-  const review = await waitForReview({ port, review_id, timeout_ms })
+  const review = await waitForReview({ port, state_dir, review_id, timeout_ms })
   if (review === null) {
     process.stdout.write(`yart: no verdict on ${review_id} in ${minutes} minutes.\n`)
     return 2
@@ -330,6 +382,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         'Usage: yart [options]',
         '       yart start|stop|restart|status [--port <port>]',
+        '       yart open [review-id] [--port <port>]',
         '       yart await <review-id> [--author] [--port <port>] [--timeout <minutes>]',
         '       yart hook <install|uninstall|pre-commit>',
         '       yart reviewer <install|uninstall> [--user]',
@@ -351,9 +404,12 @@ export const main = async (argv: readonly string[]): Promise<void> => {
 
   const repo_path = await defaultRepo(values.repo)
   const state_dir = defaultStateDir()
+  const token = makeToken()
   // The server exists only after createServer. Thus the shutdown reads it from a holder.
   const holder: { server: Server | null } = { server: null }
   const app = createServer({
+    // A new token at each start. A token that leaked before does not work after a restart.
+    auth: { token, ui_token: makeToken(), cookie_name: `yart_${port}` },
     repo_path,
     state_dir,
     shutdown: () => {
@@ -362,9 +418,22 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     },
   })
 
+  // The daemon can read all files in all repositories that it served. Thus other
+  // computers must not connect to it. Each client uses this same address, not
+  // `localhost`, because a different process could listen on `::1`.
   holder.server = serve({ fetch: app.fetch, port, hostname: LOOPBACK }, (info) => {
-    process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
-    process.stdout.write(`listening on http://localhost:${info.port}\n`)
+    // Only after the listen. A daemon that cannot get the port must not replace
+    // the token of the daemon that has it.
+    void writeToken(state_dir, info.port, token).then(
+      () => {
+        process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
+        process.stdout.write(`listening on ${daemonUrl(info.port)}. Run yart open to sign in.\n`)
+      },
+      (cause: unknown) => {
+        process.stderr.write(`yart: cannot write the token: ${String(cause)}\n`)
+        process.exit(1)
+      },
+    )
   }) as Server
 }
 

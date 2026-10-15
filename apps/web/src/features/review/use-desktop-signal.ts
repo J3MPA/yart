@@ -5,6 +5,8 @@ import type { Unseen } from './use-unseen'
 interface DesktopBridge {
   unseenChanged(count: number): void
   notify(notice: { review_id: string; title: string }): void
+  /** Asks the app to sign this window in again. An app from before sign-in does not have it. */
+  signIn?(): void
 }
 
 declare global {

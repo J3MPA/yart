@@ -278,8 +278,11 @@ when it passes AI review.
 **Done: the reviewer role.** A comment can come from `human`, from `agent`, or
 from `reviewer`. A `reviewer` is an AI reviewer with an optional `author_name`.
 A verdict records if the person or a reviewer gave it. The daemon examines the
-authors. A reviewer can give a verdict with the comments that it held. The agent
-under review cannot give a verdict. Only the approval of the person starts the
+authors. A reviewer can give a verdict with the comments that it held. The MCP
+server of the agent under review has no tool that gives a verdict. Only a server
+with `--role reviewer` has the reviewer tools. Only the window of the person,
+with its sign-in cookie, can give a verdict as the person. The roles are labels
+for the processes of one user, not a security control. Only the approval of the person starts the
 clean-up that the settings set. The comments and verdicts of a reviewer count as
 activity. Thus the person sees that an AI review moves.
 

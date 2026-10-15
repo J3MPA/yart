@@ -1,21 +1,40 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Review } from '@yart/core'
+import { daemonUrl } from './auth.ts'
+import { authHeaders, foreignMessage, probeDaemon, type Probe } from './probe.ts'
 
-export interface DaemonHealth {
-  repo_path: string | null
-  version?: string
-  code_dir?: string
+export type { DaemonHealth } from './probe.ts'
+
+/**
+ * What answers on a port. Use it for each request: the token changes when the
+ * daemon starts again.
+ */
+export const daemonHealth = (port: number, state_dir: string): Promise<Probe> =>
+  probeDaemon(port, state_dir)
+
+/** The token of the daemon on a port. Refuses a process that is not the daemon. */
+const verifiedToken = async (port: number, state_dir: string): Promise<string | null> => {
+  const probe = await probeDaemon(port, state_dir)
+  if (probe.state === 'foreign') throw new Error(foreignMessage(port))
+  return probe.state === 'yart' ? probe.token : null
 }
 
-/** The health of the daemon on a port, or null when no daemon answers. */
-export const daemonHealth = async (port: number): Promise<DaemonHealth | null> => {
-  try {
-    const response = await fetch(`http://localhost:${port}/health`)
-    return response.ok ? ((await response.json()) as DaemonHealth) : null
-  } catch {
-    return null
-  }
+/**
+ * A one-time link that signs the window of the person in to the daemon, and
+ * opens a page.
+ */
+export const signInUrl = async (port: number, state_dir: string, path = '/'): Promise<string> => {
+  const token = await verifiedToken(port, state_dir)
+  if (token === null) throw new Error(`No yart daemon runs on port ${port}.`)
+  const response = await fetch(`${daemonUrl(port)}/api/sign-in-codes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(token) },
+    body: '{}',
+  })
+  if (!response.ok) throw new Error(`The daemon refused a sign-in link (${response.status}).`)
+  const { code } = (await response.json()) as { code: string }
+  return `${daemonUrl(port)}/sign-in?code=${code}&next=${encodeURIComponent(path)}`
 }
 
 const waitFor = async (check: () => Promise<boolean>, timeout_ms: number): Promise<boolean> => {
@@ -31,11 +50,22 @@ const waitFor = async (check: () => Promise<boolean>, timeout_ms: number): Promi
  * Stops the daemon on a port, and waits until it does not answer. Returns false
  * when no daemon ran.
  */
-export const stopDaemon = async (port: number, timeout_ms = 5000): Promise<boolean> => {
-  if ((await daemonHealth(port)) === null) return false
-  const response = await fetch(`http://localhost:${port}/api/shutdown`, {
+export const stopDaemon = async (
+  port: number,
+  state_dir: string,
+  timeout_ms = 5000,
+): Promise<boolean> => {
+  const probe = await probeDaemon(port, state_dir)
+  if (probe.state === 'none') return false
+  // A daemon from before the token does not prove itself, but it stops on a
+  // request with no token. Thus an update can stop it. A different program does
+  // not stop, and the error below tells how to stop it.
+  const response = await fetch(`${daemonUrl(port)}/api/shutdown`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(probe.state === 'yart' ? authHeaders(probe.token) : {}),
+    },
     body: '{}',
   }).catch(() => null)
   if (response?.status === 404) {
@@ -44,13 +74,21 @@ export const stopDaemon = async (port: number, timeout_ms = 5000): Promise<boole
         `Stop its process: lsof -ti tcp:${port} | xargs kill`,
     )
   }
-  const stopped = await waitFor(async () => (await daemonHealth(port)) === null, timeout_ms)
-  if (!stopped) throw new Error(`The daemon on port ${port} did not stop.`)
+  const stopped = await waitFor(
+    async () => (await probeDaemon(port, state_dir)).state === 'none',
+    timeout_ms,
+  )
+  if (!stopped) {
+    throw new Error(
+      probe.state === 'yart' ? `The daemon on port ${port} did not stop.` : foreignMessage(port),
+    )
+  }
   return true
 }
 
 export interface StartOptions {
   port: number
+  state_dir: string
   repo_path: string | null
   /** The CLI of the daemon. The child runs it with the same Node and flags as this process. */
   cli_path: string
@@ -63,7 +101,7 @@ export interface StartOptions {
  * Node, and the child gets that mode from the environment.
  */
 export const startDaemon = async (options: StartOptions): Promise<void> => {
-  const { port, repo_path, cli_path, timeout_ms = 10_000 } = options
+  const { port, state_dir, repo_path, cli_path, timeout_ms = 10_000 } = options
   spawn(
     process.execPath,
     [
@@ -75,12 +113,16 @@ export const startDaemon = async (options: StartOptions): Promise<void> => {
     ],
     { detached: true, stdio: 'ignore' },
   ).unref()
-  const started = await waitFor(async () => (await daemonHealth(port)) !== null, timeout_ms)
+  const started = await waitFor(
+    async () => (await probeDaemon(port, state_dir)).state === 'yart',
+    timeout_ms,
+  )
   if (!started) throw new Error(`The daemon did not start on port ${port}.`)
 }
 
 export interface WaitOptions {
   port: number
+  state_dir: string
   review_id: string
   /** Null waits with no limit. */
   timeout_ms: number | null
@@ -97,16 +139,25 @@ export interface WaitOptions {
 export const waitForReview = async (options: WaitOptions): Promise<Review | null> => {
   const {
     port,
+    state_dir,
     review_id,
     timeout_ms,
     done = (review) => review.status === 'submitted',
     poll_ms = 1000,
   } = options
   const deadline = timeout_ms === null ? null : Date.now() + timeout_ms
+  // The token changes when the daemon starts again. Thus a refused token makes
+  // the next poll prove the daemon and read the token again.
+  let token: string | null = null
   for (;;) {
-    const response = await fetch(
-      `http://localhost:${port}/api/reviews/${encodeURIComponent(review_id)}`,
-    ).catch(() => null)
+    token ??= await verifiedToken(port, state_dir)
+    const response =
+      token === null
+        ? null
+        : await fetch(`${daemonUrl(port)}/api/reviews/${encodeURIComponent(review_id)}`, {
+            headers: authHeaders(token),
+          }).catch(() => null)
+    if (response?.status === 401) token = null
     if (response?.status === 404) throw new Error(`There is no review ${review_id}.`)
     if (response?.ok === true) {
       const review = (await response.json()) as Review

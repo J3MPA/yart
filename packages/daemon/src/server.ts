@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
+import { setCookie } from 'hono/cookie'
+import { parse as parseCookies } from 'hono/utils/cookie'
 import {
+  hasControlCharacters,
   latestSubmission,
   reviewerRounds,
   submissionAuthor,
@@ -13,6 +16,7 @@ import {
   type ReviewVerdict,
   type Thread,
 } from '@yart/core'
+import { healthProof, makeToken, sameSecret } from './auth.ts'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { Repositories } from './repositories.ts'
@@ -20,7 +24,24 @@ import { ReviewError, type SubmitParams } from './review.ts'
 import { SettingsStore } from './settings.ts'
 import { VERSION } from './version.ts'
 
+/**
+ * The secrets of the daemon. Each `/api` request must have one of them.
+ */
+export interface ServerAuth {
+  /** The token of the clients: the CLI, the commit hook and the MCP server. It is in a file. */
+  token: string
+  /**
+   * The token of the window of the person. The window gets it in a cookie, from
+   * a sign-in link. The daemon never writes it to a file. Only a request with it
+   * can write as the person, change the settings, or archive or delete a review.
+   */
+  ui_token: string
+  /** The name of the cookie. A cookie does not belong to one port, thus the name has the port. */
+  cookie_name: string
+}
+
 export interface ServerOptions {
+  auth: ServerAuth
   /** The repository for a request that does not name one, or null for none. */
   repo_path: string | null
   /** Where the daemon records the repositories that it served. Null keeps them in memory. */
@@ -39,6 +60,21 @@ export interface ServerOptions {
  * archived or deleted.
  */
 const APPROVAL_GRACE_MS = 60_000
+
+/** How long a sign-in link works. A link works one time only. */
+const SIGN_IN_CODE_MS = 5 * 60_000
+
+/** The most sign-in links that can wait at one time. */
+const MAX_SIGN_IN_CODES = 100
+
+/**
+ * Who sent a request. `person` is the window of the person. `client` is a
+ * process with the token file: the CLI, the hook or an MCP server.
+ */
+type Role = 'person' | 'client'
+
+// eslint-disable-next-line @typescript-eslint/naming-convention -- Hono's own type shape
+export type ServerEnv = { Variables: { role: Role } }
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL('../../../apps/web/dist', import.meta.url))
 
@@ -76,11 +112,17 @@ interface Speaker {
  */
 const parseSpeaker = (
   body: { author?: unknown; author_name?: unknown },
+  role: Role,
   allowed: ReadonlySet<string> = AUTHORS,
 ): Speaker => {
-  const author = body.author ?? 'human'
+  // A client must say who it speaks for. Only the window of the person can
+  // leave it out, and only that window can write as the person.
+  const author = body.author ?? (role === 'person' ? 'human' : undefined)
   if (typeof author !== 'string' || !allowed.has(author)) {
     throw new ReviewError(`author must be one of ${[...allowed].join(', ')}`, 400)
+  }
+  if (author === 'human' && role !== 'person') {
+    throw new ReviewError('Only the yart window can write as the person.', 403)
   }
   const raw_name = body.author_name ?? null
   if (raw_name === null) return { author: author as CommentAuthor, author_name: null }
@@ -89,6 +131,10 @@ const parseSpeaker = (
   }
   if (typeof raw_name !== 'string' || raw_name.trim() === '') {
     throw new ReviewError('author_name must be a name', 400)
+  }
+  // A line break in a name would start a new line in the text that an agent reads.
+  if (hasControlCharacters(raw_name)) {
+    throw new ReviewError('author_name must be one line, with no control characters', 400)
   }
   const author_name = raw_name.trim()
   if (author_name.length > MAX_AUTHOR_NAME) {
@@ -233,16 +279,37 @@ const messageFor = (cause: unknown): string => {
   return cause instanceof Error ? cause.message : 'Unexpected error'
 }
 
+const SIGN_IN_FAILED =
+  '<!doctype html><title>yart</title><p style="font-family:sans-serif">' +
+  'This sign-in link does not work now. A link works one time, for a short time. ' +
+  'Run <code>yart open</code> in a terminal to get a new link.'
+
+/** The page after a sign-in. Only a path on this daemon, thus the link cannot send the person away. */
+const safeNext = (next: string | undefined): string =>
+  next !== undefined && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+    ? next
+    : '/'
+
+/** Refuses a request that does not come from the window of the person. */
+const requirePerson = (context: Context<ServerEnv>): void => {
+  if (context.get('role') !== 'person') {
+    throw new ReviewError('Only the yart window can do this.', 403)
+  }
+}
+
 export const createServer = ({
+  auth,
   repo_path,
   ui_dir = DEFAULT_UI_DIR,
   state_dir = null,
   approval_grace_ms = APPROVAL_GRACE_MS,
   shutdown,
-}: ServerOptions): Hono => {
+}: ServerOptions): Hono<ServerEnv> => {
   const repositories = new Repositories({ default_repo: repo_path, state_dir })
   const settings = new SettingsStore(state_dir)
-  const app = new Hono()
+  const app = new Hono<ServerEnv>()
+  /** The sign-in codes that wait, with the time when each stops working. */
+  const sign_in_codes = new Map<string, number>()
 
   /**
    * Archives or deletes a review some time after its approval, as the settings
@@ -299,6 +366,32 @@ export const createServer = ({
   })
 
   /**
+   * Refuses a request with no token.
+   *
+   * The Host check and the JSON rule stop web pages, but not a process on this
+   * computer. Loopback TCP does not check the user account. Thus a process of a
+   * different user, or a process in a sandbox, could control the daemon without
+   * this check.
+   */
+  app.use('/api/*', async (context, next) => {
+    const cookie = parseCookies(context.req.header('cookie') ?? '', auth.cookie_name)[
+      auth.cookie_name
+    ]
+    const bearer = /^Bearer (\S+)$/i.exec(context.req.header('authorization') ?? '')?.[1]
+    if (cookie !== undefined && sameSecret(cookie, auth.ui_token)) {
+      context.set('role', 'person')
+    } else if (bearer !== undefined && sameSecret(bearer, auth.token)) {
+      context.set('role', 'client')
+    } else {
+      return context.json<ErrorBody>(
+        { error: 'yart needs a sign-in for this request. Run yart open in a terminal.' },
+        401,
+      )
+    }
+    await next()
+  })
+
+  /**
    * Refuses a write that a web page could send.
    *
    * A page on any site can send a "simple" POST across origins, with plain text
@@ -326,9 +419,52 @@ export const createServer = ({
   // The version lets a client see a daemon that is older than the client. After
   // an update, the old daemon still runs. A daemon from before this field
   // existed also served only one repository.
-  app.get('/health', (context) =>
-    context.json({ ok: true, repo_path, version: VERSION, code_dir: CODE_DIR }),
-  )
+  //
+  // A client sends a challenge. The proof tells the client that this process
+  // knows the token, before the client sends the token.
+  app.get('/health', (context) => {
+    const challenge = context.req.query('challenge')
+    const proof =
+      challenge !== undefined && challenge.length > 0 && challenge.length <= 128
+        ? healthProof(auth.token, challenge)
+        : undefined
+    return context.json({ ok: true, repo_path, version: VERSION, code_dir: CODE_DIR, proof })
+  })
+
+  /**
+   * A one-time code for a sign-in link. A client with the token gets it, and
+   * opens the link for the person. The code goes into a URL, thus it works only
+   * one time and for a short time.
+   */
+  app.post('/api/sign-in-codes', (context) => {
+    const now = Date.now()
+    for (const [code, expires_at] of sign_in_codes) {
+      if (expires_at <= now || sign_in_codes.size >= MAX_SIGN_IN_CODES) {
+        sign_in_codes.delete(code)
+      }
+    }
+    const code = makeToken()
+    sign_in_codes.set(code, now + SIGN_IN_CODE_MS)
+    return context.json({ code }, 201)
+  })
+
+  /** Gives the window of the person its cookie, for a code from `/api/sign-in-codes`. */
+  app.get('/sign-in', (context) => {
+    const code = context.req.query('code') ?? ''
+    const expires_at = sign_in_codes.get(code)
+    sign_in_codes.delete(code)
+    if (expires_at === undefined || expires_at <= Date.now()) {
+      return context.html(SIGN_IN_FAILED, 403)
+    }
+    setCookie(context, auth.cookie_name, auth.ui_token, {
+      path: '/',
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- Hono's option name
+      httpOnly: true,
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- Hono's option name
+      sameSite: 'Strict',
+    })
+    return context.redirect(safeNext(context.req.query('next')), 303)
+  })
 
   app.get('/api/version', (context) => context.json({ version: VERSION }))
 
@@ -352,6 +488,7 @@ export const createServer = ({
   })
 
   app.patch('/api/reviews/:id', async (context) => {
+    requirePerson(context)
     const service = await repositories.locate(context.req.param('id'))
     const body = await context.req.json<{ archived?: boolean }>()
     if (typeof body.archived !== 'boolean') {
@@ -369,6 +506,13 @@ export const createServer = ({
     }>()
     if (body.repo_path !== undefined && typeof body.repo_path !== 'string') {
       throw new ReviewError('repo_path must be a path', 400)
+    }
+    // A line break in a title would start a new line in the text that an agent reads.
+    if (
+      body.title !== undefined &&
+      (typeof body.title !== 'string' || hasControlCharacters(body.title))
+    ) {
+      throw new ReviewError('title must be one line, with no control characters', 400)
     }
     const { service, repo_root } = await repositories.resolve(body.repo_path)
     // The default is uncommitted work against HEAD. An agent that just finished
@@ -388,6 +532,7 @@ export const createServer = ({
   })
 
   app.delete('/api/reviews/:id', async (context) => {
+    requirePerson(context)
     const service = await repositories.locate(context.req.param('id'))
     await service.remove(context.req.param('id'))
     return context.body(null, 204)
@@ -446,7 +591,7 @@ export const createServer = ({
       side: body.side,
       body: body.body,
       attachments: parseAttachmentIds(body.attachments),
-      ...parseSpeaker(body),
+      ...parseSpeaker(body, context.get('role')),
     })
     return context.json(review, 201)
   })
@@ -465,7 +610,7 @@ export const createServer = ({
 
     return context.json(
       await service.addComment(context.req.param('id'), context.req.param('thread_id'), body.body, {
-        ...parseSpeaker(body),
+        ...parseSpeaker(body, context.get('role')),
         attachments: parseAttachmentIds(body.attachments),
       }),
       201,
@@ -506,7 +651,10 @@ export const createServer = ({
         context.req.param('id'),
         context.req.param('submission_id'),
         body.body,
-        { ...parseSpeaker(body), attachments: parseAttachmentIds(body.attachments) },
+        {
+          ...parseSpeaker(body, context.get('role')),
+          attachments: parseAttachmentIds(body.attachments),
+        },
       ),
       201,
     )
@@ -526,7 +674,7 @@ export const createServer = ({
       throw new ReviewError('expected_head_sha must be a string', 400)
     }
 
-    const speaker = parseSpeaker(body, SUBMITTERS)
+    const speaker = parseSpeaker(body, context.get('role'), SUBMITTERS)
     if (speaker.author === 'reviewer') {
       // The daemon examines this. It does not leave it to the reviewer, because
       // the reviewer is one of the two parties that possibly do not want to stop.
@@ -592,6 +740,7 @@ export const createServer = ({
   app.get('/api/settings', async (context) => context.json(await settings.read()))
 
   app.patch('/api/settings', async (context) => {
+    requirePerson(context)
     const body = await context.req.json<unknown>().catch(() => null)
     if (typeof body !== 'object' || body === null) {
       throw new ReviewError('Settings must be sent as an object', 400)

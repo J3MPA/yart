@@ -1,9 +1,9 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { latestSubmission, reviewerRounds, submissionAuthor, type Settings } from '@yart/core'
 import { VERSION, type Review } from '@yart/daemon'
 import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-client.ts'
-import { browserOpeningEnabled, openReview } from './open-browser.ts'
+import { browserOpeningEnabled, openInBrowser, openReview } from './open-browser.ts'
 import {
   openThreads,
   ImageNumbers,
@@ -30,18 +30,35 @@ const imagePaths = () =>
 /** The most images that one result gives. Each image goes into the context of the agent. */
 const MAX_IMAGES = 10
 
+/**
+ * The two sides of a review. An agent whose work is under review gets the
+ * `author` tools. An AI reviewer gets the `reviewer` tools from a different
+ * server. Thus the author does not have a tool that gives a verdict.
+ */
+export type McpRole = 'author' | 'reviewer'
+
+export const MCP_ROLES: readonly McpRole[] = ['author', 'reviewer']
+
 /** The rules that the MCP client gives to the agent with the tools. */
-const INSTRUCTIONS = [
-  'yart is a local code review tool. Obey these rules:',
-  '- When the person asks to review changes, call start_review. Do not ask how they want to review.',
-  '- After start_review and advance_review, wait for the verdict at once. Do not wait for the ' +
-    'person to tell you. Their results tell you how to wait.',
-  '- When yart opens the review for the person, do not send the review URL.',
-  '- When you fix a problem that the person can see, such as a UI change, attach a ' +
-    'screenshot of the fix with image_paths.',
-  '- To review the work of a different agent, use the reviewer tools: get_reviewer_settings, ' +
-    'get_diff, submit_verdict and await_author.',
-].join('\n')
+const INSTRUCTIONS: Record<McpRole, string> = {
+  author: [
+    'yart is a local code review tool. Obey these rules:',
+    '- When the person asks to review changes, call start_review. Do not ask how they want to review.',
+    '- After start_review and advance_review, wait for the verdict at once. Do not wait for the ' +
+      'person to tell you. Their results tell you how to wait.',
+    '- When yart opens the review for the person, do not send the review URL.',
+    '- When you fix a problem that the person can see, such as a UI change, attach a ' +
+      'screenshot of the fix with image_paths.',
+    '- For an AI review of your work, read get_reviewer_settings. Then start the yart-reviewer ' +
+      'subagent. It has its own yart server with the reviewer tools.',
+  ].join('\n'),
+  reviewer: [
+    'yart is a local code review tool. This server is for an AI reviewer. Obey these rules:',
+    '- Review only the work of a different agent. Do not review your own work.',
+    '- Read the review with get_review and the changes with get_diff. Then give one verdict ' +
+      'with submit_verdict.',
+  ].join('\n'),
+}
 const MAX_WAIT_SECONDS = 1800
 
 /* eslint-disable @typescript-eslint/naming-convention -- MCP wire field names */
@@ -116,6 +133,8 @@ const guard = async (run: () => Promise<ToolResult>): Promise<ToolResult> => {
 }
 
 export interface McpServerOptions extends DaemonClientOptions {
+  /** The side of the review that this server serves. The default is `author`. */
+  role?: McpRole
   /**
    * Shows a new review to the person who must read it.
    *
@@ -128,10 +147,25 @@ export interface McpServerOptions extends DaemonClientOptions {
 
 export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
-  const server = new McpServer({ name: 'yart', version: VERSION }, { instructions: INSTRUCTIONS })
+  const role = options.role ?? 'author'
+  const server = new McpServer(
+    { name: role === 'author' ? 'yart' : 'yart-reviewer', version: VERSION },
+    { instructions: INSTRUCTIONS[role] },
+  )
+  /** Keeps a tool only on a server of its role. */
+  const only = (allowed: McpRole, tool: RegisteredTool): void => {
+    if (role !== allowed) tool.remove()
+  }
 
   const port = options.port ?? DEFAULT_PORT
-  const openBrowser = options.openBrowser ?? ((url: string) => openReview(url, port))
+  // The browser gets a one-time sign-in link, not the bare URL. The desktop app
+  // signs in by itself. The agent never gets the link.
+  const openBrowser =
+    options.openBrowser ??
+    ((url: string) =>
+      openReview(url, port, (review_url) => {
+        daemon.signInUrl(review_url).then(openInBrowser, () => openInBrowser(review_url))
+      }))
   const opening_enabled = browserOpeningEnabled()
   // When yart opens the review for the person, the agent does not get the URL.
   // An agent repeats a URL in the chat, and the person does not need it there.
@@ -175,145 +209,151 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     return { content }
   }
 
-  server.registerTool(
-    'start_review',
-    toolConfig({
-      title: 'Start a review',
-      description:
-        'Open a code review of your changes for the person. Call this when you complete ' +
-        'your changes. You do not have to commit them. Also call this when the person asks ' +
-        'to review changes. By default, the review shows all changes in the files on disk, ' +
-        'also new files. Then wait for the verdict, as the result tells you.',
-      input_schema: {
-        base: z
-          .string()
-          .optional()
-          .describe(
-            'The revision to compare from, for example a branch name, a commit sha or HEAD~3. ' +
-              'The default is HEAD. HEAD is correct for changes that are not committed.',
-          ),
-        head: z
-          .string()
-          .optional()
-          .describe(
-            'The revision to compare to. The default is "working": the files on disk, ' +
-              'committed or not. For committed work, give a revision.',
-          ),
-        title: z
-          .string()
-          .optional()
-          .describe(
-            'A short name for the review. The list of reviews shows it. The default is the ' +
-              'subject of the head commit. Give a name when the subject does not identify ' +
-              'the review.',
-          ),
-      },
-    }),
-    async ({ base, head, title }) =>
-      guard(async () => {
-        const review = await daemon.createReview(base, head, title)
-        const url = daemon.reviewUrl(review.id)
+  only(
+    'author',
+    server.registerTool(
+      'start_review',
+      toolConfig({
+        title: 'Start a review',
+        description:
+          'Open a code review of your changes for the person. Call this when you complete ' +
+          'your changes. You do not have to commit them. Also call this when the person asks ' +
+          'to review changes. By default, the review shows all changes in the files on disk, ' +
+          'also new files. Then wait for the verdict, as the result tells you.',
+        input_schema: {
+          base: z
+            .string()
+            .optional()
+            .describe(
+              'The revision to compare from, for example a branch name, a commit sha or HEAD~3. ' +
+                'The default is HEAD. HEAD is correct for changes that are not committed.',
+            ),
+          head: z
+            .string()
+            .optional()
+            .describe(
+              'The revision to compare to. The default is "working": the files on disk, ' +
+                'committed or not. For committed work, give a revision.',
+            ),
+          title: z
+            .string()
+            .optional()
+            .describe(
+              'A short name for the review. The list of reviews shows it. The default is the ' +
+                'subject of the head commit. Give a name when the subject does not identify ' +
+                'the review.',
+            ),
+        },
+      }),
+      async ({ base, head, title }) =>
+        guard(async () => {
+          const review = await daemon.createReview(base, head, title)
+          const url = daemon.reviewUrl(review.id)
 
-        if (review.files.length === 0) {
+          if (review.files.length === 0) {
+            return text(
+              [
+                renderReview(review, shownUrl(review.id)),
+                '',
+                'The two revisions are the same. Thus there is nothing to review.',
+                'To review committed work, give a base, for example HEAD~1 or main.',
+              ].join('\n'),
+            )
+          }
+
+          // An empty review does not need a window. Thus this comes after the check
+          // above, not next to the call that made the review.
+          if (opening_enabled) openBrowser(url)
+
           return text(
             [
               renderReview(review, shownUrl(review.id)),
               '',
-              'The two revisions are the same. Thus there is nothing to review.',
-              'To review committed work, give a base, for example HEAD~1 or main.',
+              opening_enabled
+                ? 'yart opened the review for the person. Tell them in one short sentence that ' +
+                  'it is open. Do not send the URL.'
+                : 'Ask the person to open the URL and review the changes.',
+              waitHint(review.id),
             ].join('\n'),
           )
-        }
-
-        // An empty review does not need a window. Thus this comes after the check
-        // above, not next to the call that made the review.
-        if (opening_enabled) openBrowser(url)
-
-        return text(
-          [
-            renderReview(review, shownUrl(review.id)),
-            '',
-            opening_enabled
-              ? 'yart opened the review for the person. Tell them in one short sentence that ' +
-                'it is open. Do not send the URL.'
-              : 'Ask the person to open the URL and review the changes.',
-            waitHint(review.id),
-          ].join('\n'),
-        )
-      }),
+        }),
+    ),
   )
 
-  server.registerTool(
-    'await_review',
-    toolConfig({
-      title: 'Wait for the verdict of the person',
-      description:
-        'Wait until the person submits the review. Then get their verdict and open comments. ' +
-        'If the time stops first, you get the comments so far. That is not an error. ' +
-        'Call it again to wait more.',
-      input_schema: {
-        review_id: z.string().describe('The id that start_review gave.'),
-        timeout_seconds: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_WAIT_SECONDS)
-          .optional()
-          .describe(
-            `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
-          ),
-      },
-    }),
-    async ({ review_id, timeout_seconds }) =>
-      guard(async () => {
-        const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
-        const submitted = await daemon.waitForSubmission(review_id, seconds * 1000)
+  only(
+    'author',
+    server.registerTool(
+      'await_review',
+      toolConfig({
+        title: 'Wait for the verdict of the person',
+        description:
+          'Wait until the person submits the review. Then get their verdict and open comments. ' +
+          'If the time stops first, you get the comments so far. That is not an error. ' +
+          'Call it again to wait more.',
+        input_schema: {
+          review_id: z.string().describe('The id that start_review gave.'),
+          timeout_seconds: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_WAIT_SECONDS)
+            .optional()
+            .describe(
+              `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
+            ),
+        },
+      }),
+      async ({ review_id, timeout_seconds }) =>
+        guard(async () => {
+          const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
+          const submitted = await daemon.waitForSubmission(review_id, seconds * 1000)
 
-        if (submitted === null) {
-          const pending = await daemon.getReview(review_id)
-          const pending_images = new ImageNumbers()
-          return withImages(
-            review_id,
-            [
-              `The person did not submit the review in ${seconds} seconds. Call await_review again to wait more.`,
-              '',
-              renderThreads(openThreads(pending), 'Comments so far', pending_images),
-            ].join('\n'),
-            pending_images,
-          )
-        }
+          if (submitted === null) {
+            const pending = await daemon.getReview(review_id)
+            const pending_images = new ImageNumbers()
+            return withImages(
+              review_id,
+              [
+                `The person did not submit the review in ${seconds} seconds. Call await_review again to wait more.`,
+                '',
+                renderThreads(openThreads(pending), 'Comments so far', pending_images),
+              ].join('\n'),
+              pending_images,
+            )
+          }
 
-        const open = openThreads(submitted)
-        const note = reviewerNote(submitted, await daemon.getSettings())
-        const images = new ImageNumbers()
-        const rendered = renderVerdict(submitted, images)
-        const verdict = note === null ? rendered : `${rendered}\n\n${note}`
+          const open = openThreads(submitted)
+          const note = reviewerNote(submitted, await daemon.getSettings())
+          const images = new ImageNumbers()
+          const rendered = renderVerdict(submitted, images)
+          const verdict = note === null ? rendered : `${rendered}\n\n${note}`
 
-        if (open.length === 0) {
+          if (open.length === 0) {
+            return withImages(
+              review_id,
+              [
+                verdict,
+                '',
+                'No open comments.',
+                'To answer the summary, use reply_to_verdict. Thus the answer goes into the review.',
+              ].join('\n'),
+              images,
+            )
+          }
           return withImages(
             review_id,
             [
               verdict,
               '',
-              'No open comments.',
-              'To answer the summary, use reply_to_verdict. Thus the answer goes into the review.',
+              renderThreads(open, 'Open comments', images),
+              '',
+              'Fix these comments. Then call advance_review, to move the comments onto your changes.',
+              'To answer a comment, use reply_to_thread. To answer the verdict, use reply_to_verdict.',
             ].join('\n'),
             images,
           )
-        }
-        return withImages(
-          review_id,
-          [
-            verdict,
-            '',
-            renderThreads(open, 'Open comments', images),
-            '',
-            'Fix these comments. Then call advance_review, to move the comments onto your changes.',
-            'To answer a comment, use reply_to_thread. To answer the verdict, use reply_to_verdict.',
-          ].join('\n'),
-          images,
-        )
-      }),
+        }),
+    ),
   )
 
   server.registerTool(
@@ -352,65 +392,71 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       }),
   )
 
-  server.registerTool(
-    'reply_to_thread',
-    toolConfig({
-      title: 'Answer a comment',
-      description:
-        'Answer a comment thread. Use it to tell what you changed, or to give the reason ' +
-        'when you do not agree with the comment.',
-      input_schema: {
-        review_id: z.string(),
-        thread_id: z.string().describe('The id in brackets before each comment.'),
-        body: z.string().describe('The text of the answer.'),
-        image_paths: imagePaths(),
-      },
-    }),
-    async ({ review_id, thread_id, body, image_paths }) =>
-      guard(async () => {
-        const attachments = await daemon.uploadImages(review_id, image_paths)
-        await daemon.replyToThread(review_id, thread_id, body, attachments)
-        return text(`You answered ${thread_id}.`)
+  only(
+    'author',
+    server.registerTool(
+      'reply_to_thread',
+      toolConfig({
+        title: 'Answer a comment',
+        description:
+          'Answer a comment thread. Use it to tell what you changed, or to give the reason ' +
+          'when you do not agree with the comment.',
+        input_schema: {
+          review_id: z.string(),
+          thread_id: z.string().describe('The id in brackets before each comment.'),
+          body: z.string().describe('The text of the answer.'),
+          image_paths: imagePaths(),
+        },
       }),
+      async ({ review_id, thread_id, body, image_paths }) =>
+        guard(async () => {
+          const attachments = await daemon.uploadImages(review_id, image_paths)
+          await daemon.replyToThread(review_id, thread_id, body, attachments)
+          return text(`You answered ${thread_id}.`)
+        }),
+    ),
   )
 
-  server.registerTool(
-    'reply_to_verdict',
-    toolConfig({
-      title: 'Answer the verdict',
-      description:
-        'Answer the summary of the verdict, not a comment on a line. Use it to tell what ' +
-        'you did about the verdict, to tell about work that you already completed, or to ' +
-        'give the reason when you do not agree. Thus the answer goes into the review, not ' +
-        'only into the chat.',
-      input_schema: {
-        review_id: z.string(),
-        body: z.string().describe('The text of the answer.'),
-        submission_id: z
-          .string()
-          .optional()
-          .describe(
-            'The id in brackets next to the verdict. The default is the newest verdict, ' +
-              'which is the verdict that you got last.',
-          ),
-        image_paths: imagePaths(),
-      },
-    }),
-    async ({ review_id, body, submission_id, image_paths }) =>
-      guard(async () => {
-        let target = submission_id
-        if (target === undefined) {
-          const review = await daemon.getReview(review_id)
-          const submission = latestSubmission(review)
-          if (submission === null) {
-            return text('This review has no verdict yet. Thus there is no verdict to answer.')
-          }
-          target = submission.id
-        }
-        const attachments = await daemon.uploadImages(review_id, image_paths)
-        await daemon.replyToVerdict(review_id, target, body, attachments)
-        return text(`You answered the verdict on ${review_id}.`)
+  only(
+    'author',
+    server.registerTool(
+      'reply_to_verdict',
+      toolConfig({
+        title: 'Answer the verdict',
+        description:
+          'Answer the summary of the verdict, not a comment on a line. Use it to tell what ' +
+          'you did about the verdict, to tell about work that you already completed, or to ' +
+          'give the reason when you do not agree. Thus the answer goes into the review, not ' +
+          'only into the chat.',
+        input_schema: {
+          review_id: z.string(),
+          body: z.string().describe('The text of the answer.'),
+          submission_id: z
+            .string()
+            .optional()
+            .describe(
+              'The id in brackets next to the verdict. The default is the newest verdict, ' +
+                'which is the verdict that you got last.',
+            ),
+          image_paths: imagePaths(),
+        },
       }),
+      async ({ review_id, body, submission_id, image_paths }) =>
+        guard(async () => {
+          let target = submission_id
+          if (target === undefined) {
+            const review = await daemon.getReview(review_id)
+            const submission = latestSubmission(review)
+            if (submission === null) {
+              return text('This review has no verdict yet. Thus there is no verdict to answer.')
+            }
+            target = submission.id
+          }
+          const attachments = await daemon.uploadImages(review_id, image_paths)
+          await daemon.replyToVerdict(review_id, target, body, attachments)
+          return text(`You answered the verdict on ${review_id}.`)
+        }),
+    ),
   )
 
   server.registerTool(
@@ -432,37 +478,40 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       }),
   )
 
-  server.registerTool(
-    'advance_review',
-    toolConfig({
-      title: 'Move the review onto your new changes',
-      description:
-        'Move all comments onto your newest changes. Call this after you fix the comments, ' +
-        'committed or not. Each comment follows its line. When you changed that line, the ' +
-        'comment becomes outdated. The review opens again for the person.',
-      input_schema: {
-        review_id: z.string(),
-        head: z
-          .string()
-          .optional()
-          .describe(
-            'The revision to compare to now. The default is the same kind of head as before. ' +
-              'Thus a review of changes that are not committed reads the files on disk again.',
-          ),
-      },
-    }),
-    async ({ review_id, head }) =>
-      guard(async () => {
-        const review = await daemon.advanceReview(review_id, head)
-        return text(
-          [
-            renderReviewWithThreads(review, shownUrl(review.id)),
-            '',
-            'Tell the person that the review is ready again.',
-            waitHint(review.id),
-          ].join('\n'),
-        )
+  only(
+    'author',
+    server.registerTool(
+      'advance_review',
+      toolConfig({
+        title: 'Move the review onto your new changes',
+        description:
+          'Move all comments onto your newest changes. Call this after you fix the comments, ' +
+          'committed or not. Each comment follows its line. When you changed that line, the ' +
+          'comment becomes outdated. The review opens again for the person.',
+        input_schema: {
+          review_id: z.string(),
+          head: z
+            .string()
+            .optional()
+            .describe(
+              'The revision to compare to now. The default is the same kind of head as before. ' +
+                'Thus a review of changes that are not committed reads the files on disk again.',
+            ),
+        },
       }),
+      async ({ review_id, head }) =>
+        guard(async () => {
+          const review = await daemon.advanceReview(review_id, head)
+          return text(
+            [
+              renderReviewWithThreads(review, shownUrl(review.id)),
+              '',
+              'Tell the person that the review is ready again.',
+              waitHint(review.id),
+            ].join('\n'),
+          )
+        }),
+    ),
   )
 
   // The side of the reviewer. One MCP server serves the two sides. Thus these
@@ -493,165 +542,176 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       ),
   )
 
-  server.registerTool(
-    'get_diff',
-    toolConfig({
-      title: 'Read the changes of a review',
-      description:
-        'For an AI reviewer of the work of a different agent. Read the changes of a review as ' +
-        'a diff. Each line has its base and head line numbers, for your comments. Read it ' +
-        'before each submit_verdict, because the author can move the review.',
-      input_schema: { review_id: z.string().describe('The review to read.') },
-    }),
-    async ({ review_id }) =>
-      guard(async () => {
-        const [review, files] = await Promise.all([
-          daemon.getReview(review_id),
-          daemon.getDiff(review_id),
-        ])
-        return text(renderDiff(files, review))
+  only(
+    'reviewer',
+    server.registerTool(
+      'get_diff',
+      toolConfig({
+        title: 'Read the changes of a review',
+        description:
+          'For an AI reviewer of the work of a different agent. Read the changes of a review as ' +
+          'a diff. Each line has its base and head line numbers, for your comments. Read it ' +
+          'before each submit_verdict, because the author can move the review.',
+        input_schema: { review_id: z.string().describe('The review to read.') },
       }),
+      async ({ review_id }) =>
+        guard(async () => {
+          const [review, files] = await Promise.all([
+            daemon.getReview(review_id),
+            daemon.getDiff(review_id),
+          ])
+          return text(renderDiff(files, review))
+        }),
+    ),
   )
 
-  server.registerTool(
-    'submit_verdict',
-    toolConfig({
-      title: 'Give a verdict as an AI reviewer',
-      description:
-        'Only for an AI reviewer. Do not use it on your own work. Give a verdict on a review, ' +
-        'with all your line comments and answers in one call. approved: nothing must change. ' +
-        'changes_requested: the author must fix your comments. commented: your comments do ' +
-        'not stop the work. Then the review waits for the author. If you did not approve, ' +
-        'call await_author.',
-      input_schema: {
-        review_id: z.string(),
-        verdict: z.enum(['approved', 'changes_requested', 'commented']),
-        summary: z
-          .string()
-          .optional()
-          .describe('The summary of the verdict, in one or two sentences.'),
-        image_paths: imagePaths(),
-        comments: z
-          .array(
-            z.object({
-              path: z.string(),
-              line: z.number().int().positive(),
-              side: z
-                .enum(['base', 'head'])
-                .optional()
-                .describe(
-                  '"base" for a removed line. "head" for all other lines. The default is "head".',
-                ),
-              body: z.string(),
-              image_paths: imagePaths(),
-            }),
-          )
-          .optional()
-          .describe('New comments on lines. Use the line numbers that get_diff shows.'),
-        replies: z
-          .array(z.object({ thread_id: z.string(), body: z.string(), image_paths: imagePaths() }))
-          .optional()
-          .describe('Answers to comments that exist. Use the id in brackets before each comment.'),
-        reviewer_name: z
-          .string()
-          .optional()
-          .describe('A short name for your comments, for example "claude-reviewer".'),
-      },
-    }),
-    async ({ review_id, verdict, summary, image_paths, comments, replies, reviewer_name }) =>
-      guard(async () => {
-        const review = await daemon.submitAsReviewer(review_id, {
-          verdict,
-          summary,
-          attachments: await daemon.uploadImages(review_id, image_paths),
-          comments:
-            comments === undefined
-              ? undefined
-              : await Promise.all(
-                  comments.map(async ({ image_paths: paths, ...comment }) => ({
-                    ...comment,
-                    attachments: await daemon.uploadImages(review_id, paths),
-                  })),
-                ),
-          replies:
-            replies === undefined
-              ? undefined
-              : await Promise.all(
-                  replies.map(async ({ image_paths: paths, ...reply }) => ({
-                    ...reply,
-                    attachments: await daemon.uploadImages(review_id, paths),
-                  })),
-                ),
-          reviewer_name,
-        })
-        const { ai_review_rounds } = await daemon.getSettings()
-        const used = reviewerRounds(review)
-        const next =
-          verdict === 'approved'
-            ? 'You approved it. Thus it goes to the person now. Your work is complete.'
-            : used >= ai_review_rounds
-              ? 'That was your last round. Stop now. The person completes the review.'
-              : 'Wait for the answer of the author. If you can run a shell command in the ' +
-                'background, run ' +
-                `\`yart await ${review_id} --author${port === DEFAULT_PORT ? '' : ` --port ${port}`}\`` +
-                ' in the background. Else call await_author. Then read get_diff again.'
-        return text(
-          [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
-        )
+  only(
+    'reviewer',
+    server.registerTool(
+      'submit_verdict',
+      toolConfig({
+        title: 'Give a verdict as an AI reviewer',
+        description:
+          'Only for an AI reviewer. Do not use it on your own work. Give a verdict on a review, ' +
+          'with all your line comments and answers in one call. approved: nothing must change. ' +
+          'changes_requested: the author must fix your comments. commented: your comments do ' +
+          'not stop the work. Then the review waits for the author. If you did not approve, ' +
+          'call await_author.',
+        input_schema: {
+          review_id: z.string(),
+          verdict: z.enum(['approved', 'changes_requested', 'commented']),
+          summary: z
+            .string()
+            .optional()
+            .describe('The summary of the verdict, in one or two sentences.'),
+          image_paths: imagePaths(),
+          comments: z
+            .array(
+              z.object({
+                path: z.string(),
+                line: z.number().int().positive(),
+                side: z
+                  .enum(['base', 'head'])
+                  .optional()
+                  .describe(
+                    '"base" for a removed line. "head" for all other lines. The default is "head".',
+                  ),
+                body: z.string(),
+                image_paths: imagePaths(),
+              }),
+            )
+            .optional()
+            .describe('New comments on lines. Use the line numbers that get_diff shows.'),
+          replies: z
+            .array(z.object({ thread_id: z.string(), body: z.string(), image_paths: imagePaths() }))
+            .optional()
+            .describe(
+              'Answers to comments that exist. Use the id in brackets before each comment.',
+            ),
+          reviewer_name: z
+            .string()
+            .optional()
+            .describe('A short name for your comments, for example "claude-reviewer".'),
+        },
       }),
-  )
-
-  server.registerTool(
-    'await_author',
-    toolConfig({
-      title: 'Wait for the author to answer',
-      description:
-        'For an AI reviewer. Wait until the author answers your last verdict: the author moves ' +
-        'the review onto new work, or answers a comment. If the time stops first, you get the ' +
-        'open comments. That is not an error. Call it again to wait more.',
-      input_schema: {
-        review_id: z.string(),
-        timeout_seconds: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_WAIT_SECONDS)
-          .optional()
-          .describe(
-            `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
-          ),
-      },
-    }),
-    async ({ review_id, timeout_seconds }) =>
-      guard(async () => {
-        const current = await daemon.getReview(review_id)
-        const verdict = latestSubmission(current)
-        if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
-          return failure(
-            'You did not give a verdict on this review. Read the changes with get_diff. Then ' +
-              'give a verdict with submit_verdict.',
-          )
-        }
-        const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
-        const answered = await daemon.waitForAuthor(review_id, seconds * 1000)
-        if (answered === null) {
+      async ({ review_id, verdict, summary, image_paths, comments, replies, reviewer_name }) =>
+        guard(async () => {
+          const review = await daemon.submitAsReviewer(review_id, {
+            verdict,
+            summary,
+            attachments: await daemon.uploadImages(review_id, image_paths),
+            comments:
+              comments === undefined
+                ? undefined
+                : await Promise.all(
+                    comments.map(async ({ image_paths: paths, ...comment }) => ({
+                      ...comment,
+                      attachments: await daemon.uploadImages(review_id, paths),
+                    })),
+                  ),
+            replies:
+              replies === undefined
+                ? undefined
+                : await Promise.all(
+                    replies.map(async ({ image_paths: paths, ...reply }) => ({
+                      ...reply,
+                      attachments: await daemon.uploadImages(review_id, paths),
+                    })),
+                  ),
+            reviewer_name,
+          })
+          const { ai_review_rounds } = await daemon.getSettings()
+          const used = reviewerRounds(review)
+          const next =
+            verdict === 'approved'
+              ? 'You approved it. Thus it goes to the person now. Your work is complete.'
+              : used >= ai_review_rounds
+                ? 'That was your last round. Stop now. The person completes the review.'
+                : 'Wait for the answer of the author. If you can run a shell command in the ' +
+                  'background, run ' +
+                  `\`yart await ${review_id} --author${port === DEFAULT_PORT ? '' : ` --port ${port}`}\`` +
+                  ' in the background. Else call await_author. Then read get_diff again.'
           return text(
-            `The author did not answer in ${seconds} seconds. Call await_author again to wait more.`,
+            [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
           )
-        }
-        const images = new ImageNumbers()
-        return withImages(
-          review_id,
-          [
-            renderReviewWithThreads(answered, shownUrl(answered.id), images),
-            '',
-            'The author answered. Do these steps: read the changes with get_diff, and read the ' +
-              'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
-              'verdict with submit_verdict.',
-          ].join('\n'),
-          images,
-        )
+        }),
+    ),
+  )
+
+  only(
+    'reviewer',
+    server.registerTool(
+      'await_author',
+      toolConfig({
+        title: 'Wait for the author to answer',
+        description:
+          'For an AI reviewer. Wait until the author answers your last verdict: the author moves ' +
+          'the review onto new work, or answers a comment. If the time stops first, you get the ' +
+          'open comments. That is not an error. Call it again to wait more.',
+        input_schema: {
+          review_id: z.string(),
+          timeout_seconds: z
+            .number()
+            .int()
+            .positive()
+            .max(MAX_WAIT_SECONDS)
+            .optional()
+            .describe(
+              `The maximum time to wait, in seconds. The default is ${DEFAULT_WAIT_SECONDS}.`,
+            ),
+        },
       }),
+      async ({ review_id, timeout_seconds }) =>
+        guard(async () => {
+          const current = await daemon.getReview(review_id)
+          const verdict = latestSubmission(current)
+          if (verdict === null || submissionAuthor(verdict) !== 'reviewer') {
+            return failure(
+              'You did not give a verdict on this review. Read the changes with get_diff. Then ' +
+                'give a verdict with submit_verdict.',
+            )
+          }
+          const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
+          const answered = await daemon.waitForAuthor(review_id, seconds * 1000)
+          if (answered === null) {
+            return text(
+              `The author did not answer in ${seconds} seconds. Call await_author again to wait more.`,
+            )
+          }
+          const images = new ImageNumbers()
+          return withImages(
+            review_id,
+            [
+              renderReviewWithThreads(answered, shownUrl(answered.id), images),
+              '',
+              'The author answered. Do these steps: read the changes with get_diff, and read the ' +
+                'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
+                'verdict with submit_verdict.',
+            ].join('\n'),
+            images,
+          )
+        }),
+    ),
   )
 
   return server

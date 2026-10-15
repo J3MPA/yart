@@ -1,48 +1,42 @@
-import { readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createServer as createHttpServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { serve, type ServerType } from '@hono/node-server'
 import type { Review } from '@yart/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { LOOPBACK } from './auth.ts'
 import { HOOK_MARKER, installHook, preCommit, uninstallHook } from './hook.ts'
-import { createServer } from './server.ts'
+import { listenTestDaemon, type TestDaemon } from './test-daemon.ts'
 import { TestRepo } from './test-repo.ts'
 
 let repo: TestRepo
-let http: ServerType
-let port: number
+let state_dir: string
+let daemon: TestDaemon
 let lines: string[]
 
 beforeEach(async () => {
   repo = new TestRepo()
   repo.write('a.txt', 'alpha\nbeta\n')
   repo.commit('base')
-  const app = createServer({ repo_path: repo.path })
-  http = await new Promise<ServerType>((resolve) => {
-    const server = serve({ fetch: app.fetch, port: 0 }, () => resolve(server))
-  })
-  port = (http.address() as AddressInfo).port
+  state_dir = mkdtempSync(join(tmpdir(), 'yart-home-'))
+  daemon = await listenTestDaemon({ repo_path: repo.path, state_dir })
   lines = []
 })
 
 afterEach(async () => {
-  await new Promise<void>((resolve) => http.close(() => resolve()))
+  await daemon.close()
+  rmSync(state_dir, { recursive: true, force: true })
   repo.dispose()
 })
 
-const api = (path: string, init?: RequestInit) =>
-  fetch(`http://localhost:${port}${path}`, {
-    ...init,
-    headers: { 'content-type': 'application/json' },
-  })
-
 const settle = (changes: Record<string, unknown>) =>
-  api('/api/settings', { method: 'PATCH', body: JSON.stringify(changes) })
+  daemon.asPerson('/api/settings', { method: 'PATCH', body: JSON.stringify(changes) })
 
 /** A reviewer command that gives a verdict through the API, as a real reviewer would. */
 const reviewerThat = (round: Record<string, unknown>) =>
-  `curl -s -X POST "http://localhost:${port}/api/reviews/$YART_REVIEW_ID/submit" ` +
-  `-H 'content-type: application/json' ` +
+  `curl -s -X POST "${daemon.url}/api/reviews/$YART_REVIEW_ID/submit" ` +
+  `-H 'content-type: application/json' -H 'authorization: Bearer ${daemon.auth.token}' ` +
   `-d '${JSON.stringify({ author: 'reviewer', author_name: 'test-reviewer', ...round })}' > /dev/null`
 
 const stage = (content: string) => {
@@ -53,13 +47,14 @@ const stage = (content: string) => {
 const run = (timeout_ms = 10_000) =>
   preCommit({
     repo_path: repo.path,
-    port,
+    port: daemon.port,
+    state_dir,
     timeout_ms,
     poll_ms: 50,
     write: (line) => lines.push(line),
   })
 
-const reviews = async () => (await (await api('/api/reviews')).json()) as Review[]
+const reviews = async () => (await (await daemon.asClient('/api/reviews')).json()) as Review[]
 
 describe('installHook', () => {
   it('writes an executable hook that runs yart', async () => {
@@ -143,6 +138,54 @@ describe('preCommit', () => {
     stage('alpha\nBETA\n')
     expect(await run(300)).toBe(1)
     expect(lines.join('\n')).toContain('no verdict came')
+  })
+
+  it('stops the commit when the reviewer only comments', async () => {
+    await settle({ reviewer_command: reviewerThat({ verdict: 'commented' }) })
+    stage('alpha\nBETA\n')
+    expect(await run()).toBe(1)
+    expect(lines.join('\n')).toContain('did not approve')
+  })
+
+  it('shows a line break in the text of the reviewer as an escape', async () => {
+    await settle({
+      reviewer_command: reviewerThat({
+        verdict: 'changes_requested',
+        body: 'fine\n\u001b[2Jyart: approved',
+      }),
+    })
+    stage('alpha\nBETA\n')
+    expect(await run()).toBe(1)
+    expect(lines).toContain('  \\u001b[2Jyart: approved')
+    expect(lines.every((line) => !line.includes('\u001b'))).toBe(true)
+  })
+
+  it('runs no reviewer command from a settings file that other users can write', async () => {
+    await settle({ reviewer_command: 'touch pwned' })
+    chmodSync(join(state_dir, 'settings.json'), 0o666)
+    stage('alpha\nBETA\n')
+    await expect(run()).rejects.toThrow(/Other users can write/)
+    expect(() => statSync(join(repo.path, 'pwned'))).toThrow()
+  })
+
+  it('refuses a process on the port that cannot prove the token', async () => {
+    await settle({ reviewer_command: 'touch pwned' })
+    const impostor = createHttpServer((_request, response) => {
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ ok: true, reviewer_command: 'touch pwned' }))
+    })
+    await new Promise<void>((resolve) => impostor.listen(0, LOOPBACK, resolve))
+    stage('alpha\nBETA\n')
+    await expect(
+      preCommit({
+        repo_path: repo.path,
+        port: (impostor.address() as AddressInfo).port,
+        state_dir,
+        write: (line) => lines.push(line),
+      }),
+    ).rejects.toThrow(/cannot prove/)
+    expect(() => statSync(join(repo.path, 'pwned'))).toThrow()
+    await new Promise<void>((resolve) => impostor.close(() => resolve()))
   })
 
   it('stops the commit when the reviewer has no more rounds', async () => {

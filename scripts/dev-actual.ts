@@ -14,9 +14,13 @@
  * a URL for the browser. When you quit the shell, the session stops.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { setTimeout as delay } from 'node:timers/promises'
+import { daemonUrl } from '../packages/daemon/src/auth.ts'
+import { authHeaders, foreignMessage, probeDaemon } from '../packages/daemon/src/probe.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,6 +31,8 @@ const DAEMON_CODE_DIR = fileURLToPath(new URL('../packages/daemon/', import.meta
 const DAEMON_PORT = 7778
 const VITE_PORT = 5173
 const STARTUP_TIMEOUT_MS = 20_000
+/** Where the daemon writes its token file. The same rule as the daemon. */
+const STATE_DIR = process.env.YART_HOME ?? join(homedir(), '.yart')
 
 const ARGS = process.argv.slice(2)
 const DESKTOP = ARGS.includes('--desktop')
@@ -69,17 +75,20 @@ const resolveBase = async (): Promise<string> => {
   return git('rev-parse', 'HEAD~1')
 }
 
-interface Health {
-  code_dir?: string
+/** The daemon on the port, or null when none answers. Refuses a process that is not the daemon. */
+const daemonOnPort = async () => {
+  const probe = await probeDaemon(DAEMON_PORT, STATE_DIR)
+  if (probe.state === 'foreign') throw new Error(foreignMessage(DAEMON_PORT))
+  return probe.state === 'yart' ? probe : null
 }
 
-const health = async (url: string): Promise<Health | null> => {
-  try {
-    const response = await fetch(url)
-    return response.ok ? ((await response.json()) as Health) : null
-  } catch {
-    return null
+const waitForDaemon = async (): Promise<void> => {
+  const deadline = Date.now() + STARTUP_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if ((await daemonOnPort()) !== null) return
+    await delay(200)
   }
+  throw new Error(`daemon did not start within ${STARTUP_TIMEOUT_MS / 1000}s`)
 }
 
 const waitForPort = async (url: string, what: string): Promise<void> => {
@@ -97,9 +106,11 @@ const waitForPort = async (url: string, what: string): Promise<void> => {
 }
 
 const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`http://localhost:${DAEMON_PORT}${path}`, {
+  const found = await daemonOnPort()
+  if (found === null) throw new Error(`No daemon answers on port ${DAEMON_PORT}.`)
+  const response = await fetch(`${daemonUrl(DAEMON_PORT)}${path}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
+    headers: { 'content-type': 'application/json', ...init?.headers, ...authHeaders(found.token) },
   })
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null
@@ -171,12 +182,11 @@ const main = async (): Promise<void> => {
   // new daemon would stop with EADDRINUSE while the old daemon still answered.
   // Then this script would report success against a daemon that it does not own
   // and cannot stop.
-  const health_url = `http://localhost:${DAEMON_PORT}/health`
-  const found = await health(health_url)
-  if (found !== null && found.code_dir !== DAEMON_CODE_DIR) {
+  const found = await daemonOnPort()
+  if (found !== null && found.health.code_dir !== DAEMON_CODE_DIR) {
     throw new Error(
       `Port ${DAEMON_PORT} is taken by a yart daemon from ` +
-        `${found.code_dir ?? 'an older checkout'}, not this one. Stop it and re-run.`,
+        `${found.health.code_dir ?? 'an older checkout'}, not this one. Stop it and re-run.`,
     )
   }
   const reused = found !== null
@@ -194,7 +204,7 @@ const main = async (): Promise<void> => {
       ],
       'daemon',
     )
-    await waitForPort(health_url, 'daemon')
+    await waitForDaemon()
   }
 
   const review = await openOrAdvanceReview(base_sha, head_sha)
@@ -209,6 +219,11 @@ const main = async (): Promise<void> => {
   await waitForPort(`http://localhost:${VITE_PORT}/`, 'vite')
 
   const review_url = `http://localhost:${VITE_PORT}/reviews/${review.id}`
+  // The browser needs the cookie of the person. The desktop shell signs in by itself.
+  const { code } = await api<{ code: string }>('/api/sign-in-codes', { method: 'POST', body: '{}' })
+  const sign_in_url =
+    `http://localhost:${VITE_PORT}/sign-in?code=${code}` +
+    `&next=${encodeURIComponent(`/reviews/${review.id}`)}`
   const changed = await git('diff', '--name-only', `${base_sha}..${head_sha}`)
   const file_count = changed === '' ? 0 : changed.split('\n').length
 
@@ -222,7 +237,7 @@ const main = async (): Promise<void> => {
       `    round    ${review.rounds.length}, ${review.threads.length} thread(s) carried over`,
       `    daemon   ${reused ? 'reused one already running' : 'started'} on ${DAEMON_PORT}`,
       '',
-      DESKTOP ? '    open     in the desktop shell' : `    open     ${review_url}`,
+      DESKTOP ? '    open     in the desktop shell' : `    open     ${sign_in_url}`,
       '',
       '  Vite has the UI with hot reload; the daemon serves /api behind it.',
       '  Commit, re-run, and your comments follow the lines they were on.',

@@ -1,74 +1,109 @@
-import { realpathSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { listenTestDaemon, type TestDaemon } from '@yart/daemon/test-daemon'
 import { TestRepo } from '@yart/daemon/test-repo'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DaemonClient } from './daemon-client.ts'
 
 let repo: TestRepo
+let daemon: TestDaemon
 let fake: Server | null = null
+let seen: { url: string | undefined; authorization: string | undefined }[]
 
-beforeEach(() => {
+beforeEach(async () => {
   repo = new TestRepo()
   repo.write('a.txt', 'a\n')
   repo.commit('base')
+  daemon = await listenTestDaemon({ repo_path: repo.path })
+  seen = []
 })
 
 afterEach(async () => {
-  repo.dispose()
   if (fake !== null) await new Promise<void>((resolve) => fake?.close(() => resolve()))
   fake = null
+  await daemon.close()
+  repo.dispose()
 })
 
 /**
- * Takes the place of a daemon from before one daemon served all repositories.
- * Its health check names its one repository and has no version.
+ * A process that answers as a daemon, but does not know the token. A daemon
+ * from before the token answers in the same way.
  */
-const oldDaemonServing = async (repo_path: string): Promise<number> => {
+const listenFake = async (host: string, port = 0): Promise<number> => {
   fake = createServer((request, response) => {
+    seen.push({ url: request.url, authorization: request.headers.authorization })
     response.setHeader('content-type', 'application/json')
-    if (request.url === '/health') {
-      response.end(JSON.stringify({ ok: true, repo_path }))
+    if (request.url?.startsWith('/health') === true) {
+      response.end(JSON.stringify({ ok: true, repo_path: repo.path, version: '9.9.9' }))
       return
     }
     response.end('[]')
   })
-  await new Promise<void>((resolve) => fake?.listen(0, resolve))
+  await new Promise<void>((resolve, reject) => {
+    fake?.once('error', reject)
+    fake?.listen(port, host, resolve)
+  })
   return (fake?.address() as AddressInfo).port
 }
 
-describe('an older daemon still running after an update', () => {
-  it('is refused when it serves a different repository', async () => {
-    const other = new TestRepo()
-    try {
-      const port = await oldDaemonServing(realpathSync(other.path))
-      const client = new DaemonClient({ port, repo_path: repo.path, autostart: false })
-      await expect(client.listReviews()).rejects.toThrow(/older yart/)
-    } finally {
-      other.dispose()
-    }
-  })
-
-  it('is refused by a client that belongs to no repository', async () => {
-    const port = await oldDaemonServing(realpathSync(repo.path))
-    const client = new DaemonClient({ port, repo_path: null, autostart: false })
-    await expect(client.listReviews()).rejects.toThrow(/older yart/)
-  })
-
-  it('is still used when it serves this same repository', async () => {
-    const port = await oldDaemonServing(realpathSync(repo.path))
-    const client = new DaemonClient({ port, repo_path: repo.path, autostart: false })
-    await expect(client.listReviews()).resolves.toEqual([])
-  })
-
-  it('is still used from a directory inside the repository it serves', async () => {
-    repo.write('deep/inside/file.txt', 'x\n')
-    const port = await oldDaemonServing(realpathSync(repo.path))
+describe('a process on the port that is not the daemon', () => {
+  it('is refused, and never gets the token', async () => {
+    const port = await listenFake('127.0.0.1')
     const client = new DaemonClient({
       port,
-      repo_path: `${repo.path}/deep/inside`,
+      repo_path: repo.path,
       autostart: false,
+      state_dir: daemon.state_dir,
+    })
+    await expect(client.listReviews()).rejects.toThrow(/cannot prove/)
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every((request) => request.authorization === undefined)).toBe(true)
+  })
+
+  it('on ::1 does not get the traffic for the daemon on 127.0.0.1', async () => {
+    try {
+      await listenFake('::1', daemon.port)
+    } catch {
+      // This computer has no IPv6 loopback. Then no process can listen there.
+      return
+    }
+    const client = new DaemonClient({
+      port: daemon.port,
+      repo_path: repo.path,
+      autostart: false,
+      state_dir: daemon.state_dir,
     })
     await expect(client.listReviews()).resolves.toEqual([])
+    expect(seen).toEqual([])
+  })
+})
+
+describe('the daemon', () => {
+  it('gets the token on each request', async () => {
+    const client = new DaemonClient({
+      port: daemon.port,
+      repo_path: repo.path,
+      autostart: false,
+      state_dir: daemon.state_dir,
+    })
+    await expect(client.listReviews()).resolves.toEqual([])
+  })
+
+  it('gives a sign-in link with the origin of the page', async () => {
+    const client = new DaemonClient({
+      port: daemon.port,
+      repo_path: repo.path,
+      autostart: false,
+      state_dir: daemon.state_dir,
+    })
+    const link = new URL(await client.signInUrl('http://localhost:5173/reviews/abc?x=1'))
+    expect(link.origin).toBe('http://localhost:5173')
+    expect(link.pathname).toBe('/sign-in')
+    expect(link.searchParams.get('next')).toBe('/reviews/abc?x=1')
+    const signed_in = await fetch(
+      `${daemon.url}/sign-in?code=${link.searchParams.get('code')}&next=%2F`,
+      { redirect: 'manual' },
+    )
+    expect(signed_in.status).toBe(303)
   })
 })

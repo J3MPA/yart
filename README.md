@@ -203,7 +203,8 @@ The agent reads your comments and answers them. It then moves the review to its
 fixes, and each comment follows its line. The window shows the reviews of all
 repositories that yart served.
 
-The same reviews are at `http://localhost:7777` in a browser. The app and each
+To see the same reviews in a browser, run `yart open`. It opens a sign-in link
+in your browser. The link works one time, for 5 minutes. The app and each
 browser keep their own seen state and drafts. When you change from one to the
 other, these start again.
 
@@ -237,6 +238,11 @@ cannot change the code. Add it to a project, or with `--user` to all projects:
 yart reviewer install
 ```
 
+The reviewer tools come from a second MCP server, `yart-mcp --role reviewer`.
+The subagent file starts that server for the subagent only. Thus the agent
+whose work is under review does not have a tool that gives a verdict. The
+`yart` server that you added for your agent has only the tools of the author.
+
 To start the loop with a subagent, tell the agent that does the work:
 
 > Make the change. Then start a reviewer subagent to review it with yart, before
@@ -256,8 +262,12 @@ The agent then does these steps:
    the reviewer approves or has no more rounds.
 7. The agent tells you that the review is ready for you.
 
-To use a second session as the reviewer, open a new Claude Code session and tell
-it:
+To use a second session as the reviewer, start a new Claude Code session with
+the reviewer server, and tell it what to do:
+
+```sh
+claude --mcp-config '{"mcpServers":{"yart-reviewer":{"command":"yart-mcp","args":["--role","reviewer"]}}}'
+```
 
 > Review the open yart review as an AI reviewer. Use get_diff, submit_verdict and
 > await_author.
@@ -317,8 +327,12 @@ reviewer settings in `YART_REVIEWER_MODEL`, `YART_REVIEWER_EFFORT` and
 command. Thus a value with quotes cannot break the command. For Claude Code:
 
 ```sh
-claude -p "Review the yart review $YART_REVIEW_ID as an AI reviewer. Use get_reviewer_settings, get_diff and submit_verdict. $YART_REVIEWER_INSTRUCTIONS" --model "${YART_REVIEWER_MODEL:-sonnet}"
+claude -p "Review the yart review $YART_REVIEW_ID as an AI reviewer. Use get_reviewer_settings, get_diff and submit_verdict. $YART_REVIEWER_INSTRUCTIONS" --model "${YART_REVIEWER_MODEL:-sonnet}" --strict-mcp-config --mcp-config '{"mcpServers":{"yart-reviewer":{"command":"yart-mcp","args":["--role","reviewer"]}}}'
 ```
+
+The hook reads the command from `settings.json` in the home of yart, not from
+the daemon. It refuses the file when a different user owns it, or when other
+users can write it.
 
 On each commit, the hook does these steps:
 
@@ -327,7 +341,7 @@ On each commit, the hook does these steps:
 2. It runs the command, and waits for the verdict of the reviewer for up to 10
    minutes.
 3. If the reviewer approves, the commit continues.
-4. If the reviewer asks for changes, the commit stops. The hook shows the
+4. If the reviewer asks for changes, or only comments, the commit stops. The hook shows the
    comments and the link to the review. Make the fixes, stage them and commit
    again. The next commit moves the same review, and the comments follow their
    lines.
@@ -337,6 +351,11 @@ and when the reviewer has no more rounds. Without a command, or with nothing
 staged, the hook does nothing. Each run of the reviewer costs a model run.
 `git commit --no-verify` skips the hook one time. `yart hook uninstall` removes
 it.
+
+The hook is a help, not a security control. The roles "agent" and "reviewer"
+are labels that the MCP servers send. A process of your user account can read
+the token file of yart and send a verdict as a reviewer. Also,
+`git commit --no-verify` skips the hook.
 
 ### Clean up approved reviews
 
@@ -409,7 +428,7 @@ repository when you run `yart` in it. You do not need paths or flags:
 
 ```sh
 cd ~/some-other-project
-yart            # http://localhost:7777
+yart            # http://127.0.0.1:7777
 ```
 
 The commands do not need a build step. Their entry points are TypeScript files
@@ -431,8 +450,7 @@ claude mcp add -s local yart -- node --experimental-strip-types \
 
 ### Run it
 
-Open `http://localhost:7777`, or let an agent open a review with the
-`start_review` tool. The daemon accepts `--port` and `--repo`. It keeps reviews
+Run `yart open`, or let an agent open a review with the `start_review` tool. The daemon accepts `--port` and `--repo`. It keeps reviews
 in the git directory of the repository, thus nothing shows in `git status`.
 Linked worktrees share one store. Thus you can see a review from all worktrees,
 and the review records its worktree.
@@ -630,6 +648,7 @@ yart status    # Show if a daemon runs, with its version and repository.
 yart start     # Start a daemon in the background.
 yart stop      # Stop the daemon.
 yart restart   # Stop the daemon, and start it again with the same repository.
+yart open      # Open a sign-in link in the browser. Give a review id to open that review.
 ```
 
 Each command accepts `--port`. `yart` with no command runs the daemon in the
@@ -642,6 +661,33 @@ that can run a shell command in the background uses it in place of
 `await_review`. Thus the turn of the agent stays free while you review. With
 `--author`, an AI reviewer waits until the author answers its verdict, in place
 of `await_author`.
+
+**Each request needs a token.** Loopback TCP does not check the user account.
+Thus without a token, each process on the computer could control the daemon:
+also a process of a different user, or a process in a sandbox. At each start,
+the daemon makes a random token. It writes the token to `daemon-<port>.token`
+in the home of yart (`~/.yart`, or `YART_HOME`), which only your user can read.
+The CLI, the commit hook and the MCP server read the token from that file, and
+send it on each `/api` request.
+
+**The window of the person signs in.** A browser cannot read the token file.
+Thus a client with the token asks for a one-time code, and opens the link
+`/sign-in?code=…`. The daemon then gives the window an `HttpOnly` cookie with a
+second secret. That secret is never in a file. Only a request with the cookie
+can write or give a verdict as the person, change the settings, or archive or
+delete a review. The desktop app signs in by itself. In a browser, run
+`yart open`.
+
+**Clients make sure that they talk to the daemon.** Each client connects to
+`127.0.0.1`, never to `localhost`, because `localhost` can go to `::1` first,
+and a different process could listen there. Before a client sends the token,
+it sends a random challenge to `/health`. Only a process that knows the token
+can answer with the correct HMAC. A client refuses a process that cannot, and
+says how to stop it. A daemon of an older yart also cannot answer. Stop it with
+`yart stop`, or with the command in the message.
+
+**Review ids are UUIDs.** A review id goes into file paths. The daemon refuses
+each id that is not a UUID, and makes sure that each path stays in its store.
 
 **Writes must be JSON.** A web page on any site can send a "simple" POST across
 origins to `localhost`. The browser does not ask first. The page cannot read
@@ -691,6 +737,8 @@ repository has its own state. `git status` does not show it.
 | `POST /api/reviews/:id/submissions/:sid/comments`    | Reply to a verdict                        |
 | `POST /api/reviews/:id/advance`                      | Move to a new head, and attach again      |
 | `GET /api/settings` · `PATCH /api/settings`          | Read or change the settings               |
+| `POST /api/sign-in-codes` · `GET /sign-in?code=`     | Sign the window of the person in          |
+| `GET /health?challenge=`                             | Health, with a proof of the token         |
 
 `advance` completes the loop. It compares the old head with the new head, makes
 a line map for each changed file, and attaches each thread again. Thus the next
@@ -911,7 +959,9 @@ An MCP server stops with its client, but a review must stay after that.
 | `resolve_thread`   | Mark a comment as done                                |
 | `advance_review`   | Attach each comment to the new commits                |
 
-An AI reviewer has its own tools, to review work that it did not write:
+An AI reviewer has its own tools, to review work that it did not write. Only a
+server that runs with `--role reviewer` has them. It also has `get_review`,
+`list_reviews` and `resolve_thread`:
 
 | Tool                    | What the reviewer does with it                                 |
 | ----------------------- | -------------------------------------------------------------- |
@@ -919,6 +969,12 @@ An AI reviewer has its own tools, to review work that it did not write:
 | `get_diff`              | Read the changes, with the base and head line numbers          |
 | `submit_verdict`        | Give a verdict with its line comments and replies, in one call |
 | `await_author`          | Wait until the author moves the review or answers              |
+
+**Text from other parties cannot look like yart.** An AI reviewer, the agent
+and the file names in a repository write parts of each result. A comment or a
+summary with more than one line goes into a block where each line starts with
+`|`. A name or a title with a line break is refused, and shows an escape. A file
+path with a line break gets quotes, as `git` gives with `core.quotePath`.
 
 **A new review opens in the yart app.** If the app is not installed, it opens in
 your browser. This applies only to the daemon on port 7777. A link names a
@@ -947,7 +1003,9 @@ edit. A comment next to its code is easier to act on:
   >   TARGET
       gamma
   reviewer claude-reviewer: this name is unclear
-  agent: renamed it
+  agent:
+    | Renamed it.
+    | The old name is in the changelog.
 ```
 
 `await_review` returns when its time limit is over, and does not wait forever.

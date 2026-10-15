@@ -1,0 +1,19 @@
+.notice {
+  max-width: 36rem;
+  margin: var(--yart-space-8) auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--yart-space-3);
+}
+
+.title {
+  font-size: var(--yart-text-xl);
+}
+
+.command {
+  padding: var(--yart-space-2) var(--yart-space-3);
+  border: 1px solid var(--yart-color-border);
+  border-radius: var(--yart-radius-sm);
+  background: var(--yart-color-surface-sunken);
+  font-family: var(--yart-font-mono);
+}

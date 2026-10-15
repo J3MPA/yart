@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findGitCommonDir } from './git.ts'
-import { createServer } from './server.ts'
+import { createServer, type ServerOptions } from './server.ts'
+import { personHeaders, testAuth } from './test-daemon.ts'
 import { TestRepo } from './test-repo.ts'
 import type { Review } from './types.ts'
 
@@ -32,14 +32,28 @@ afterEach(() => {
   rmSync(state_dir, { recursive: true, force: true })
 })
 
-const send = async (app: Hono, method: string, path: string, body?: unknown) =>
+type TestApp = { request: (path: string, init?: RequestInit) => Promise<Response> }
+
+/** A server whose requests come from the window of the person, as the web UI sends them. */
+const serverFor = (options: Omit<ServerOptions, 'auth'>): TestApp => {
+  const auth = testAuth()
+  const server = createServer({ ...options, auth })
+  return {
+    request: async (path, init) =>
+      server.request(path, {
+        ...init,
+        headers: { ...personHeaders(auth), ...(init?.headers as Record<string, string>) },
+      }),
+  }
+}
+const send = async (app: TestApp, method: string, path: string, body?: unknown) =>
   app.request(path, {
     method,
     headers: { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
-const open = async (app: Hono, repo_path?: string): Promise<Review> => {
+const open = async (app: TestApp, repo_path?: string): Promise<Review> => {
   const response = await send(app, 'POST', '/api/reviews', { repo_path })
   expect(response.status).toBe(201)
   return (await response.json()) as Review
@@ -52,7 +66,7 @@ const open = async (app: Hono, repo_path?: string): Promise<Review> => {
 const real = (path: string): string => realpathSync(path)
 
 /** A daemon that started in repository A, as the first agent that asks would start it. */
-const daemonIn = (repo: TestRepo) => createServer({ repo_path: repo.path, state_dir })
+const daemonIn = (repo: TestRepo) => serverFor({ repo_path: repo.path, state_dir })
 
 describe('one daemon for every repository', () => {
   it('reviews the repository a request names, not the one it was started in', async () => {
@@ -148,7 +162,7 @@ describe('remembering repositories across restarts', () => {
   })
 
   it('keeps nothing on disk when given nowhere to keep it', async () => {
-    const in_memory = createServer({ repo_path: repo_a.path })
+    const in_memory = serverFor({ repo_path: repo_a.path })
     await open(in_memory, repo_b.path)
     expect(existsSync(join(state_dir, 'repositories.json'))).toBe(false)
   })
