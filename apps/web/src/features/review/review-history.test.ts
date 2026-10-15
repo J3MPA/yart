@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Comment, CommentAuthor, Review, ReviewSubmission, Thread } from '@yart/core'
-import { buildHistory, hasAiReview } from './review-history'
+import { buildHistory, hasAiReview, historyOpens, showsHistory } from './review-history'
 
 const comment = (id: string, author: CommentAuthor, minute: number): Comment => ({
   id,
@@ -96,5 +96,49 @@ describe('hasAiReview', () => {
   it('tells if a reviewer gave a verdict', () => {
     expect(hasAiReview(review([], [verdict('v', 1, 'h1')]))).toBe(true)
     expect(hasAiReview(review([], [verdict('v', 1, 'h1', 'human')]))).toBe(false)
+  })
+})
+
+describe('historyOpens', () => {
+  it('opens when an AI reviewer took part', () => {
+    expect(historyOpens(review([], [verdict('v', 1, 'h1')]))).toBe(true)
+  })
+
+  it('opens when the agent answered the last verdict of the person', () => {
+    const person = { ...verdict('v', 1, 'h1', 'human'), comments: [comment('a', 'agent', 2)] }
+    expect(historyOpens(review([], [person]))).toBe(true)
+    expect(
+      historyOpens(
+        review([thread(3, [comment('b', 'agent', 2)])], [verdict('v', 1, 'h1', 'human')]),
+      ),
+    ).toBe(true)
+  })
+
+  it('stays closed when nothing new came after the verdict of the person', () => {
+    const answered_before = review(
+      [thread(3, [comment('b', 'agent', 0)])],
+      [verdict('v', 1, 'h1', 'human')],
+    )
+    expect(historyOpens(answered_before)).toBe(false)
+    expect(historyOpens(review([], []))).toBe(false)
+  })
+})
+
+describe('showsHistory', () => {
+  it('hides a history that would only repeat the verdict banner', () => {
+    const person = { ...verdict('v', 1, 'h1', 'human'), comments: [comment('a', 'agent', 2)] }
+    expect(showsHistory(review([], [person]))).toBe(false)
+    expect(showsHistory(review([], []))).toBe(false)
+  })
+
+  it('shows the history with line comments, or with more than one verdict', () => {
+    expect(
+      showsHistory(
+        review([thread(3, [comment('c', 'human', 0)])], [verdict('v', 1, 'h1', 'human')]),
+      ),
+    ).toBe(true)
+    expect(
+      showsHistory(review([], [verdict('v', 1, 'h1', 'human'), verdict('w', 3, 'h2', 'human')])),
+    ).toBe(true)
   })
 })

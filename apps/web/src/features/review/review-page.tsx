@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { agentActivity, currentSubmission, describeAuthor, submissionAuthor } from '@yart/core'
+import {
+  agentActivity,
+  currentSubmission,
+  describeAuthor,
+  latestSubmission,
+  submissionAuthor,
+} from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { attachmentIds, AttachmentList } from './attachments'
 import { Button } from '@/components/button'
 import { AuthorLabel } from './author-label'
-import { hasAiReview } from './review-history'
+import { historyOpens, showsHistory } from './review-history'
 import { ReviewHistoryPanel } from './review-history-panel'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
@@ -147,8 +153,14 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   }
 
   const open_count = countOpen(review.threads)
-  const submission = currentSubmission(review)
-  const submitted = submission !== null
+  const submitted = currentSubmission(review) !== null
+  // The banner shows the latest verdict, also after the agent moved the review.
+  // The answer of the agent to it is often the summary of the new round.
+  const submission = latestSubmission(review)
+  const earlier_round =
+    submission !== null && submission.head_sha !== review.head_sha
+      ? review.rounds.indexOf(submission.head_sha) + 1
+      : null
 
   const held = local.drafts.length
   const diff_error = range === 'since' ? since_query.error : diff_query.error
@@ -216,6 +228,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
             .join(' ')}
         >
           <div className={styles.verdict_label}>
+            {earlier_round !== null && earlier_round > 0 && `Round ${earlier_round} · `}
             {VERDICT_LABEL[submission.verdict]}
             {submissionAuthor(submission) === 'reviewer' &&
               ` · by ${describeAuthor('reviewer', submission.author_name)}`}{' '}
@@ -262,7 +275,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         </div>
       )}
 
-      {hasAiReview(review) && <ReviewHistoryPanel review={review} />}
+      {showsHistory(review) && <ReviewHistoryPanel review={review} open={historyOpens(review)} />}
 
       {submitting && (
         <SubmitPanel

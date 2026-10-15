@@ -8,6 +8,8 @@ import styles from './review.module.css'
 
 export interface ReviewHistoryPanelProps {
   review: Review
+  /** Tells if the panel is open when it first shows. */
+  open: boolean
 }
 
 const heading = (block: HistoryBlock): string => {
@@ -26,16 +28,16 @@ const heading = (block: HistoryBlock): string => {
 /**
  * The full conversation of a review, verdict by verdict.
  *
- * When an AI reviewer took part, this shows its verdicts and comments, and the
- * answers of the agent, in the order that they occurred. Thus the person can
- * read the exchange before they give the last verdict. The diff still shows each
+ * This shows each verdict and its comments, and the answers of the agent, in
+ * the order that they occurred. Thus the person can read the exchange of the
+ * earlier rounds before they give the next verdict. The diff still shows each
  * thread at its line.
  */
-export const ReviewHistoryPanel = ({ review }: ReviewHistoryPanelProps) => {
+export const ReviewHistoryPanel = ({ review, open }: ReviewHistoryPanelProps) => {
   const blocks = buildHistory(review)
 
   return (
-    <details className={styles.history} open>
+    <details className={styles.history} open={open}>
       <summary className={styles.history_summary}>Review history</summary>
       {blocks.map((block) => (
         <section
