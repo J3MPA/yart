@@ -45,9 +45,11 @@ const notifications = new Set<Notification>()
 
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 
+/** The links that the system can open. A comment can link a web page or an email address. */
+const OUTSIDE_PROTOCOLS: ReadonlySet<string> = new Set(['http:', 'https:', 'mailto:'])
+
 const openOutside = (url: string) => {
-  const { protocol } = new URL(url)
-  if (protocol === 'http:' || protocol === 'https:') void shell.openExternal(url)
+  if (OUTSIDE_PROTOCOLS.has(new URL(url).protocol)) void shell.openExternal(url)
 }
 
 const reviewUrl = (review_id: string): string =>
