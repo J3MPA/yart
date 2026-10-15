@@ -8,6 +8,7 @@ import { hasAiReview } from './review-history'
 import { ReviewHistoryPanel } from './review-history-panel'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { CommentForm } from './comment-form'
+import { unsentKey } from './unsent'
 import { DiffFile } from './diff-file'
 import type { ComposeTarget } from './diff-row'
 import { groupDrafts, type Drafting } from './drafts'
@@ -180,14 +181,15 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
                 placeholder="Reply to this verdict"
                 submit_label="Reply"
                 pending={answer_state.isLoading}
+                unsent_key={unsentKey(review_id, `answer ${submission.id}`)}
                 onCancel={() => setAnswering(false)}
-                onSubmit={(body, attachments) => {
-                  void addSubmissionComment({
+                onSubmit={async (body, attachments) => {
+                  await addSubmissionComment({
                     review_id,
                     submission_id: submission.id,
                     body,
                     attachments: attachmentIds(attachments),
-                  })
+                  }).unwrap()
                   setAnswering(false)
                 }}
               />

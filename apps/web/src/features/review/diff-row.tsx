@@ -8,6 +8,7 @@ import { newThreadDraft, type Drafting, type FileBlobs } from './drafts'
 import { draftAdded } from './local-review-slice'
 import type { SyntaxToken } from './syntax'
 import { anchorKey } from './thread-anchors'
+import { unsentKey } from './unsent'
 import styles from './review.module.css'
 
 /** Where the comment form is open. Only one row on the page at a time. */
@@ -36,7 +37,8 @@ export interface DiffRowProps {
   composing: ComposeTarget | null
   adding: boolean
   onComposingChange: (composing: ComposeTarget | null) => void
-  onAddThread: (target: RowTarget, body: string, attachments: Attachment[]) => void
+  /** Sends a comment on a line. It rejects when the daemon did not save it. */
+  onAddThread: (target: RowTarget, body: string, attachments: Attachment[]) => Promise<void>
 }
 
 const MARKER: Record<DiffLine['kind'], string> = {
@@ -185,6 +187,7 @@ export const DiffRow = ({
             <CommentForm
               review_id={review_id}
               pending={adding}
+              unsent_key={unsentKey(review_id, `line ${key}`)}
               submit_label="Comment now"
               queue_label={drafting.in_progress ? 'Add to review' : 'Start a review'}
               onCancel={() => onComposingChange(null)}
@@ -206,8 +209,8 @@ export const DiffRow = ({
                 )
                 onComposingChange(null)
               }}
-              onSubmit={(body, attachments) => {
-                onAddThread(target, body, attachments)
+              onSubmit={async (body, attachments) => {
+                await onAddThread(target, body, attachments)
                 onComposingChange(null)
               }}
             />

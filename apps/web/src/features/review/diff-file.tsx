@@ -111,15 +111,16 @@ export const DiffFile = ({
       return next
     })
 
-  const addThreadAt = (target: RowTarget, body: string, attachments: Attachment[]) =>
-    void addThread({
+  const addThreadAt = async (target: RowTarget, body: string, attachments: Attachment[]) => {
+    await addThread({
       review_id,
       path: file.path,
       line: target.line,
       side: target.side,
       body,
       attachments: attachmentIds(attachments),
-    })
+    }).unwrap()
+  }
 
   const row = (line: DiffLine, key: string) => (
     <DiffRow
