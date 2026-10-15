@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Attachment, ImageType } from '@yart/core'
 import { findGitCommonDir } from './git.ts'
 import { ReviewError } from './review-error.ts'
+import { checkInside, checkReviewId } from './review-id.ts'
 
 /** The largest image that a comment can have, in bytes. */
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -48,7 +49,7 @@ export class AttachmentStore {
 
   private async dir(review_id: string): Promise<string> {
     this.resolved_dir ??= join(await findGitCommonDir(this.repo_path), 'yart', 'attachments')
-    return join(this.resolved_dir, review_id)
+    return checkInside(this.resolved_dir, join(this.resolved_dir, checkReviewId(review_id)))
   }
 
   /** Keeps an image, and returns its attachment. The same image twice gives the same attachment. */

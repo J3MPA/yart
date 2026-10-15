@@ -1,26 +1,43 @@
 import { writeFileSync } from 'node:fs'
-import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
-import { serve, type ServerType } from '@hono/node-server'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { createServer } from '@yart/daemon'
+import { listenTestDaemon, type TestDaemon } from '@yart/daemon/test-daemon'
 import { TestRepo } from '@yart/daemon/test-repo'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createMcpServer } from './server.ts'
+import { createMcpServer, type McpServerOptions } from './server.ts'
 
 const FOUR_LINES = 'alpha\nbeta\ngamma\ndelta\n'
 
 let repo: TestRepo
-let http: ServerType
+let daemon: TestDaemon
 let port: number
 let client: Client
+let reviewer_client: Client
 let base: string
 let opened: string[]
 
-/** Calls a tool and returns its text. Fails clearly if the tool gave an error. */
-const call = async (name: string, args: Record<string, unknown> = {}): Promise<string> => {
-  const result = await client.callTool({ name, arguments: args })
+/** Connects an MCP client to a new MCP server on the daemon of the test. */
+const connect = async (options: McpServerOptions): Promise<Client> => {
+  const server = createMcpServer({
+    port,
+    state_dir: daemon.state_dir,
+    repo_path: repo.path,
+    autostart: false,
+    ...options,
+  })
+  const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
+  const connected = new Client({ name: 'test', version: '0.0.0' })
+  await Promise.all([server.connect(server_transport), connected.connect(client_transport)])
+  return connected
+}
+
+const callOn = async (
+  target: Client,
+  name: string,
+  args: Record<string, unknown> = {},
+): Promise<string> => {
+  const result = await target.callTool({ name, arguments: args })
   const body = (result.content as { type: string; text: string }[])
     .map((block) => block.text)
     .join('\n')
@@ -28,18 +45,28 @@ const call = async (name: string, args: Record<string, unknown> = {}): Promise<s
   return body
 }
 
+/** Calls a tool of the agent under review and returns its text. */
+const call = (name: string, args: Record<string, unknown> = {}) => callOn(client, name, args)
+
+/** Calls a tool of the AI reviewer, on its own server, and returns its text. */
+const review = (name: string, args: Record<string, unknown> = {}) =>
+  callOn(reviewer_client, name, args)
+
 /** Calls a tool that must fail, and returns the error text. */
-const callExpectingError = async (name: string, args: Record<string, unknown>): Promise<string> => {
-  const result = await client.callTool({ name, arguments: args })
+const callExpectingError = async (
+  name: string,
+  args: Record<string, unknown>,
+  target: Client = client,
+): Promise<string> => {
+  const result = await target.callTool({ name, arguments: args })
   expect(result.isError).toBe(true)
   return (result.content as { text: string }[]).map((block) => block.text).join('\n')
 }
 
 /** The side of the loop that belongs to the person. The agent cannot do it. */
 const humanComments = async (review_id: string, line: number, body: string): Promise<void> => {
-  const response = await fetch(`http://localhost:${port}/api/reviews/${review_id}/threads`, {
+  const response = await daemon.asPerson(`/api/reviews/${review_id}/threads`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ path: 'a.txt', line, body }),
   })
   expect(response.ok).toBe(true)
@@ -50,9 +77,8 @@ const humanSubmits = async (
   verdict: 'commented' | 'approved' | 'changes_requested' = 'commented',
   body?: string,
 ): Promise<void> => {
-  await fetch(`http://localhost:${port}/api/reviews/${review_id}/submit`, {
+  await daemon.asPerson(`/api/reviews/${review_id}/submit`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ verdict, body }),
   })
 }
@@ -76,41 +102,30 @@ beforeEach(async () => {
   repo.write('a.txt', 'alpha\nTARGET\ngamma\ndelta\n')
   repo.commit('change')
 
-  const app = createServer({ repo_path: repo.path })
-  http = await new Promise<ServerType>((resolve) => {
-    const server = serve({ fetch: app.fetch, port: 0 }, () => resolve(server))
-  })
-  port = (http.address() as AddressInfo).port
+  daemon = await listenTestDaemon({ repo_path: repo.path })
+  port = daemon.port
 
   // autostart is off, because the daemon above already listens on this port.
   // The test records the opener and does not run it. Thus the tests never open
   // a browser on the computer of the person who runs them.
   opened = []
-  const mcp = createMcpServer({
-    port,
-    repo_path: repo.path,
-    autostart: false,
-    openBrowser: (url) => opened.push(url),
-  })
-  const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
-  client = new Client({ name: 'test', version: '0.0.0' })
-  await Promise.all([mcp.connect(server_transport), client.connect(client_transport)])
+  client = await connect({ openBrowser: (url) => opened.push(url) })
+  reviewer_client = await connect({ role: 'reviewer', openBrowser: () => undefined })
 })
 
 afterEach(async () => {
   await client.close()
-  await new Promise<void>((resolve) => http.close(() => resolve()))
+  await reviewer_client.close()
+  await daemon.close()
   repo.dispose()
 })
 
 describe('tool surface', () => {
-  it('exposes the review loop as tools', async () => {
+  it('gives the agent under review the review loop, with no tool that gives a verdict', async () => {
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'advance_review',
-      'await_author',
       'await_review',
-      'get_diff',
       'get_review',
       'get_reviewer_settings',
       'list_reviews',
@@ -118,8 +133,28 @@ describe('tool surface', () => {
       'reply_to_verdict',
       'resolve_thread',
       'start_review',
+    ])
+  })
+
+  it('gives the reviewer tools only to a server with the reviewer role', async () => {
+    const { tools } = await reviewer_client.listTools()
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'await_author',
+      'get_diff',
+      'get_review',
+      'get_reviewer_settings',
+      'list_reviews',
+      'resolve_thread',
       'submit_verdict',
     ])
+    expect(reviewer_client.getInstructions()).toContain('AI reviewer')
+  })
+
+  it('refuses a verdict from the agent under review', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    expect(
+      await callExpectingError('submit_verdict', { review_id: id, verdict: 'approved' }),
+    ).toMatch(/not found/i)
   })
 
   it('tells the agent to open a review when the person asks for one', () => {
@@ -160,7 +195,7 @@ describe('start_review', () => {
   it('opens a review and reports the changed files', async () => {
     const rendered = await call('start_review', { base, head: 'HEAD' })
     expect(rendered).toContain('modified  a.txt')
-    expect(rendered).not.toContain(`http://localhost:${port}/reviews/`)
+    expect(rendered).not.toContain(`http://127.0.0.1:${port}/reviews/`)
   })
 
   it('reports a bad revision as a tool error rather than throwing', async () => {
@@ -207,15 +242,7 @@ describe('an agent in another repository', () => {
       other.commit('base')
       other.write('elsewhere.txt', 'one\ntwo\n')
 
-      const agent = createMcpServer({
-        port,
-        repo_path: other.path,
-        autostart: false,
-        openBrowser: () => undefined,
-      })
-      const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
-      const other_client = new Client({ name: 'other', version: '0.0.0' })
-      await Promise.all([agent.connect(server_transport), other_client.connect(client_transport)])
+      const other_client = await connect({ repo_path: other.path, openBrowser: () => undefined })
 
       const result = await other_client.callTool({ name: 'start_review', arguments: {} })
       const rendered = (result.content as { text: string }[])[0]?.text ?? ''
@@ -233,7 +260,7 @@ describe('opening the review', () => {
   it('shows a new review to the person who has to read it', async () => {
     const rendered = await call('start_review', { base })
     const review_id = idFrom(rendered)
-    expect(opened).toEqual([`http://localhost:${port}/reviews/${review_id}`])
+    expect(opened).toEqual([`http://127.0.0.1:${port}/reviews/${review_id}`])
     expect(rendered).toContain('yart opened the review')
   })
 
@@ -252,20 +279,12 @@ describe('opening the review', () => {
     // The real switch, not a replacement. A person configures this path. Thus the
     // test examines the value that they set.
     process.env.YART_NO_BROWSER = '1'
-    const quiet = createMcpServer({
-      port,
-      repo_path: repo.path,
-      autostart: false,
-      openBrowser: (url) => opened.push(url),
-    })
-    const [client_transport, server_transport] = InMemoryTransport.createLinkedPair()
-    const quiet_client = new Client({ name: 'quiet', version: '0.0.0' })
-    await Promise.all([quiet.connect(server_transport), quiet_client.connect(client_transport)])
+    const quiet_client = await connect({ openBrowser: (url) => opened.push(url) })
 
     const result = await quiet_client.callTool({ name: 'start_review', arguments: { base } })
     const rendered = (result.content as { text: string }[])[0]?.text ?? ''
     expect(rendered).toContain('Ask the person to open the URL')
-    expect(rendered).toContain(`http://localhost:${port}/reviews/`)
+    expect(rendered).toContain(`http://127.0.0.1:${port}/reviews/`)
     expect(opened).toEqual([])
 
     await quiet_client.close()
@@ -414,11 +433,7 @@ describe('advance_review', () => {
 
 describe('an AI reviewer', () => {
   const settle = (changes: Record<string, unknown>) =>
-    fetch(`http://localhost:${port}/api/settings`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(changes),
-    })
+    daemon.asPerson('/api/settings', { method: 'PATCH', body: JSON.stringify(changes) })
 
   it('reads how the person wants it run', async () => {
     await settle({ reviewer_model: 'sonnet', reviewer_effort: 'high', ai_review_rounds: 2 })
@@ -430,7 +445,7 @@ describe('an AI reviewer', () => {
 
   it('reads the diff with both line numbers on every line', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    const diff = await call('get_diff', { review_id: id })
+    const diff = await review('get_diff', { review_id: id })
     expect(diff).toContain('=== a.txt  [modified]')
     expect(diff).toMatch(/- +2 +beta/)
     expect(diff).toMatch(/\+ +2 +TARGET/)
@@ -438,7 +453,7 @@ describe('an AI reviewer', () => {
 
   it('passes a verdict with its comments, and is told how many rounds it has left', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    const rendered = await call('submit_verdict', {
+    const rendered = await review('submit_verdict', {
       review_id: id,
       verdict: 'changes_requested',
       summary: 'One thing.',
@@ -454,18 +469,18 @@ describe('an AI reviewer', () => {
   it('is told to stop on its last round', async () => {
     await settle({ ai_review_rounds: 1 })
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    const rendered = await call('submit_verdict', { review_id: id, verdict: 'changes_requested' })
+    const rendered = await review('submit_verdict', { review_id: id, verdict: 'changes_requested' })
     expect(rendered).toContain('That was your last round')
   })
 
   it('hears when the author answers, and only then', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    await call('submit_verdict', {
+    await review('submit_verdict', {
       review_id: id,
       verdict: 'changes_requested',
       comments: [{ path: 'a.txt', line: 2, body: 'rename this' }],
     })
-    expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
       'did not answer',
     )
     const author_view = await call('await_review', { review_id: id, timeout_seconds: 1 })
@@ -474,19 +489,21 @@ describe('an AI reviewer', () => {
       thread_id: threadIdFrom(author_view.split('Open comments')[1] ?? ''),
       body: 'I think TARGET is right here.',
     })
-    expect(await call('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
       'The author answered',
     )
   })
 
   it('cannot wait for an answer to a verdict it never passed', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    expect(await callExpectingError('await_author', { review_id: id })).toMatch(/submit_verdict/)
+    expect(await callExpectingError('await_author', { review_id: id }, reviewer_client)).toMatch(
+      /submit_verdict/,
+    )
   })
 
   it('tells the author when its approval still needs the person', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
-    await call('submit_verdict', { review_id: id, verdict: 'approved' })
+    await review('submit_verdict', { review_id: id, verdict: 'approved' })
     expect(await call('await_review', { review_id: id, timeout_seconds: 1 })).toContain(
       'The person did not examine it yet',
     )
@@ -497,11 +514,9 @@ describe('images for the agent', () => {
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9])
 
   const daemonPost = async (path: string, body: unknown) =>
-    (await fetch(`http://localhost:${port}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then((response) => response.json())) as { id: string }
+    (await daemon
+      .asPerson(path, { method: 'POST', body: JSON.stringify(body) })
+      .then((response) => response.json())) as { id: string }
 
   it('gives the agent the images of the person, with the numbers from the text', async () => {
     const review_id = idFrom(await call('start_review', { base }))

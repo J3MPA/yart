@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { findGitCommonDir } from './git.ts'
+import { checkInside, checkReviewId, isReviewId } from './review-id.ts'
 import type { Review } from './types.ts'
 
 /**
@@ -60,7 +61,8 @@ export class ReviewStore {
   }
 
   private async pathFor(id: string): Promise<string> {
-    return join(await this.dir(), `${id}.json`)
+    const dir = await this.dir()
+    return checkInside(dir, join(dir, `${checkReviewId(id)}.json`))
   }
 
   async save(review: Review): Promise<void> {
@@ -71,6 +73,7 @@ export class ReviewStore {
   }
 
   async load(id: string): Promise<Review | null> {
+    if (!isReviewId(id)) return null
     try {
       const raw = await readFile(await this.pathFor(id), 'utf8')
       return withDefaults(JSON.parse(raw) as Review)
@@ -91,8 +94,9 @@ export class ReviewStore {
 
     const reviews = await Promise.all(
       entries
-        .filter((entry) => entry.endsWith('.json'))
-        .map((entry) => this.load(entry.slice(0, -'.json'.length))),
+        .map((entry) => entry.slice(0, -'.json'.length))
+        .filter((id) => isReviewId(id))
+        .map((id) => this.load(id)),
     )
 
     return reviews

@@ -4,6 +4,7 @@ import diffViewReducer from '@/features/diff/diff-view-slice'
 import localReviewsReducer, { LOCAL_REVIEWS_KEY } from '@/features/review/local-review-slice'
 import seenReducer from '@/features/review/seen-slice'
 import { reviewApi } from '@/features/review/review-api'
+import sessionReducer from '@/features/session/session-slice'
 import { writeStored } from '@/features/review/browser-storage'
 import { writeSeen } from '@/features/review/seen-reviews'
 
@@ -12,6 +13,7 @@ export const Store = configureStore({
     diff_view: diffViewReducer,
     seen: seenReducer,
     local_reviews: localReviewsReducer,
+    session: sessionReducer,
     [reviewApi.reducerPath]: reviewApi.reducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(reviewApi.middleware),

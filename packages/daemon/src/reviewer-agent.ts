@@ -1,6 +1,6 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { access, constants, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 /** The line that marks the subagent file as the file of yart. */
 export const REVIEWER_MARKER = '<!-- written by yart reviewer install -->'
@@ -13,12 +13,20 @@ export const REVIEWER_FILE_NAME = 'yart-reviewer.md'
  * does not brief its own reviewer.
  *
  * It gets only the reviewer tools of yart and tools that read files. Thus it
- * cannot change the code that it reviews.
+ * cannot change the code that it reviews. The reviewer tools come from its own
+ * MCP server, with the role `reviewer`. Claude Code gives a server in the
+ * subagent file only to the subagent. Thus the agent under review does not get
+ * a tool that gives a verdict.
  */
-export const REVIEWER_AGENT = `---
+export const reviewerAgent = (mcp_command: string): string => `---
 name: yart-reviewer
 description: Reviews the changes of a different agent in a yart review, as an AI reviewer before the person reviews. Use it when the user asks for an AI review of your work before they look. First open the review with start_review and read get_reviewer_settings. Then start this agent with the review id, on the model from the settings. It gives one verdict for each run. After you answer its comments and call advance_review, start it again, until it approves or has no more rounds.
-tools: mcp__yart__get_reviewer_settings, mcp__yart__get_diff, mcp__yart__get_review, mcp__yart__submit_verdict, mcp__yart__resolve_thread, Read, Grep, Glob
+tools: mcp__yart-reviewer__get_reviewer_settings, mcp__yart-reviewer__get_diff, mcp__yart-reviewer__get_review, mcp__yart-reviewer__submit_verdict, mcp__yart-reviewer__resolve_thread, Read, Grep, Glob
+mcpServers:
+  - yart-reviewer:
+      type: stdio
+      command: ${JSON.stringify(mcp_command)}
+      args: ["--role", "reviewer"]
 ---
 
 ${REVIEWER_MARKER}
@@ -59,6 +67,29 @@ Rules for your verdict:
   completes the review.
 `
 
+/**
+ * The `yart-mcp` command for the subagent file. Claude Code can start a server
+ * with a different PATH than the shell of the person. Thus the file gets the
+ * full path when yart can find it.
+ */
+export const findMcpCommand = async (
+  env: Record<string, string | undefined> = process.env,
+): Promise<string> => {
+  const candidates = [
+    ...(env.PATH ?? '').split(delimiter).filter((dir) => dir !== ''),
+    join(homedir(), '.local', 'bin'),
+  ].map((dir) => join(dir, 'yart-mcp'))
+  for (const candidate of candidates) {
+    try {
+      await access(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+  return 'yart-mcp'
+}
+
 const directoryFor = (scope: { project_path: string } | 'user'): string =>
   scope === 'user'
     ? join(homedir(), '.claude', 'agents')
@@ -78,6 +109,7 @@ const readIfThere = async (path: string): Promise<string | null> => {
  */
 export const installReviewerAgent = async (
   scope: { project_path: string } | 'user',
+  mcp_command?: string,
 ): Promise<string> => {
   const directory = directoryFor(scope)
   const path = join(directory, REVIEWER_FILE_NAME)
@@ -86,7 +118,7 @@ export const installReviewerAgent = async (
     throw new Error(`${path} already exists, and yart did not write it. yart does not replace it.`)
   }
   await mkdir(directory, { recursive: true })
-  await writeFile(path, REVIEWER_AGENT, 'utf8')
+  await writeFile(path, reviewerAgent(mcp_command ?? (await findMcpCommand())), 'utf8')
   return path
 }
 

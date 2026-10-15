@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/naming-convention -- every property name in
    this file is Redux Toolkit Query's own: endpoint keys become hook names
    (`getReview` -> `useGetReviewQuery`), and the rest are its config fields. */
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import {
+  createApi,
+  fetchBaseQuery,
+  type BaseQueryFn,
+  type FetchArgs,
+  type FetchBaseQueryError,
+} from '@reduxjs/toolkit/query/react'
 import type {
   Attachment,
   DiffSide,
@@ -12,6 +18,7 @@ import type {
   Settings,
   ThreadStatus,
 } from '@yart/core'
+import { signedOut } from '@/features/session/session-slice'
 
 export interface AddThreadArgs {
   review_id: string
@@ -65,9 +72,22 @@ export interface SetThreadStatusArgs {
   status: ThreadStatus
 }
 
+const fetchApi = fetchBaseQuery({ baseUrl: '/api' })
+
+/** Each request, and a note in the store when the daemon refuses the sign-in of this window. */
+const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args,
+  api,
+  extra,
+) => {
+  const result = await fetchApi(args, api, extra)
+  if (result.error?.status === 401) api.dispatch(signedOut())
+  return result
+}
+
 export const reviewApi = createApi({
   reducerPath: 'reviewApi',
-  baseQuery: fetchBaseQuery({ baseUrl: '/api' }),
+  baseQuery,
   // Threads change on almost each action. Thus the page gets the review again,
   // and does not change it locally. The server owns the anchor state. To
   // calculate it again in the browser would be a second implementation.

@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   installReviewerAgent,
-  REVIEWER_AGENT,
   REVIEWER_FILE_NAME,
+  reviewerAgent,
   uninstallReviewerAgent,
 } from './reviewer-agent.ts'
 import { TestRepo } from './test-repo.ts'
@@ -23,15 +23,25 @@ const agentPath = () => join(repo.path, '.claude', 'agents', REVIEWER_FILE_NAME)
 
 describe('the reviewer subagent', () => {
   it('names itself and limits itself to reading and the reviewer tools', () => {
-    const front = REVIEWER_AGENT.split('---')[1] ?? ''
+    const front = reviewerAgent('/bin/yart-mcp').split('---')[1] ?? ''
     expect(front).toContain('name: yart-reviewer')
-    expect(front).toContain('mcp__yart__submit_verdict')
+    expect(front).toContain('mcp__yart-reviewer__submit_verdict')
+    expect(front).not.toContain('mcp__yart__')
     expect(front).not.toMatch(/\bEdit\b|\bWrite\b|\bBash\b/)
   })
 
+  it('has its own MCP server with the reviewer role', () => {
+    const front = reviewerAgent('/opt/yart/bin/yart-mcp').split('---')[1] ?? ''
+    expect(front).toContain('  - yart-reviewer:')
+    expect(front).toContain('command: "/opt/yart/bin/yart-mcp"')
+    expect(front).toContain('args: ["--role", "reviewer"]')
+  })
+
   it('is written into the project', async () => {
-    expect(await installReviewerAgent({ project_path: repo.path })).toBe(agentPath())
-    expect(readFileSync(agentPath(), 'utf8')).toBe(REVIEWER_AGENT)
+    expect(await installReviewerAgent({ project_path: repo.path }, '/bin/yart-mcp')).toBe(
+      agentPath(),
+    )
+    expect(readFileSync(agentPath(), 'utf8')).toBe(reviewerAgent('/bin/yart-mcp'))
   })
 
   it('refuses to replace a file with the same name that yart did not write', async () => {

@@ -6,6 +6,8 @@ import { useGetVersionQuery } from '@/features/review/review-api'
 import { ReviewList } from '@/features/review/review-list'
 import { ReviewPage } from '@/features/review/review-page'
 import { SettingsPage } from '@/features/settings/settings-page'
+import { SignInNotice } from '@/features/session/sign-in-notice'
+import { useAppSelector } from '@/store/hooks'
 import styles from './app.module.css'
 
 /**
@@ -29,11 +31,14 @@ export const App = () => {
   useUnseenSignal(unseen.count)
   useDesktopSignal(unseen)
   const { data: version } = useGetVersionQuery()
+  const signed_out = useAppSelector((state) => state.session.signed_out)
 
   return (
     <main className={styles.shell}>
       <div className={styles.content}>
-        {on_settings ? (
+        {signed_out ? (
+          <SignInNotice />
+        ) : on_settings ? (
           <SettingsPage />
         ) : review_id === null ? (
           <>

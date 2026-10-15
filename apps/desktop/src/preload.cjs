@@ -10,4 +10,7 @@ electron.contextBridge.exposeInMainWorld('yart_desktop', {
   notify(notice) {
     electron.ipcRenderer.send('notify', notice)
   },
+  signIn() {
+    electron.ipcRenderer.send('sign-in')
+  },
 })

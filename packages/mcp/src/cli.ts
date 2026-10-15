@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { VERSION } from '@yart/daemon'
 import { DEFAULT_PORT } from './daemon-client.ts'
-import { createMcpServer } from './server.ts'
+import { createMcpServer, MCP_ROLES, type McpRole } from './server.ts'
 
 export const main = async (argv: readonly string[]): Promise<void> => {
   const { values } = parseArgs({
@@ -11,6 +11,7 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     options: {
       port: { type: 'string', short: 'p' },
       repo: { type: 'string', short: 'r' },
+      role: { type: 'string' },
       'no-autostart': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -33,6 +34,8 @@ export const main = async (argv: readonly string[]): Promise<void> => {
         '',
         '  -p, --port <port>  Daemon port (default: 7777)',
         '  -r, --repo <path>  Repository to review (default: the current one)',
+        '      --role <role>  author: the tools of the agent under review (default)',
+        '                     reviewer: the tools of an AI reviewer',
         '      --no-autostart Fail instead of starting a daemon',
         '  -v, --version      Show the version',
         '  -h, --help         Show this message',
@@ -44,7 +47,13 @@ export const main = async (argv: readonly string[]): Promise<void> => {
     return
   }
 
+  const role = values.role ?? 'author'
+  if (!(MCP_ROLES as readonly string[]).includes(role)) {
+    throw new Error(`Invalid role: ${role}. Use ${MCP_ROLES.join(' or ')}.`)
+  }
+
   const server = createMcpServer({
+    role: role as McpRole,
     port: values.port === undefined ? DEFAULT_PORT : Number(values.port),
     repo_path: values.repo ?? process.cwd(),
     autostart: values['no-autostart'] !== true,

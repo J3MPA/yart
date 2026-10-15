@@ -70,3 +70,4 @@ export {
   type ReviewerEffort,
   type Settings,
 } from './settings.ts'
+export { bodyLines, escapeControl, hasControlCharacters, quotePath } from './text.ts'
