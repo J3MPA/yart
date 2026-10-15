@@ -542,12 +542,16 @@ export const createServer = ({
    * not as a path segment. Thus nested paths do not need an encoding.
    */
   app.get('/api/reviews/:id/file', async (context) => {
-    const service = await repositories.locate(context.req.param('id'))
-    const review = await service.get(context.req.param('id'))
+    const id = context.req.param('id')
+    const service = await repositories.locate(id)
+    const review = await service.get(id)
     const path = context.req.query('path')
     if (path === undefined) throw new ReviewError('A path is required', 400)
+    // With `since`, the base side is the file at the head of that earlier round.
+    const since = context.req.query('since')
+    const files = since === undefined ? review.files : await service.filesSince(id, since)
 
-    const file = review.files.find((candidate) => candidate.path === path)
+    const file = files.find((candidate) => candidate.path === path)
     if (file === undefined) throw new ReviewError(`${path} is not part of this review`, 404)
 
     const [base_content, head_content] = await Promise.all([

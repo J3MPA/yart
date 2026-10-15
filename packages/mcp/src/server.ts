@@ -2,6 +2,7 @@ import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server
 import { z } from 'zod'
 import {
   latestSubmission,
+  quotePath,
   reviewerRounds,
   submissionAuthor,
   threadIsAnswered,
@@ -538,10 +539,25 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         guard(async () => {
           const review = await daemon.advanceReview(review_id, head)
           delivered.addThreads(openThreads(review))
+          // The person sees the work of this round apart from the rest. The agent
+          // gets the same list of files, to tell the person what it changed.
+          const previous = review.rounds[review.rounds.length - 2]
+          const changed =
+            previous === undefined
+              ? []
+              : (await daemon.getDiff(review_id, previous)).map((file) => quotePath(file.path))
           return text(
             [
               renderReviewWithThreads(review, shownUrl(review.id)),
               '',
+              ...(previous === undefined
+                ? []
+                : [
+                    changed.length === 0
+                      ? 'No file changed in this round.'
+                      : `Files that changed in this round (${changed.length}): ${changed.join(', ')}`,
+                    '',
+                  ]),
               'Tell the person that the review is ready again.',
               waitHint(review.id),
             ].join('\n'),

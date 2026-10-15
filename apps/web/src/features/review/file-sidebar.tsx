@@ -15,6 +15,8 @@ export interface FileSidebarProps {
   folded: ReadonlySet<string>
   /** The files marked as reviewed at their current content. */
   reviewed: ReadonlySet<string>
+  /** The files that changed in the latest round. The list marks them. */
+  changed: ReadonlySet<string>
   onSelect: (path: string) => void
   onToggleDirectory: (path: string) => void
 }
@@ -34,6 +36,7 @@ interface TreeView {
   active_path: string | null
   folded: ReadonlySet<string>
   reviewed: ReadonlySet<string>
+  changed: ReadonlySet<string>
 }
 
 interface TreeRowsProps {
@@ -141,6 +144,9 @@ const TreeRows = ({ nodes, view, onSelect, onToggleDirectory }: TreeRowsProps) =
               {is_reviewed ? '✓' : file === undefined ? '' : STATUS_LETTER[file.status]}
             </span>
             <span className={styles.tree_name}>{node.name}</span>
+            {view.changed.has(node.path) && (
+              <span className={styles.tree_new} role="img" aria-label="changed in this round" />
+            )}
             {summary !== undefined && <Counts summary={summary} />}
           </button>
         </li>
@@ -156,6 +162,7 @@ export const FileSidebar = ({
   active_path,
   folded,
   reviewed,
+  changed,
   onSelect,
   onToggleDirectory,
 }: FileSidebarProps) => {
@@ -164,7 +171,7 @@ export const FileSidebar = ({
   const by_path = useMemo(() => new Map(files.map((file) => [file.path, file])), [files])
   const totals = useMemo(() => sumSummaries(summaries.values()), [summaries])
 
-  const view: TreeView = { files: by_path, summaries, active_path, folded, reviewed }
+  const view: TreeView = { files: by_path, summaries, active_path, folded, reviewed, changed }
 
   return (
     <nav className={styles.tree} aria-label="Changed files">
