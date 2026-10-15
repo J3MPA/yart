@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { currentSubmission, reviewProgress, threadIsAnswered } from './progress.ts'
+import {
+  authorHasAnswered,
+  currentSubmission,
+  reviewProgress,
+  threadIsAnswered,
+} from './progress.ts'
 import type { Review, ReviewSubmission } from './review.ts'
 import type { Comment, CommentAuthor, Thread } from './types.ts'
 
@@ -123,5 +128,59 @@ describe('reviewProgress', () => {
 
   it('is idle for an approval with nothing to do', () => {
     expect(reviewProgress(review({ submissions: [submission('head2')] }))?.state).toBe('idle')
+  })
+})
+
+describe('authorHasAnswered', () => {
+  const VERDICT_AT = '2026-09-25T12:00:00.000Z'
+  const LATER = '2026-09-25T12:05:00.000Z'
+
+  const said = (author: CommentAuthor, created_at = LATER): Comment => ({
+    ...comment(author),
+    created_at,
+  })
+
+  const reviewerThread = (id: string, ...later: Comment[]): Thread =>
+    ({ id, status: 'open', comments: [said('reviewer', VERDICT_AT), ...later] }) as Thread
+
+  const afterVerdict = (threads: Thread[], verdict_comments: Comment[] = []): Review =>
+    review({
+      head_sha: 'head1',
+      threads,
+      submissions: [
+        { ...submission('head1', verdict_comments), author: 'reviewer', created_at: VERDICT_AT },
+      ],
+    })
+
+  it('waits while the agent answered only some threads of the reviewer', () => {
+    const answered = afterVerdict([reviewerThread('a', said('agent')), reviewerThread('b')])
+    expect(authorHasAnswered(answered)).toBe(false)
+  })
+
+  it('wakes when the agent answered each open thread of the reviewer', () => {
+    const answered = afterVerdict([
+      reviewerThread('a', said('agent')),
+      { ...reviewerThread('b'), status: 'resolved' },
+    ])
+    expect(authorHasAnswered(answered)).toBe(true)
+  })
+
+  it('wakes when the agent moved the review, also with no reply', () => {
+    expect(authorHasAnswered({ ...afterVerdict([reviewerThread('a')]), head_sha: 'head2' })).toBe(
+      true,
+    )
+  })
+
+  it('wakes on a reply to a verdict with no line comments', () => {
+    expect(authorHasAnswered(afterVerdict([], [said('agent')]))).toBe(true)
+  })
+
+  it('does not wait for the threads of the person', () => {
+    const person = { id: 'p', status: 'open', comments: [said('human', VERDICT_AT)] } as Thread
+    expect(authorHasAnswered(afterVerdict([person, reviewerThread('a', said('agent'))]))).toBe(true)
+  })
+
+  it('waits when the agent did nothing after the verdict', () => {
+    expect(authorHasAnswered(afterVerdict([]))).toBe(false)
   })
 })

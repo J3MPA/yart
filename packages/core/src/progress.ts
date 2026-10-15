@@ -21,24 +21,8 @@ export const latestSubmission = (review: Review): ReviewSubmission | null =>
   review.submissions[review.submissions.length - 1] ?? null
 
 /**
- * Tells if the agent under review did something after the last verdict of an AI
- * reviewer. It can move the review to new work, or write in it. Both give the
- * turn to the reviewer. A reply alone can mean that the author disagrees, and
- * that also needs an answer.
- */
-export const authorHasAnswered = (review: Review): boolean => {
-  const verdict = latestSubmission(review)
-  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
-  if (review.head_sha !== verdict.head_sha) return true
-  const spoken = [
-    ...review.threads.flatMap((thread) => thread.comments),
-    ...verdict.comments,
-  ].filter((comment) => comment.author === 'agent')
-  return spoken.some((comment) => comment.created_at > verdict.created_at)
-}
-
-/**
- * Tells if the agent answered a thread after the person last wrote in it.
+ * Tells if the agent answered a thread after the person or the reviewer last
+ * wrote in it.
  *
  * A resolved thread counts. An agent that marks a thread as done has said all
  * that it has to say. In other cases, the last author decides. When the person
@@ -49,6 +33,33 @@ export const threadIsAnswered = (thread: Thread): boolean => {
   if (thread.status === 'resolved') return true
   const last = thread.comments[thread.comments.length - 1]
   return last !== undefined && last.author === 'agent'
+}
+
+/**
+ * Tells if the agent under review completed its answer to the last verdict of
+ * an AI reviewer. Then the turn goes to the reviewer.
+ *
+ * The answer is complete when the agent moved the review to new work. It is
+ * also complete when the agent wrote after the verdict, and answered each open
+ * thread of the reviewer. A reply alone can mean that the author disagrees, and
+ * that also needs an answer. But the agent replies to each comment before it
+ * moves the review. Thus the first reply must not wake the reviewer.
+ */
+export const authorHasAnswered = (review: Review): boolean => {
+  const verdict = latestSubmission(review)
+  if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
+  if (review.head_sha !== verdict.head_sha) return true
+  const spoken = [
+    ...review.threads.flatMap((thread) => thread.comments),
+    ...verdict.comments,
+  ].filter((comment) => comment.author === 'agent')
+  if (!spoken.some((comment) => comment.created_at > verdict.created_at)) return false
+  return review.threads.every(
+    (thread) =>
+      thread.status !== 'open' ||
+      !thread.comments.some((comment) => comment.author === 'reviewer') ||
+      threadIsAnswered(thread),
+  )
 }
 
 /**

@@ -295,8 +295,8 @@ const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
       return 2
     }
     process.stdout.write(
-      `yart: the author answered on ${review_id}. Read the changes with get_diff and the ` +
-        'answers with get_review.\n',
+      `yart: the author answered on ${review_id}. Read the new changes with get_diff and ` +
+        'since_last_verdict, and the answers with get_review.\n',
     )
     return 0
   }

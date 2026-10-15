@@ -337,8 +337,34 @@ describe('await_review', () => {
     await humanComments(review_id, 2, 'rename this')
 
     const rendered = await call('await_review', { review_id, timeout_seconds: 1 })
-    expect(rendered).toContain('Comments so far (1)')
+    expect(rendered).toContain('New comments so far (1)')
     expect(rendered).toContain('rename this')
+  })
+
+  it('does not send the same comments again on the next time out', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanComments(review_id, 2, 'rename this')
+    await call('await_review', { review_id, timeout_seconds: 1 })
+    const again = await call('await_review', { review_id, timeout_seconds: 1 })
+    expect(again).toContain('No new comments.')
+    expect(again).not.toContain('rename this')
+  })
+
+  it('does not send a thread that the agent answered on a time out', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    await humanComments(review_id, 2, 'rename this')
+    await humanSubmits(review_id, 'changes_requested')
+    const verdict = await call('await_review', { review_id, timeout_seconds: 5 })
+    await call('reply_to_thread', {
+      review_id,
+      thread_id: threadIdFrom(verdict.split('Open comments')[1] ?? ''),
+      body: 'renamed it',
+    })
+    repo.write('a.txt', 'alpha\nRENAMED\ngamma\ndelta\n')
+    await call('advance_review', { review_id })
+    expect(await call('await_review', { review_id, timeout_seconds: 1 })).toContain(
+      'No new comments.',
+    )
   })
 
   it('returns the open comments once submitted', async () => {
@@ -494,6 +520,59 @@ describe('an AI reviewer', () => {
     )
   })
 
+  it('waits until the author answered each of its comments, and wakes one time', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    await review('submit_verdict', {
+      review_id: id,
+      verdict: 'changes_requested',
+      comments: [
+        { path: 'a.txt', line: 2, body: 'rename this' },
+        { path: 'a.txt', line: 3, body: 'and this' },
+      ],
+    })
+    const author_view = await call('await_review', { review_id: id, timeout_seconds: 1 })
+    const [first, second] = [
+      ...(author_view.split('Open comments')[1] ?? '').matchAll(/\[([0-9a-f-]{36})\]/g),
+    ].map((match) => match[1] as string)
+    await call('reply_to_thread', { review_id: id, thread_id: first, body: 'renamed it' })
+    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'did not answer',
+    )
+    await call('reply_to_thread', { review_id: id, thread_id: second, body: 'I keep this one' })
+    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'The author answered',
+    )
+    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'did not answer',
+    )
+  })
+
+  it('reads only the changes after its last verdict', async () => {
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    await review('submit_verdict', { review_id: id, verdict: 'changes_requested' })
+    expect(await review('get_diff', { review_id: id, since_last_verdict: true })).toContain(
+      'did not change the code',
+    )
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    await call('advance_review', { review_id: id, head: 'HEAD' })
+
+    const since = await review('get_diff', { review_id: id, since_last_verdict: true })
+    expect(since).toContain('after your last verdict')
+    expect(since).toContain('=== b.txt  [added]')
+    expect(since).not.toContain('=== a.txt')
+    expect(await review('get_diff', { review_id: id })).toContain('=== a.txt')
+  })
+
+  it('reads only the files that it names', async () => {
+    repo.write('b.txt', 'new\n')
+    repo.commit('add b')
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    const diff = await review('get_diff', { review_id: id, paths: ['b.txt'] })
+    expect(diff).toContain('=== b.txt')
+    expect(diff).not.toContain('=== a.txt')
+  })
+
   it('cannot wait for an answer to a verdict it never passed', async () => {
     const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
     expect(await callExpectingError('await_author', { review_id: id }, reviewer_client)).toMatch(
@@ -545,6 +624,42 @@ describe('images for the agent', () => {
   })
 })
 
+describe('images that the agent already has', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 8, 8, 8])
+
+  const imagesOf = async (name: string, args: Record<string, unknown>) => {
+    const result = await client.callTool({ name, arguments: args })
+    const blocks = result.content as { type: string; text?: string }[]
+    return {
+      text: blocks[0]?.text ?? '',
+      images: blocks.filter((block) => block.type === 'image').length,
+    }
+  }
+
+  it('sends each image one time, unless the agent asks for all again', async () => {
+    const review_id = idFrom(await call('start_review', { base }))
+    const { id } = (await (
+      await daemon.asPerson(`/api/reviews/${review_id}/attachments`, {
+        method: 'POST',
+        body: JSON.stringify({ data: PNG.toString('base64') }),
+      })
+    ).json()) as { id: string }
+    await daemon.asPerson(`/api/reviews/${review_id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({
+        verdict: 'changes_requested',
+        threads: [{ path: 'a.txt', line: 2, body: 'see this', attachments: [id] }],
+      }),
+    })
+
+    expect((await imagesOf('await_review', { review_id, timeout_seconds: 5 })).images).toBe(1)
+    const again = await imagesOf('get_review', { review_id })
+    expect(again.images).toBe(0)
+    expect(again.text).toContain('human: see this  [image 1 (sent before)]')
+    expect((await imagesOf('get_review', { review_id, include_images: true })).images).toBe(1)
+  })
+})
+
 describe('images from the agent', () => {
   const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7])
 
@@ -565,7 +680,7 @@ describe('images from the agent', () => {
       image_paths: ['fix.png'],
     })
     expect(await call('get_review', { review_id })).toContain(
-      'agent: Fixed. See the screenshot.  [image 1]',
+      'agent: Fixed. See the screenshot.  [image 1 (sent before)]',
     )
   })
 

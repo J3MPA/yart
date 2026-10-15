@@ -273,8 +273,12 @@ claude --mcp-config '{"mcpServers":{"yart-reviewer":{"command":"yart-mcp","args"
 > await_author.
 
 That session waits for the author with `await_author` between rounds. It
-continues when the author moves the review or replies to a comment. A reply alone can
-mean that the author disagrees, and that also needs an answer.
+continues when the author moves the review, or when the author answered each
+open comment of the reviewer. An answer alone can mean that the author
+disagrees, and that also needs an answer. The first reply does not wake the
+reviewer, because the author replies to each comment before it moves the review.
+In each later round, the reviewer reads only the new changes with
+`get_diff` and `since_last_verdict`.
 
 When the review comes to you, a **Review history** panel at the top shows the
 exchange round by round. Each round starts with the verdict of the reviewer and
@@ -966,7 +970,7 @@ server that runs with `--role reviewer` has them. It also has `get_review`,
 | Tool                    | What the reviewer does with it                                 |
 | ----------------------- | -------------------------------------------------------------- |
 | `get_reviewer_settings` | Read the model, effort, instructions and rounds to use         |
-| `get_diff`              | Read the changes, with the base and head line numbers          |
+| `get_diff`              | Read the changes, with line numbers, or only the new changes   |
 | `submit_verdict`        | Give a verdict with its line comments and replies, in one call |
 | `await_author`          | Wait until the author moves the review or answers              |
 
@@ -988,7 +992,14 @@ remote shell, or a second screen.
 **The agent sees your images.** `await_review`, `get_review` and `await_author`
 give the images of the comments after the text. The text gives each comment the
 numbers of its images, for example `[image 1]`. One result gives 10 images at
-most.
+most. Each MCP server sends an image to its agent one time. It also does not send
+an image back to the agent that uploaded it. The text marks such an image as
+`(sent before)`. `get_review` with `include_images` sends all images again.
+
+**A diff has a size limit.** One `get_diff` result has 60,000 characters at
+most, and a line has 400 characters at most. When a result leaves out files, a
+note at the start names them. The reviewer reads them with the `paths`
+parameter.
 
 **The agent can attach images.** `reply_to_thread`, `reply_to_verdict` and
 `submit_verdict` accept `image_paths`, for example a screenshot of a fix. A
@@ -1009,8 +1020,8 @@ edit. A comment next to its code is easier to act on:
 ```
 
 `await_review` returns when its time limit is over, and does not wait forever.
-It gives back all comments until that time. A time limit is not a failure. The
-agent can call the tool again.
+It gives back only the comments that wait for the agent and that it did not get
+yet. A time limit is not a failure. The agent can call the tool again.
 
 ### Register it
 

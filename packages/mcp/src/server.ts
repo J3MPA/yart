@@ -1,8 +1,15 @@
 import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { latestSubmission, reviewerRounds, submissionAuthor, type Settings } from '@yart/core'
+import {
+  latestSubmission,
+  reviewerRounds,
+  submissionAuthor,
+  threadIsAnswered,
+  type Settings,
+} from '@yart/core'
 import { VERSION, type Review } from '@yart/daemon'
 import { DaemonClient, DEFAULT_PORT, type DaemonClientOptions } from './daemon-client.ts'
+import { Delivered } from './delivered.ts'
 import { browserOpeningEnabled, openInBrowser, openReview } from './open-browser.ts'
 import {
   openThreads,
@@ -147,6 +154,13 @@ export interface McpServerOptions extends DaemonClientOptions {
 
 export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
+  const delivered = new Delivered()
+  /** Uploads images, and remembers them. The agent does not need its own images back. */
+  const upload = async (review_id: string, paths: readonly string[] | undefined) => {
+    const ids = await daemon.uploadImages(review_id, paths)
+    delivered.addImages(ids)
+    return ids
+  }
   const role = options.role ?? 'author'
   const server = new McpServer(
     { name: role === 'author' ? 'yart' : 'yart-reviewer', version: VERSION },
@@ -182,8 +196,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     opening_enabled ? null : daemon.reviewUrl(review_id)
 
   /**
-   * The text, then each image that the text numbered. The agent sees the images
-   * of the person, not only the words.
+   * The text, then each image that the text numbered and that the agent does
+   * not have yet. The agent sees the images of the person, not only the words.
    */
   const withImages = async (
     review_id: string,
@@ -191,19 +205,21 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
     images: ImageNumbers,
   ): Promise<ToolResult> => {
     const content: ContentBlock[] = [{ type: 'text', text: body }]
-    for (const [index, attachment] of images.attachments.slice(0, MAX_IMAGES).entries()) {
+    const fresh = images.fresh
+    for (const { number, attachment } of fresh.slice(0, MAX_IMAGES)) {
       const data = await daemon.getAttachment(review_id, attachment.id).catch(() => null)
       if (data === null) continue
+      delivered.images.add(attachment.id)
       content.push(
-        { type: 'text', text: `Image ${index + 1}:` },
+        { type: 'text', text: `Image ${number}:` },
         // eslint-disable-next-line @typescript-eslint/naming-convention -- MCP wire field
         { type: 'image', data, mimeType: attachment.media_type },
       )
     }
-    if (images.attachments.length > MAX_IMAGES) {
+    if (fresh.length > MAX_IMAGES) {
       content.push({
         type: 'text',
-        text: `The result shows ${MAX_IMAGES} of ${images.attachments.length} images.`,
+        text: `The result shows ${MAX_IMAGES} of ${fresh.length} new images.`,
       })
     }
     return { content }
@@ -309,22 +325,31 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           const submitted = await daemon.waitForSubmission(review_id, seconds * 1000)
 
           if (submitted === null) {
+            // Only the comments that wait for the agent, and that it did not get
+            // yet. A long review has many time outs, and the agent already has
+            // the other comments.
             const pending = await daemon.getReview(review_id)
-            const pending_images = new ImageNumbers()
+            const waiting = openThreads(pending).filter(
+              (thread) => !threadIsAnswered(thread) && delivered.hasNewComment(thread),
+            )
+            delivered.addThreads(waiting)
+            const pending_images = new ImageNumbers(delivered.images)
             return withImages(
               review_id,
               [
                 `The person did not submit the review in ${seconds} seconds. Call await_review again to wait more.`,
-                '',
-                renderThreads(openThreads(pending), 'Comments so far', pending_images),
+                waiting.length === 0
+                  ? 'No new comments.'
+                  : `\n${renderThreads(waiting, 'New comments so far', pending_images)}`,
               ].join('\n'),
               pending_images,
             )
           }
 
           const open = openThreads(submitted)
+          delivered.addThreads(open)
           const note = reviewerNote(submitted, await daemon.getSettings())
-          const images = new ImageNumbers()
+          const images = new ImageNumbers(delivered.images)
           const rendered = renderVerdict(submitted, images)
           const verdict = note === null ? rendered : `${rendered}\n\n${note}`
 
@@ -363,12 +388,22 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       description:
         'Read a review and its open comments at once, with no wait. To wait for the ' +
         'verdict of the person, use await_review.',
-      input_schema: { review_id: z.string().describe('The id that start_review gave.') },
+      input_schema: {
+        review_id: z.string().describe('The id that start_review gave.'),
+        include_images: z
+          .boolean()
+          .optional()
+          .describe(
+            'Send all images again, also the images that you already got. Use it only when ' +
+              'you do not have an image any more.',
+          ),
+      },
     }),
-    async ({ review_id }) =>
+    async ({ review_id, include_images }) =>
       guard(async () => {
         const review = await daemon.getReview(review_id)
-        const images = new ImageNumbers()
+        delivered.addThreads(openThreads(review))
+        const images = new ImageNumbers(include_images === true ? new Set() : delivered.images)
         return withImages(
           review_id,
           renderReviewWithThreads(review, shownUrl(review.id), images),
@@ -410,7 +445,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       }),
       async ({ review_id, thread_id, body, image_paths }) =>
         guard(async () => {
-          const attachments = await daemon.uploadImages(review_id, image_paths)
+          const attachments = await upload(review_id, image_paths)
           await daemon.replyToThread(review_id, thread_id, body, attachments)
           return text(`You answered ${thread_id}.`)
         }),
@@ -452,7 +487,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             }
             target = submission.id
           }
-          const attachments = await daemon.uploadImages(review_id, image_paths)
+          const attachments = await upload(review_id, image_paths)
           await daemon.replyToVerdict(review_id, target, body, attachments)
           return text(`You answered the verdict on ${review_id}.`)
         }),
@@ -502,6 +537,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       async ({ review_id, head }) =>
         guard(async () => {
           const review = await daemon.advanceReview(review_id, head)
+          delivered.addThreads(openThreads(review))
           return text(
             [
               renderReviewWithThreads(review, shownUrl(review.id)),
@@ -551,16 +587,53 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
         description:
           'For an AI reviewer of the work of a different agent. Read the changes of a review as ' +
           'a diff. Each line has its base and head line numbers, for your comments. Read it ' +
-          'before each submit_verdict, because the author can move the review.',
-        input_schema: { review_id: z.string().describe('The review to read.') },
+          'before your first verdict. In a later round, read only the new changes with ' +
+          'since_last_verdict.',
+        input_schema: {
+          review_id: z.string().describe('The review to read.'),
+          since_last_verdict: z
+            .boolean()
+            .optional()
+            .describe(
+              'Show only the changes after your last verdict. Use it in each round after the first.',
+            ),
+          paths: z
+            .array(z.string())
+            .optional()
+            .describe('Show only these files. Use it for the files that a long diff left out.'),
+        },
       }),
-      async ({ review_id }) =>
+      async ({ review_id, since_last_verdict, paths }) =>
         guard(async () => {
-          const [review, files] = await Promise.all([
-            daemon.getReview(review_id),
-            daemon.getDiff(review_id),
-          ])
-          return text(renderDiff(files, review))
+          const review = await daemon.getReview(review_id)
+          let since: string | null = null
+          if (since_last_verdict === true) {
+            const last = [...review.submissions]
+              .reverse()
+              .find((submission) => submissionAuthor(submission) === 'reviewer')
+            if (last?.head_sha === review.head_sha) {
+              return text(
+                'The author did not change the code after your last verdict. Read the answers ' +
+                  'with get_review.',
+              )
+            }
+            since = last?.head_sha ?? null
+          }
+          const all = await daemon.getDiff(review_id, since ?? undefined)
+          const files =
+            paths === undefined
+              ? all
+              : all.filter(
+                  (file) =>
+                    paths.includes(file.path) ||
+                    (file.old_path !== null && paths.includes(file.old_path)),
+                )
+          const diff = renderDiff(files, review, { since_sha: since })
+          return text(
+            since_last_verdict === true && since === null
+              ? `You gave no verdict on this review yet. This is the full diff.\n\n${diff}`
+              : diff,
+          )
         }),
     ),
   )
@@ -619,14 +692,14 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
           const review = await daemon.submitAsReviewer(review_id, {
             verdict,
             summary,
-            attachments: await daemon.uploadImages(review_id, image_paths),
+            attachments: await upload(review_id, image_paths),
             comments:
               comments === undefined
                 ? undefined
                 : await Promise.all(
                     comments.map(async ({ image_paths: paths, ...comment }) => ({
                       ...comment,
-                      attachments: await daemon.uploadImages(review_id, paths),
+                      attachments: await upload(review_id, paths),
                     })),
                   ),
             replies:
@@ -635,7 +708,7 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                 : await Promise.all(
                     replies.map(async ({ image_paths: paths, ...reply }) => ({
                       ...reply,
-                      attachments: await daemon.uploadImages(review_id, paths),
+                      attachments: await upload(review_id, paths),
                     })),
                   ),
             reviewer_name,
@@ -650,7 +723,8 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                 : 'Wait for the answer of the author. If you can run a shell command in the ' +
                   'background, run ' +
                   `\`yart await ${review_id} --author${port === DEFAULT_PORT ? '' : ` --port ${port}`}\`` +
-                  ' in the background. Else call await_author. Then read get_diff again.'
+                  ' in the background. Else call await_author. Then read the new changes with get_diff ' +
+                  'and since_last_verdict.'
           return text(
             [renderVerdict(review), '', `Round ${used} of ${ai_review_rounds}.`, next].join('\n'),
           )
@@ -692,19 +766,26 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
             )
           }
           const seconds = timeout_seconds ?? DEFAULT_WAIT_SECONDS
-          const answered = await daemon.waitForAuthor(review_id, seconds * 1000)
+          // A wait after an answer that the reviewer already got waits for a new answer.
+          // Without this, each call after the first answer would return at once.
+          const answered = await daemon.waitForAuthor(review_id, seconds * 1000, {
+            done: (review) => delivered.isNewAnswer(review),
+          })
           if (answered === null) {
             return text(
               `The author did not answer in ${seconds} seconds. Call await_author again to wait more.`,
             )
           }
-          const images = new ImageNumbers()
+          delivered.addAnswer(answered)
+          delivered.addThreads(openThreads(answered))
+          const images = new ImageNumbers(delivered.images)
           return withImages(
             review_id,
             [
               renderReviewWithThreads(answered, shownUrl(answered.id), images),
               '',
-              'The author answered. Do these steps: read the changes with get_diff, and read the ' +
+              'The author answered. Do these steps: read the new changes with get_diff and ' +
+                'since_last_verdict, and read the ' +
                 'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
                 'verdict with submit_verdict.',
             ].join('\n'),

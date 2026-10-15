@@ -70,6 +70,12 @@ export interface ReviewerRound {
   reviewer_name?: string
 }
 
+export interface WaitOptions {
+  poll_ms?: number
+  /** Tells if the wait is over. */
+  done?: (review: Review) => boolean
+}
+
 export class DaemonClient {
   readonly base_url: string
   private readonly port: number
@@ -285,8 +291,10 @@ export class DaemonClient {
     )
   }
 
-  getDiff(review_id: string): Promise<FileDiff[]> {
-    return this.request<FileDiff[]>(`/api/reviews/${encodeURIComponent(review_id)}/diff`)
+  /** The diff of a review. With `since`, the head of an earlier round, only the changes after it. */
+  getDiff(review_id: string, since?: string): Promise<FileDiff[]> {
+    const query = since === undefined ? '' : `?since=${encodeURIComponent(since)}`
+    return this.request<FileDiff[]>(`/api/reviews/${encodeURIComponent(review_id)}/diff${query}`)
   }
 
   getSettings(): Promise<Settings> {
@@ -318,7 +326,8 @@ export class DaemonClient {
   }
 
   /**
-   * Polls until the review has a verdict, or until the time limit is over.
+   * Polls until the author answers the verdict of a reviewer, or until the time
+   * limit is over. `done` can ask for more than an answer.
    *
    * It polls, and does not keep a connection open. The daemon keeps no state
    * about who waits. A lost poll costs one second, not a lost signal.
@@ -326,12 +335,12 @@ export class DaemonClient {
   async waitForAuthor(
     review_id: string,
     timeout_ms: number,
-    poll_ms = 1000,
+    { poll_ms = 1000, done = authorHasAnswered }: WaitOptions = {},
   ): Promise<Review | null> {
     const deadline = Date.now() + timeout_ms
     for (;;) {
       const review = await this.getReview(review_id)
-      if (authorHasAnswered(review)) return review
+      if (done(review)) return review
       if (Date.now() >= deadline) return null
       await delay(Math.min(poll_ms, Math.max(0, deadline - Date.now())))
     }
