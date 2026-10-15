@@ -172,6 +172,18 @@ export interface CommentOptions {
   attachments?: readonly string[]
 }
 
+/**
+ * A thread with one more comment. A comment of the person or of a reviewer in
+ * a resolved thread opens the thread again. The agent reads only open threads.
+ * Without this, the agent would never read the answer to a thread that it
+ * resolved too early.
+ */
+const withComment = (thread: Thread, comment: Comment): Thread => ({
+  ...thread,
+  status: comment.author === 'agent' ? thread.status : 'open',
+  comments: [...thread.comments, comment],
+})
+
 /** A comment. It has the name of a reviewer and images only when there are some. */
 const newComment = (
   body: string,
@@ -372,10 +384,7 @@ export class ReviewService {
     return this.writes.run(id, async () => {
       const resolved = await this.attachments.resolve(id, attachments)
       const comment = newComment(body, author, author_name, resolved)
-      return this.withThread(id, thread_id, (thread) => ({
-        ...thread,
-        comments: [...thread.comments, comment],
-      }))
+      return this.withThread(id, thread_id, (thread) => withComment(thread, comment))
     })
   }
 
@@ -478,7 +487,7 @@ export class ReviewService {
         const thread = threads[index] as Thread
         const attachments = await this.attachments.resolve(id, reply.attachments)
         const comment = newComment(reply.body, author, author_name, attachments)
-        threads[index] = { ...thread, comments: [...thread.comments, comment] }
+        threads[index] = withComment(thread, comment)
       }
 
       const summary_attachments = await this.attachments.resolve(id, attachment_ids)

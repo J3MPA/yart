@@ -1,11 +1,17 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import type { Attachment } from '@yart/core'
 import { Button } from '@/components/button'
 import { AttachButton, AttachmentList, useImageAttachments } from './attachments'
 import attachment_styles from './attachments.module.css'
+import { describeQueryError, type QueryError } from './query-error'
+import { readUnsent, writeUnsent } from './unsent'
 import styles from './review.module.css'
 
-export type CommentAction = (body: string, attachments: Attachment[]) => void
+/**
+ * Sends or holds a comment. A promise that rejects keeps the form open with its
+ * text, and the form shows the error.
+ */
+export type CommentAction = (body: string, attachments: Attachment[]) => void | Promise<void>
 
 export interface CommentFormProps {
   /** The review that keeps the images of the comment. */
@@ -15,7 +21,12 @@ export interface CommentFormProps {
   initial_body?: string
   initial_attachments?: readonly Attachment[]
   pending?: boolean
-  onSubmit: (body: string, attachments: Attachment[]) => void
+  /**
+   * The key of the unsent text of this form, from `unsentKey`. With it, the form
+   * keeps its text when it closes before a send, and takes it back when it opens.
+   */
+  unsent_key?: string
+  onSubmit: (body: string, attachments: Attachment[]) => void | Promise<void>
   /**
    * Holds the comment for the pending review, and does not send it.
    *
@@ -23,7 +34,7 @@ export interface CommentFormProps {
    * GitHub. You draft a review, you do not dictate it. Thus to hold a comment is
    * the usual case, and to send one alone is the exception.
    */
-  onQueue?: (body: string, attachments: Attachment[]) => void
+  onQueue?: (body: string, attachments: Attachment[]) => void | Promise<void>
   queue_label?: string
   onCancel?: () => void
 }
@@ -35,18 +46,39 @@ export const CommentForm = ({
   initial_body = '',
   initial_attachments = [],
   pending = false,
+  unsent_key,
   onSubmit,
   onQueue,
   queue_label = 'Add to review',
   onCancel,
 }: CommentFormProps) => {
-  const [body, setBody] = useState(initial_body)
-  const images = useImageAttachments(review_id, initial_attachments)
-  const can_submit = body.trim() !== '' && !pending && !images.uploading
+  const [unsent] = useState(() => (unsent_key === undefined ? null : readUnsent(unsent_key)))
+  const [body, setBody] = useState(unsent?.body ?? initial_body)
+  const images = useImageAttachments(review_id, unsent?.attachments ?? initial_attachments)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const can_submit = body.trim() !== '' && !pending && !sending && !images.uploading
 
-  const run = (action: CommentAction) => {
+  useEffect(() => {
+    if (unsent_key !== undefined) writeUnsent(unsent_key, { body, attachments: images.attachments })
+  }, [unsent_key, body, images.attachments])
+
+  const run = async (action: CommentAction) => {
     if (!can_submit) return
-    action(body.trim(), images.attachments)
+    setError(null)
+    setSending(true)
+    try {
+      await action(body.trim(), images.attachments)
+    } catch (cause) {
+      setError(
+        `The comment was not sent: ${describeQueryError(cause as QueryError).message} ` +
+          'Your text is still here.',
+      )
+      setSending(false)
+      return
+    }
+    if (unsent_key !== undefined) writeUnsent(unsent_key, null)
+    setSending(false)
     setBody('')
     images.clear()
   }
@@ -58,7 +90,7 @@ export const CommentForm = ({
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault()
-      run(primary)
+      void run(primary)
     }
     if (event.key === 'Escape' && onCancel !== undefined) onCancel()
   }
@@ -81,18 +113,23 @@ export const CommentForm = ({
         onRemove={images.remove}
       />
       {images.error !== null && <p className={attachment_styles.error}>{images.error}</p>}
+      {error !== null && (
+        <p className={attachment_styles.error} role="alert">
+          {error}
+        </p>
+      )}
       <div className={styles.form_actions}>
         {onQueue === undefined ? (
-          <Button tone="primary" disabled={!can_submit} onClick={() => run(onSubmit)}>
-            {pending ? 'Saving…' : submit_label}
+          <Button tone="primary" disabled={!can_submit} onClick={() => void run(onSubmit)}>
+            {pending || sending ? 'Saving…' : submit_label}
           </Button>
         ) : (
           <>
-            <Button tone="primary" disabled={!can_submit} onClick={() => run(onQueue)}>
+            <Button tone="primary" disabled={!can_submit} onClick={() => void run(onQueue)}>
               {queue_label}
             </Button>
-            <Button disabled={!can_submit} onClick={() => run(onSubmit)}>
-              {pending ? 'Saving…' : submit_label}
+            <Button disabled={!can_submit} onClick={() => void run(onSubmit)}>
+              {pending || sending ? 'Saving…' : submit_label}
             </Button>
           </>
         )}

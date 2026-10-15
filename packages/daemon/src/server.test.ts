@@ -232,6 +232,36 @@ describe('threads', () => {
     expect(((await response.json()) as Review).threads[0]?.status).toBe('resolved')
   })
 
+  it('opens a resolved thread again when the person or a reviewer replies', async () => {
+    const { review, thread_id } = await openReviewWithThread()
+    const resolve = () =>
+      patch(`/api/reviews/${review.id}/threads/${thread_id}`, { status: 'resolved' })
+    const reply = async (body: Record<string, unknown>) =>
+      (
+        (await (
+          await post(`/api/reviews/${review.id}/threads/${thread_id}/comments`, body)
+        ).json()) as Review
+      ).threads[0]?.status
+
+    await resolve()
+    expect(await reply({ body: 'done', author: 'agent' })).toBe('resolved')
+    expect(await reply({ body: 'No, it is still wrong.' })).toBe('open')
+    await resolve()
+    expect(await reply({ body: 'still wrong', author: 'reviewer' })).toBe('open')
+  })
+
+  it('opens a resolved thread again for a reply that comes with a verdict', async () => {
+    const { review, thread_id } = await openReviewWithThread()
+    await patch(`/api/reviews/${review.id}/threads/${thread_id}`, { status: 'resolved' })
+    const submitted = (await (
+      await post(`/api/reviews/${review.id}/submit`, {
+        verdict: 'changes_requested',
+        replies: [{ thread_id, body: 'Still wrong too.' }],
+      })
+    ).json()) as Review
+    expect(submitted.threads[0]?.status).toBe('open')
+  })
+
   it('rejects an unknown thread status', async () => {
     const { review, thread_id } = await openReviewWithThread()
     const response = await patch(`/api/reviews/${review.id}/threads/${thread_id}`, {

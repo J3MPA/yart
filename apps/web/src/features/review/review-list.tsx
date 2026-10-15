@@ -10,6 +10,7 @@ import {
   repositoryName,
   type StatusTone,
 } from './format'
+import { describeQueryError, type QueryError } from './query-error'
 import {
   useDeleteReviewMutation,
   useListReviewsQuery,
@@ -137,6 +138,8 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
   const [selection, setSelection] = useState<Selection>(new Set())
   /** The reviews that the delete dialog asks about, or null when it is closed. */
   const [deleting, setDeleting] = useState<readonly Review[] | null>(null)
+  /** Why the last archive or delete failed, or null. */
+  const [action_error, setActionError] = useState<string | null>(null)
   const { data, isLoading: is_loading } = useListReviewsQuery(archived)
   const [setArchived] = useSetReviewArchivedMutation()
   const [deleteReview] = useDeleteReviewMutation()
@@ -154,17 +157,39 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
     if (select_all.current !== null) select_all.current.indeterminate = state === 'some'
   }, [state])
 
-  const archiveAll = (targets: readonly Review[]) => {
-    void Promise.all(
-      targets.map((review) => setArchived({ review_id: review.id, archived: !archived })),
+  /**
+   * Runs an action on each review. The selection stays when an action fails,
+   * thus the person can try again, and a message tells what failed.
+   */
+  const runAll = async (
+    targets: readonly Review[],
+    action: (review: Review) => Promise<unknown>,
+    verb: string,
+  ) => {
+    setActionError(null)
+    const results = await Promise.allSettled(targets.map(action))
+    const failures = results.filter((result) => result.status === 'rejected')
+    if (failures.length === 0) {
+      setSelection(new Set())
+      return
+    }
+    const cause = (failures[0] as PromiseRejectedResult).reason as QueryError
+    setActionError(
+      `${failures.length} of ${targets.length} review${targets.length === 1 ? ' was' : 's were'} ` +
+        `not ${verb}: ${describeQueryError(cause).message}`,
     )
-    setSelection(new Set())
   }
 
+  const archiveAll = (targets: readonly Review[]) =>
+    void runAll(
+      targets,
+      (review) => setArchived({ review_id: review.id, archived: !archived }).unwrap(),
+      archived ? 'restored' : 'archived',
+    )
+
   const deleteAll = (targets: readonly Review[]) => {
-    void Promise.all(targets.map((review) => deleteReview(review.id)))
-    setSelection(new Set())
     setDeleting(null)
+    void runAll(targets, (review) => deleteReview(review.id).unwrap(), 'deleted')
   }
 
   const threads_lost = (deleting ?? []).reduce((total, review) => total + review.threads.length, 0)
@@ -230,6 +255,11 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
               </>
             )}
           </div>
+          {action_error !== null && (
+            <p className={styles.submit_error} role="alert">
+              {action_error}
+            </p>
+          )}
 
           <div className={styles.list}>
             {reviews.map((review) => (
