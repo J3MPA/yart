@@ -3,6 +3,7 @@ import type { Review } from '@yart/core'
 import { Button } from '@/components/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Menu, MenuItem } from '@/components/menu'
+import { ReviewerIcon } from '@/components/reviewer-icon'
 import {
   describeRange,
   describeStatus,
@@ -24,6 +25,7 @@ import {
   type Selection,
 } from './review-selection'
 import { countOpen } from './thread-anchors'
+import { useAiRoundLimit } from './use-ai-round-limit'
 import styles from './review.module.css'
 
 const STATUS_CLASS: Record<StatusTone, string> = {
@@ -32,6 +34,7 @@ const STATUS_CLASS: Record<StatusTone, string> = {
   changes: styles.badge_changes as string,
   working: styles.badge_working as string,
   ready: styles.badge_ready as string,
+  ai: styles.badge_ai as string,
 }
 
 /** The line under the title: where the review is, what it covers, and when it came. */
@@ -50,6 +53,7 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
 
 interface ReviewRowProps {
   review: Review
+  round_limit: number
   unseen: boolean
   archived: boolean
   selected: boolean
@@ -60,6 +64,7 @@ interface ReviewRowProps {
 
 const ReviewRow = ({
   review,
+  round_limit,
   unseen,
   archived,
   selected,
@@ -67,7 +72,7 @@ const ReviewRow = ({
   onArchive,
   onDelete,
 }: ReviewRowProps) => {
-  const status = describeStatus(review)
+  const status = describeStatus(review, round_limit)
   const open = countOpen(review.threads)
 
   return (
@@ -95,6 +100,7 @@ const ReviewRow = ({
         className={[styles.badge, STATUS_CLASS[status.tone]].filter(Boolean).join(' ')}
         title={status.detail ?? undefined}
       >
+        {status.tone === 'ai' && <ReviewerIcon />}
         {status.label}
       </span>
 
@@ -144,6 +150,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
   const [setArchived] = useSetReviewArchivedMutation()
   const [deleteReview] = useDeleteReviewMutation()
   const select_all = useRef<HTMLInputElement>(null)
+  const round_limit = useAiRoundLimit()
 
   const reviews = useMemo(() => data ?? [], [data])
   const ids = useMemo(() => reviews.map((review) => review.id), [reviews])
@@ -266,6 +273,7 @@ export const ReviewList = ({ unseen }: ReviewListProps) => {
               <ReviewRow
                 key={review.id}
                 review={review}
+                round_limit={round_limit}
                 unseen={unseen.has(review.id)}
                 archived={archived}
                 selected={selection.has(review.id)}
