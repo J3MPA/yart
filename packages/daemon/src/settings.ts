@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   DEFAULT_SETTINGS,
@@ -14,6 +14,7 @@ import {
   type Settings,
 } from '@yart/core'
 import { ReviewError } from './review.ts'
+import { KeyedQueue, writeFileAtomic } from './serial.ts'
 
 const APPROVAL_ACTIONS: ReadonlySet<string> = new Set<ApprovalAction>(['keep', 'archive', 'delete'])
 
@@ -70,6 +71,8 @@ export class SettingsStore {
   private readonly path: string | null
   /** The settings when there is no file. Tests use this. */
   private in_memory: Settings = DEFAULT_SETTINGS
+  /** Two quick changes on the Settings page must not remove each other. */
+  private readonly writes = new KeyedQueue()
 
   constructor(state_dir: string | null) {
     this.path = state_dir === null ? null : settingsPath(state_dir)
@@ -86,7 +89,11 @@ export class SettingsStore {
   }
 
   /** Changes the named settings. Refuses each value that is not correct. */
-  async update(changes: Record<string, unknown>): Promise<Settings> {
+  update(changes: Record<string, unknown>): Promise<Settings> {
+    return this.writes.run('settings', () => this.apply(changes))
+  }
+
+  private async apply(changes: Record<string, unknown>): Promise<Settings> {
     const next = { ...(await this.read()) }
     if (changes.on_approve !== undefined) {
       if (!isApprovalAction(changes.on_approve)) {
@@ -153,11 +160,9 @@ export class SettingsStore {
     // Write through a temporary file. Thus a crash during the write cannot leave
     // half of the settings.
     await mkdir(join(this.path, '..'), { recursive: true, mode: 0o700 })
-    const temporary = `${this.path}.${process.pid}.tmp`
     // Only the user can write it. The commit hook runs the reviewer command from
     // this file, and refuses a file that other users can write.
-    await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
-    await rename(temporary, this.path)
+    await writeFileAtomic(this.path, `${JSON.stringify(next, null, 2)}\n`, 0o600)
     return next
   }
 }

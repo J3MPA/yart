@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -178,6 +186,15 @@ describe('remembering repositories across restarts', () => {
     expect(response.status).toBe(200)
     const listed = (await response.json()) as Review[]
     expect(listed.map((review) => review.id)).toEqual([in_a.id])
+  })
+
+  it('records two new repositories that come at the same time', async () => {
+    const app = serverFor({ repo_path: null, state_dir })
+    await Promise.all([open(app, repo_a.path), open(app, repo_b.path)])
+    const recorded = JSON.parse(readFileSync(join(state_dir, 'repositories.json'), 'utf8')) as {
+      repositories: string[]
+    }
+    expect(recorded.repositories).toEqual([real(repo_a.path), real(repo_b.path)].sort())
   })
 
   it('starts empty rather than failing when the file is unreadable', async () => {

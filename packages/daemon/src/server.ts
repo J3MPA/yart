@@ -7,7 +7,6 @@ import { parse as parseCookies } from 'hono/utils/cookie'
 import {
   hasControlCharacters,
   latestSubmission,
-  reviewerRounds,
   submissionAuthor,
   type CommentAuthor,
   type SubmissionAuthor,
@@ -675,19 +674,11 @@ export const createServer = ({
     }
 
     const speaker = parseSpeaker(body, context.get('role'), SUBMITTERS)
-    if (speaker.author === 'reviewer') {
-      // The daemon examines this. It does not leave it to the reviewer, because
-      // the reviewer is one of the two parties that possibly do not want to stop.
-      const { ai_review_rounds } = await settings.read()
-      if (reviewerRounds(await service.get(context.req.param('id'))) >= ai_review_rounds) {
-        throw new ReviewError(
-          `An AI reviewer has passed all ${ai_review_rounds} of its verdicts on this review. ` +
-            'It is the person’s to finish now.',
-          409,
-        )
-      }
-    }
+    // The daemon examines the round limit. It does not leave it to the reviewer,
+    // because the reviewer is one of the two parties that possibly do not want to stop.
+    const { ai_review_rounds } = await settings.read()
     const review = await service.submit(context.req.param('id'), {
+      reviewer_round_limit: ai_review_rounds,
       verdict: body.verdict,
       author: speaker.author as SubmissionAuthor,
       author_name: speaker.author_name,
