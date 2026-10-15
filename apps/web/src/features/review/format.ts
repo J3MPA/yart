@@ -1,5 +1,6 @@
-import { latestSubmission, reviewProgress } from '@yart/core'
+import { describeAuthor, latestSubmission, reviewProgress } from '@yart/core'
 import type { Review, ReviewVerdict } from '@yart/core'
+import { aiPhase, type AiPhase } from './ai-review'
 
 /** Sufficient characters of a hash to identify it, which is all that a list needs. */
 export const shortSha = (sha: string): string => sha.slice(0, 8)
@@ -61,13 +62,46 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   commented: 'commented',
 }
 
-export type StatusTone = 'plain' | 'approved' | 'changes' | 'working' | 'ready'
+export type StatusTone = 'plain' | 'approved' | 'changes' | 'working' | 'ready' | 'ai'
 
 export interface ReviewStatus {
   label: string
   tone: StatusTone
   /** The detail of the label, for a tooltip, or null when the label tells all. */
   detail: string | null
+}
+
+const answeredDetail = (review: Review): string | null => {
+  const progress = reviewProgress(review)
+  if (progress === null) return null
+  const total = progress.answered_threads + progress.awaiting_threads
+  return total === 0 ? null : `${progress.answered_threads} of ${total} comments answered`
+}
+
+const describeAiStatus = (phase: AiPhase, review: Review): ReviewStatus => {
+  if (phase.next === 'person') {
+    return {
+      label: 'your turn',
+      tone: 'ready',
+      detail:
+        phase.verdict === 'approved'
+          ? 'The AI reviewer approved.'
+          : `The AI reviewer used all ${phase.round_limit} rounds.`,
+    }
+  }
+  if (phase.next === 'reviewer') {
+    return {
+      label: `AI review · round ${phase.rounds_used + 1} of ${phase.round_limit}`,
+      tone: 'ai',
+      detail: 'The agent answered. The AI reviewer looks at the review again.',
+    }
+  }
+  const answered = answeredDetail(review)
+  return {
+    label: `AI review · round ${phase.rounds_used} of ${phase.round_limit}`,
+    tone: 'ai',
+    detail: `The agent answers the AI reviewer.${answered === null ? '' : ` ${answered}.`}`,
+  }
 }
 
 /**
@@ -81,8 +115,12 @@ export interface ReviewStatus {
  * The label uses the latest verdict, not the verdict of the current head. The
  * label must change when the agent moves the review, and at that time the
  * current head has no verdict.
+ *
+ * A verdict of an AI reviewer starts the AI phase, which has its own label.
+ * The label says "your turn" only when the AI reviewer approved or has no
+ * rounds left. Before that, the review is not ready for the person.
  */
-export const describeStatus = (review: Review): ReviewStatus => {
+export const describeStatus = (review: Review, round_limit: number): ReviewStatus => {
   const progress = reviewProgress(review)
   const submission = latestSubmission(review)
 
@@ -90,8 +128,10 @@ export const describeStatus = (review: Review): ReviewStatus => {
     return { label: 'open', tone: 'plain', detail: null }
   }
 
-  const total = progress.answered_threads + progress.awaiting_threads
-  const answered = total === 0 ? null : `${progress.answered_threads} of ${total} comments answered`
+  const phase = aiPhase(review, round_limit)
+  if (phase !== null) return describeAiStatus(phase, review)
+
+  const answered = answeredDetail(review)
 
   if (progress.state === 'ready') return { label: 'your turn', tone: 'ready', detail: answered }
   if (progress.state === 'in_progress') {
@@ -105,4 +145,34 @@ export const describeStatus = (review: Review): ReviewStatus => {
         ? 'changes'
         : 'plain'
   return { label: VERDICT_LABEL[submission.verdict], tone, detail: null }
+}
+
+/**
+ * Tells if the review waits on the person.
+ *
+ * A review with no verdict does not count. The agent that starts a review
+ * opens it for the person, thus a signal is not necessary.
+ */
+export const isPersonsTurn = (review: Review, round_limit: number): boolean =>
+  describeStatus(review, round_limit).tone === 'ready'
+
+const AI_VERDICT_TEXT: Record<ReviewVerdict, string> = {
+  approved: 'approved',
+  changes_requested: 'requested changes',
+  commented: 'commented',
+}
+
+/** What an AI verdict means for the person, as one or two sentences. */
+export const describeAiVerdict = (phase: AiPhase): string => {
+  const who = `AI ${describeAuthor('reviewer', phase.author_name)}`
+  if (phase.verdict === 'approved') return `${who} approved. Your review is next.`
+  const did = `${who} ${AI_VERDICT_TEXT[phase.verdict]}`
+  if (phase.next === 'person') {
+    return `${did} in its last round (${phase.rounds_used} of ${phase.round_limit}). Your review is next.`
+  }
+  const then =
+    phase.next === 'reviewer'
+      ? 'The agent answered, and the AI reviewer looks again.'
+      : 'The agent answers, and then the AI reviewer looks again.'
+  return `${did} in round ${phase.rounds_used} of ${phase.round_limit}. ${then}`
 }

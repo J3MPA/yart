@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
-import { agentActivity } from '@yart/core'
+import { agentActivity, DEFAULT_SETTINGS } from '@yart/core'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { useListReviewsQuery } from './review-api'
+import { isPersonsTurn } from './format'
+import { useGetSettingsQuery, useListReviewsQuery } from './review-api'
 import { isUnseen } from './seen-reviews'
 import { deletedReviewsForgotten } from './local-review-slice'
 import { missingForgotten } from './seen-slice'
@@ -20,13 +21,20 @@ export const POLL_MS = 10_000
 export interface Unseen {
   ids: ReadonlySet<string>
   count: number
-  /** The title of each unseen review, for signals outside the page. */
-  titles: ReadonlyMap<string, string>
-  /** Tells if the list came. Before it comes, nothing is unseen, because there are no reviews. */
+  /** The title of each review that waits on the person, for signals outside the page. */
+  waiting: ReadonlyMap<string, string>
+  /**
+   * Tells if the list and the settings came. Before the list comes, nothing is
+   * unseen, because there are no reviews. Before the settings come, the round
+   * limit of the AI reviewer is not known.
+   */
   loaded: boolean
 }
 
-/** The reviews that the agent touched after the person last looked at them. */
+/**
+ * The reviews that the agent touched after the person last looked at them,
+ * and the reviews that wait on the person.
+ */
 export const useUnseenReviews = (): Unseen => {
   const dispatch = useAppDispatch()
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit Query's option name
@@ -34,6 +42,9 @@ export const useUnseenReviews = (): Unseen => {
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Redux Toolkit Query's option name
   const archived = useListReviewsQuery(true, { pollingInterval: POLL_MS })
   const seen = useAppSelector((state) => state.seen)
+  const settings = useGetSettingsQuery()
+  const round_limit = settings.data?.ai_review_rounds ?? DEFAULT_SETTINGS.ai_review_rounds
+  const settings_loaded = !settings.isLoading
 
   const reviews = useMemo(() => data ?? [], [data])
 
@@ -49,8 +60,16 @@ export const useUnseenReviews = (): Unseen => {
   }, [data, archived.data, dispatch])
 
   return useMemo(() => {
-    const unseen = reviews.filter((review) => isUnseen(seen, review.id, agentActivity(review)))
-    const titles = new Map(unseen.map((review) => [review.id, review.title]))
-    return { ids: new Set(titles.keys()), count: titles.size, titles, loaded: data !== undefined }
-  }, [reviews, seen, data])
+    const ids = new Set(
+      reviews
+        .filter((review) => isUnseen(seen, review.id, agentActivity(review)))
+        .map((review) => review.id),
+    )
+    const waiting = new Map(
+      reviews
+        .filter((review) => isPersonsTurn(review, round_limit))
+        .map((review) => [review.id, review.title]),
+    )
+    return { ids, count: ids.size, waiting, loaded: data !== undefined && settings_loaded }
+  }, [reviews, seen, data, round_limit, settings_loaded])
 }

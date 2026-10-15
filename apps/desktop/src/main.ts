@@ -137,7 +137,7 @@ ipcMain.on('notify', (event, value: unknown) => {
   if (!fromYart(event) || notice === null || !Notification.isSupported()) return
   const notification = new Notification({
     title: notice.title,
-    body: 'The agent has answered. Your turn.',
+    body: 'The review waits on you. It is your turn.',
   })
   const release = () => notifications.delete(notification)
   notification.on('click', () => {

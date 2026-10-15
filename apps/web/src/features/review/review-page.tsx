@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import {
-  agentActivity,
-  currentSubmission,
-  describeAuthor,
-  latestSubmission,
-  submissionAuthor,
-} from '@yart/core'
+import { agentActivity, describeAuthor, latestSubmission } from '@yart/core'
 import type { ReviewVerdict } from '@yart/core'
 import { attachmentIds, AttachmentList } from './attachments'
 import { Button } from '@/components/button'
+import { ReviewerIcon } from '@/components/reviewer-icon'
+import { aiPhase, personSubmittedOnHead } from './ai-review'
 import { AuthorLabel } from './author-label'
 import { historyOpens, showsHistory } from './review-history'
 import { ReviewHistoryPanel } from './review-history-panel'
@@ -26,7 +22,13 @@ import { isReviewed, localFor, reviewBlob } from './local-review-state'
 import { reviewSeen } from './seen-slice'
 import { SubmitPanel } from './submit-panel'
 import { useActiveFile } from './use-active-file'
-import { describeRange, relativeTime, repositoryName, VERDICT_LABEL } from './format'
+import {
+  describeAiVerdict,
+  describeRange,
+  relativeTime,
+  repositoryName,
+  VERDICT_LABEL,
+} from './format'
 import {
   useAddSubmissionCommentMutation,
   useGetReviewDiffQuery,
@@ -36,6 +38,7 @@ import {
 import { defaultRange, headSideOnly, roundOf, sinceHead, type DiffRange } from './round-range'
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
+import { useAiRoundLimit } from './use-ai-round-limit'
 import styles from './review.module.css'
 
 const VERDICT_CLASS: Record<ReviewVerdict, string> = {
@@ -66,6 +69,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const [answering, setAnswering] = useState(false)
   const [addSubmissionComment, answer_state] = useAddSubmissionCommentMutation()
   const [summary, setSummary] = useState('')
+  const round_limit = useAiRoundLimit()
 
   const dispatch = useAppDispatch()
   const review = review_query.data
@@ -153,7 +157,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   }
 
   const open_count = countOpen(review.threads)
-  const submitted = currentSubmission(review) !== null
+  const submitted = personSubmittedOnHead(review)
   // The banner shows the latest verdict, also after the agent moved the review.
   // The answer of the agent to it is often the summary of the new round.
   const submission = latestSubmission(review)
@@ -161,6 +165,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
     submission !== null && submission.head_sha !== review.head_sha
       ? review.rounds.indexOf(submission.head_sha) + 1
       : null
+  const phase = aiPhase(review, round_limit)
 
   const held = local.drafts.length
   const diff_error = range === 'since' ? since_query.error : diff_query.error
@@ -223,17 +228,28 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
 
       {submission !== null && (
         <div
-          className={[styles.verdict_banner, VERDICT_CLASS[submission.verdict]]
+          className={[
+            styles.verdict_banner,
+            phase === null ? VERDICT_CLASS[submission.verdict] : styles.verdict_ai,
+          ]
             .filter(Boolean)
             .join(' ')}
         >
-          <div className={styles.verdict_label}>
-            {earlier_round !== null && earlier_round > 0 && `Round ${earlier_round} · `}
-            {VERDICT_LABEL[submission.verdict]}
-            {submissionAuthor(submission) === 'reviewer' &&
-              ` · by ${describeAuthor('reviewer', submission.author_name)}`}{' '}
-            · {relativeTime(submission.created_at)}
-          </div>
+          {phase === null ? (
+            <div className={styles.verdict_label}>
+              {earlier_round !== null && earlier_round > 0 && `Round ${earlier_round} · `}
+              {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
+            </div>
+          ) : (
+            <>
+              <div className={styles.verdict_label}>
+                <ReviewerIcon />
+                AI {describeAuthor('reviewer', phase.author_name)} ·{' '}
+                {relativeTime(submission.created_at)}
+              </div>
+              <div className={styles.verdict_next}>{describeAiVerdict(phase)}</div>
+            </>
+          )}
           {submission.body !== null && <div className={styles.verdict_body}>{submission.body}</div>}
           <AttachmentList review_id={review_id} attachments={submission.attachments} />
 

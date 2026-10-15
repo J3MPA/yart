@@ -58,6 +58,16 @@
   background-color: color-mix(in srgb, var(--yart-color-accent) 14%, transparent);
 }
 
+/* The AI phase: the review is not ready for the person yet. */
+.badge_ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  color: var(--yart-color-accent);
+  border: 1px dashed color-mix(in srgb, var(--yart-color-accent) 45%, transparent);
+  background-color: transparent;
+}
+
 .file {
   margin-top: var(--yart-space-6);
   /* By default, a grid column has `min-width: auto`. Thus a long line with no
@@ -528,6 +538,26 @@
 
 .verdict_commented {
   border-left-color: var(--yart-color-border-strong);
+}
+
+/* An AI verdict is not the verdict of the person. Thus it has no verdict color. */
+.verdict_ai {
+  border-left-color: var(--yart-color-accent);
+  border-left-style: dashed;
+}
+
+.verdict_ai .verdict_label {
+  color: var(--yart-color-accent);
+}
+
+.verdict_ai .verdict_label svg {
+  margin-right: 0.4em;
+}
+
+.verdict_next {
+  margin-top: var(--yart-space-2);
+  font-size: var(--yart-text-sm);
+  font-weight: 500;
 }
 
 .verdict_label {
