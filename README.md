@@ -21,9 +21,12 @@ over MCP.
 
 ## Quick start
 
+yart is in beta. These commands install `v0.1.0-beta.6`. For a different
+release, see [Install a pre-release](#install-a-pre-release).
+
 ```sh
-# Install the app and its two commands. During the beta, see "Install" below.
-curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
+# Install the app and its two commands.
+curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.6/install.sh | sh
 
 # Let Claude Code use yart.
 claude mcp add -s user yart -- ~/.local/bin/yart-mcp
@@ -145,33 +148,33 @@ sequenceDiagram
 yart runs on macOS. It is an app that has the two commands that an agent and a
 terminal need. You do not need Node, npm or `sudo` to install it.
 
-> yart is in beta. Until the first stable release, the command below finds
-> nothing to install. Install the newest
-> [pre-release](https://github.com/J3MPA/yart/releases) from its own URL, as the
-> second example shows.
+> yart is in beta. The command below installs `v0.1.0-beta.6`. For a different
+> release, see [Install a pre-release](#install-a-pre-release).
 
 ### Install
 
 ```sh
-curl -fsSL https://github.com/J3MPA/yart/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.6/install.sh | sh
 ```
 
 This command puts `yart.app` in `~/Applications`. It puts links to `yart` and
 `yart-mcp` in `~/.local/bin`. If that directory is not on your `PATH`, the
 command tells you.
 
-To install a pre-release, such as a beta, use the URL of that release. The
-installer of each release installs that release:
-
-```sh
-curl -fsSL https://github.com/J3MPA/yart/releases/download/v0.1.0-beta.2/install.sh | sh
-```
-
 Use `curl`. Do not download the zip in a browser. A browser marks each download
 as quarantined. macOS then does not open the app, and shows "Apple could not
 verify yart is free of malware". The reason is that the app has a free ad-hoc
 signature, not a paid signature that Apple notarized. `curl` does not mark the
 download.
+
+### Install a pre-release
+
+The installer of each release installs that release. To install a different
+[pre-release](https://github.com/J3MPA/yart/releases), put its tag in the URL:
+
+```sh
+curl -fsSL https://github.com/J3MPA/yart/releases/download/<tag>/install.sh | sh
+```
 
 ### Connect your agent
 
