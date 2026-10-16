@@ -1,4 +1,4 @@
-import { createServer as createHttpServer, type Server } from 'node:http'
+import { createServer as createHttpServer, get, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { ServerType } from '@hono/node-server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -105,15 +105,36 @@ describe('stopDaemon', () => {
   })
 })
 
+/**
+ * Opens a link of the UI as a browser does. A browser sends each name under
+ * `.localhost` to this computer, but the resolver of macOS 15 does not know the
+ * name. Thus the request goes to the address, with the name in `Host`. A fetch
+ * cannot set `Host`.
+ */
+const openUiLink = (link: string) => {
+  const url = new URL(link)
+  return new Promise<IncomingMessage>((resolve, reject) => {
+    get(
+      `http://${LOOPBACK}:${url.port}${url.pathname}${url.search}`,
+      { headers: { host: url.host } },
+      (response) => {
+        response.resume()
+        resolve(response)
+      },
+    ).on('error', reject)
+  })
+}
+
 describe('signInUrl', () => {
   it('gives a link that works one time', async () => {
     const daemon = await listen()
     const url = await signInUrl(daemon.port, daemon.state_dir, '/reviews/x')
-    const first = await fetch(url, { redirect: 'manual' })
-    expect(first.status).toBe(303)
-    expect(first.headers.get('location')).toBe('/reviews/x')
-    expect(first.headers.get('set-cookie')).toContain('HttpOnly')
-    expect((await fetch(url, { redirect: 'manual' })).status).toBe(403)
+    expect(new URL(url).hostname).toBe(`yart-${daemon.port}.localhost`)
+    const first = await openUiLink(url)
+    expect(first.statusCode).toBe(303)
+    expect(first.headers.location).toBe('/reviews/x')
+    expect(first.headers['set-cookie']?.join(';')).toContain('HttpOnly')
+    expect((await openUiLink(url)).statusCode).toBe(403)
     await daemon.close()
   })
 
