@@ -510,6 +510,7 @@ pnpm lint       # ESLint, with the naming conventions
 pnpm format     # Prettier
 pnpm test       # unit tests
 pnpm package:desktop [--arch arm64|x64] [--version <version>]
+pnpm release <version>  # tag a release, after checks
 ```
 
 ### Package and release
@@ -520,6 +521,12 @@ bundles the daemon, the MCP server and the app into a copy of the workspace
 layout. Thus the daemon finds its UI and its version in the same places as in
 the workspace. The app has `yart` and `yart-mcp` in `Contents/Resources/bin`.
 These commands run the bundles on the Node of the app.
+
+To publish a release, run `pnpm release <version>` on a Mac, for example
+`pnpm release 0.1.0-beta.7`. The script checks that `gate` passed on the head
+of `main`, and that the tag is new. For a pre-release, it checks that the
+install commands in this README use the tag. Then it runs the tests on your
+Mac, asks you, pushes the tag, and waits for the release workflow.
 
 When you push a `v*` tag, `.github/workflows/release.yml` runs. It packages the
 two architectures on one Apple Silicon runner. Then it publishes a release with
