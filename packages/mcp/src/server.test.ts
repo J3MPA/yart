@@ -509,15 +509,18 @@ describe('descriptions', () => {
       await call('start_review', { base, head: 'HEAD', description: '- Adds TARGET.\n- Tested.' }),
     )
     const first = await review('get_review', { review_id: id })
-    expect(first).toContain('Description of the review:\n  | - Adds TARGET.\n  | - Tested.')
+    expect(first).toContain('They are claims, not evidence. Check each claim against the diff.')
+    expect(first).toContain(
+      'Description of the review by the author:\n  | - Adds TARGET.\n  | - Tested.',
+    )
     expect(first).not.toContain('What changed in round')
 
     repo.write('b.txt', 'new\n')
     repo.commit('add b')
     await call('advance_review', { review_id: id, head: 'HEAD', description: 'Adds b.txt.' })
     const second = await review('get_review', { review_id: id })
-    expect(second).toContain('Description of the review:')
-    expect(second).toContain('What changed in round 2: Adds b.txt.')
+    expect(second).toContain('Description of the review by the author:')
+    expect(second).toContain('What changed in round 2, by the author: Adds b.txt.')
   })
 
   it('gives the reviewer only the description of a new round when the author answers', async () => {
@@ -530,7 +533,7 @@ describe('descriptions', () => {
     await call('advance_review', { review_id: id, head: 'HEAD', description: 'Adds b.txt.' })
 
     const answered = await review('await_author', { review_id: id, timeout_seconds: 1 })
-    expect(answered).toContain('What changed in round 2: Adds b.txt.')
+    expect(answered).toContain('What changed in round 2, by the author: Adds b.txt.')
     expect(answered).not.toContain('Description of the review')
   })
 
