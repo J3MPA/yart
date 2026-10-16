@@ -1,4 +1,4 @@
-import { submissionAuthor, type Review } from '@yart/core'
+import { submissionAuthor, type FileDiff, type Review, type Thread } from '@yart/core'
 
 /** What the diff of the review page shows. */
 export type DiffRange = 'all' | 'since'
@@ -47,3 +47,29 @@ export const defaultRange = (review: Review): DiffRange => {
  */
 export const headSideOnly = <Value>(by_anchor: ReadonlyMap<string, Value>): Map<string, Value> =>
   new Map([...by_anchor].filter(([key]) => !key.startsWith('base\u0000')))
+
+/**
+ * The open threads that have no row in the "since" view. That view shows only
+ * the hunks of the new work. A thread on a line that the agent did not change is
+ * not in those hunks, but it is often the thread that needs attention. A thread
+ * on the base side, or on a line in a collapsed run, is also outside the view.
+ * An outdated thread shows in the header of its file, thus it is outside the
+ * view only when its file is not there.
+ */
+export const openThreadsOutside = (
+  threads: readonly Thread[],
+  files: readonly FileDiff[],
+): Thread[] => {
+  const rows = new Map(
+    files.map((file) => [
+      file.path,
+      new Set(file.hunks.flatMap((hunk) => hunk.lines.map((line) => line.head_line))),
+    ]),
+  )
+  return threads.filter((thread) => {
+    if (thread.status !== 'open') return false
+    if (thread.anchor === null) return !rows.has(thread.origin.path)
+    if (thread.anchor.side !== 'head') return true
+    return rows.get(thread.anchor.path)?.has(thread.anchor.line) !== true
+  })
+}

@@ -351,6 +351,30 @@
   border-radius: var(--yart-radius-sm);
 }
 
+/* The open threads that the "since" view has no row for. */
+.outside {
+  margin-top: var(--yart-space-4);
+  padding: var(--yart-space-3);
+  background-color: var(--yart-color-surface);
+  border: 1px solid var(--yart-color-border);
+  border-left: 3px solid var(--yart-color-accent);
+  border-radius: var(--yart-radius-md);
+}
+
+.outside_header {
+  display: flex;
+  align-items: center;
+  gap: var(--yart-space-2);
+  margin-bottom: var(--yart-space-2);
+}
+
+.outside_label {
+  font-size: var(--yart-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--yart-color-accent);
+}
+
 .notice {
   padding: var(--yart-space-4);
   color: var(--yart-color-text-muted);
