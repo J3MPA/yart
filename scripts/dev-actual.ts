@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { setTimeout as delay } from 'node:timers/promises'
-import { daemonUrl } from '../packages/daemon/src/auth.ts'
+import { daemonUrl, uiUrl } from '../packages/daemon/src/auth.ts'
 import { authHeaders, foreignMessage, probeDaemon } from '../packages/daemon/src/probe.ts'
 
 const execFileAsync = promisify(execFile)
@@ -218,11 +218,12 @@ const main = async (): Promise<void> => {
   })
   await waitForPort(`http://localhost:${VITE_PORT}/`, 'vite')
 
-  const review_url = `http://localhost:${VITE_PORT}/reviews/${review.id}`
+  // The name of the UI, not `localhost`. The cookie of the person belongs to it.
+  const review_url = `${uiUrl(VITE_PORT)}/reviews/${review.id}`
   // The browser needs the cookie of the person. The desktop shell signs in by itself.
   const { code } = await api<{ code: string }>('/api/sign-in-codes', { method: 'POST', body: '{}' })
   const sign_in_url =
-    `http://localhost:${VITE_PORT}/sign-in?code=${code}` +
+    `${uiUrl(VITE_PORT)}/sign-in?code=${code}` +
     `&next=${encodeURIComponent(`/reviews/${review.id}`)}`
   const changed = await git('diff', '--name-only', `${base_sha}..${head_sha}`)
   const file_count = changed === '' ? 0 : changed.split('\n').length

@@ -28,9 +28,9 @@ export const readConfig = (env: NodeJS.ProcessEnv): ShellConfig => {
   if (!Number.isInteger(daemon_port) || daemon_port < 1 || daemon_port > 65535) {
     throw new Error(`Invalid YART_DAEMON_PORT: ${env.YART_DAEMON_PORT}`)
   }
-  // The address of the daemon, not `localhost`. A different process could listen
-  // on `::1`, and `localhost` can go there first.
-  const start_url = env.YART_START_URL ?? `http://127.0.0.1:${daemon_port}/`
+  // The name of the web UI, as `uiUrl` of the daemon gives it. The cookie of the
+  // person belongs to this name only, not to each web server on `127.0.0.1`.
+  const start_url = env.YART_START_URL ?? `http://yart-${daemon_port}.localhost:${daemon_port}/`
   return {
     daemon_port,
     start_url,

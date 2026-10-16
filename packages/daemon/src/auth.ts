@@ -15,7 +15,29 @@ import { join } from 'node:path'
 /** The one address of the daemon. A name such as `localhost` can go to `::1` first. */
 export const LOOPBACK = '127.0.0.1'
 
+/**
+ * The IPv6 loopback address. The daemon also listens there, because a browser
+ * can try it first for a name under `.localhost`.
+ */
+export const IPV6_LOOPBACK = '::1'
+
 export const daemonUrl = (port: number): string => `http://${LOOPBACK}:${port}`
+
+/**
+ * The name of the web UI of the daemon on a port.
+ *
+ * A cookie belongs to a host name, not to a port. On `127.0.0.1`, the browser
+ * would send the cookie of the person to each web server on this computer.
+ * Browsers send each name under `.localhost` to this computer. Thus the UI gets
+ * a name of its own, and its cookie goes only to that name.
+ */
+export const uiHost = (port: number): string => `yart-${port}.localhost`
+
+/** The origin of the web UI. A browser opens this, not `daemonUrl`. */
+export const uiUrl = (port: number): string => `http://${uiHost(port)}:${port}`
+
+/** Tells if a host name, without the port, is a name of the web UI. */
+export const isUiHost = (name: string): boolean => /^yart-\d{1,5}\.localhost$/.test(name)
 
 export const makeToken = (): string => randomBytes(32).toString('base64url')
 

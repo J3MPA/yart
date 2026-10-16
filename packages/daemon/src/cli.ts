@@ -5,10 +5,11 @@ import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import type { Server } from 'node:http'
 import { authorHasAnswered, latestSubmission, submissionAuthor } from '@yart/core'
-import { daemonUrl, LOOPBACK, makeToken, writeToken } from './auth.ts'
+import { daemonUrl, LOOPBACK, makeToken, uiUrl, writeToken } from './auth.ts'
 import { daemonHealth, signInUrl, startDaemon, stopDaemon, waitForReview } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
 import { installHook, preCommit, uninstallHook } from './hook.ts'
+import { listenOnIpv6 } from './listen.ts'
 import { installReviewerAgent, uninstallReviewerAgent } from './reviewer-agent.ts'
 import { defaultStateDir } from './repositories.ts'
 import { foreignMessage } from './probe.ts'
@@ -405,14 +406,16 @@ export const main = async (argv: readonly string[]): Promise<void> => {
   const repo_path = await defaultRepo(values.repo)
   const state_dir = defaultStateDir()
   const token = makeToken()
-  // The server exists only after createServer. Thus the shutdown reads it from a holder.
-  const holder: { server: Server | null } = { server: null }
+  // The servers exist only after createServer. Thus the shutdown reads them from a holder.
+  const holder: { server: Server | null; ipv6: Server | null } = { server: null, ipv6: null }
   const app = createServer({
     // A new token at each start. A token that leaked before does not work after a restart.
     auth: { token, ui_token: makeToken(), cookie_name: `yart_${port}` },
     repo_path,
     state_dir,
     shutdown: () => {
+      holder.ipv6?.close()
+      holder.ipv6?.closeAllConnections()
       holder.server?.close(() => process.exit(0))
       holder.server?.closeAllConnections()
     },
@@ -424,15 +427,23 @@ export const main = async (argv: readonly string[]): Promise<void> => {
   holder.server = serve({ fetch: app.fetch, port, hostname: LOOPBACK }, (info) => {
     // Only after the listen. A daemon that cannot get the port must not replace
     // the token of the daemon that has it.
-    void writeToken(state_dir, info.port, token).then(
-      () => {
+    const fail = (message: string) => {
+      process.stderr.write(`yart: ${message}\n`)
+      process.exit(1)
+    }
+    void listenOnIpv6(app.fetch, info.port).then(
+      async (ipv6) => {
+        holder.ipv6 = ipv6
+        await writeToken(state_dir, info.port, token).catch((cause: unknown) =>
+          fail(`cannot write the token: ${String(cause)}`),
+        )
         process.stdout.write(`yart serving reviews, remembering repositories in ${state_dir}\n`)
-        process.stdout.write(`listening on ${daemonUrl(info.port)}. Run yart open to sign in.\n`)
+        process.stdout.write(
+          `listening on ${daemonUrl(info.port)}, with the UI on ${uiUrl(info.port)}. ` +
+            'Run yart open to sign in.\n',
+        )
       },
-      (cause: unknown) => {
-        process.stderr.write(`yart: cannot write the token: ${String(cause)}\n`)
-        process.exit(1)
-      },
+      (cause: Error) => fail(cause.message),
     )
   }) as Server
 }

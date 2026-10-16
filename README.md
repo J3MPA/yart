@@ -432,7 +432,7 @@ repository when you run `yart` in it. You do not need paths or flags:
 
 ```sh
 cd ~/some-other-project
-yart            # http://127.0.0.1:7777
+yart            # http://yart-7777.localhost:7777
 ```
 
 The commands do not need a build step. Their entry points are TypeScript files
@@ -493,7 +493,9 @@ of an installed yart. When you quit the shell, the session stops. A change to
 the main process of the shell needs a restart.
 
 For work on the UI without a review, `pnpm dev` runs only Vite on port 5173. It
-sends `/api` to the daemon on port 7777.
+sends `/api` to the daemon on port 7777. Open the UI on
+`http://yart-5173.localhost:5173`, not on `localhost`, because the cookie of the
+sign-in belongs to the name in the address bar.
 
 Other scripts:
 
@@ -682,6 +684,16 @@ can write or give a verdict as the person, change the settings, or archive or
 delete a review. The desktop app signs in by itself. In a browser, run
 `yart open`.
 
+**The UI has its own host name.** A cookie belongs to a host name, not to a
+port. On `127.0.0.1`, the browser would send the cookie to each web server on
+this computer, on each port. Thus the UI of the daemon on port 7777 is on
+`http://yart-7777.localhost:7777`. Browsers send each name under `.localhost` to
+this computer. The cookie has no `Domain`, thus it goes only to that name. The
+daemon sends a page that a browser asks for on a different name, such as
+`127.0.0.1`, to the name of the UI. The browser can try `::1` first for that
+name. Thus the daemon also listens on `[::1]`, on the same port. It does not
+start when a different process listens there.
+
 **Clients make sure that they talk to the daemon.** Each client connects to
 `127.0.0.1`, never to `localhost`, because `localhost` can go to `::1` first,
 and a different process could listen there. Before a client sends the token,
@@ -699,8 +711,8 @@ the answer, but the daemon would do the action, in any repository that the page
 names. The daemon requires `application/json` on each POST and PATCH. Thus the
 browser must ask for permission first, and the daemon never gives it.
 
-**Only this computer can connect to it.** The daemon listens on `127.0.0.1`,
-not on all interfaces. Thus nothing else on the network can connect to it. This
+**Only this computer can connect to it.** The daemon listens on `127.0.0.1` and
+`[::1]`, not on all interfaces. Thus nothing else on the network can connect to it. This
 is important, because the daemon can read all files in all repositories that it
 served.
 
@@ -708,7 +720,9 @@ served.
 domain name point to `127.0.0.1`. Then the browser lets the page read the
 answers of the daemon, because the origin is the same. But the browser still
 sends the name of the page in the `Host` header. The daemon answers only
-`localhost`, `127.0.0.1` and `[::1]`, and refuses all other names with 403.
+`localhost`, `127.0.0.1`, `[::1]` and the names of the UI, such as
+`yart-7777.localhost`. It refuses all other names with 403. A web page cannot
+point a name under `.localhost` to a different computer.
 A request with no `Host` header passes, because only a browser can do this
 attack, and a browser always sends the header.
 
