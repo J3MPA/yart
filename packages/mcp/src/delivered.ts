@@ -1,4 +1,4 @@
-import { authorHasAnswered, latestSubmission, type Thread } from '@yart/core'
+import { authorIsDone, latestSubmission, type Thread } from '@yart/core'
 import type { Review } from '@yart/daemon'
 
 /** The head and the comments of the agent after the last verdict. A new answer changes it. */
@@ -29,6 +29,9 @@ export class Delivered {
   /** For each review, the state of the last answer of the author that the reviewer got. */
   private readonly answers = new Map<string, string>()
 
+  /** @param author_quiet_ms How long the author must be quiet before replies wake the reviewer. */
+  constructor(private readonly author_quiet_ms?: number) {}
+
   addImages(ids: readonly string[] | undefined): void {
     for (const id of ids ?? []) this.images.add(id)
   }
@@ -50,7 +53,10 @@ export class Delivered {
    * the first answer would return at once, with the same answer.
    */
   isNewAnswer(review: Review): boolean {
-    return authorHasAnswered(review) && this.answers.get(review.id) !== answerState(review)
+    return (
+      authorIsDone(review, this.author_quiet_ms) &&
+      this.answers.get(review.id) !== answerState(review)
+    )
   }
 
   addAnswer(review: Review): void {

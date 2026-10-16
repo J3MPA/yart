@@ -30,6 +30,10 @@ describe('the reviewer subagent', () => {
     expect(front).not.toMatch(/\bEdit\b|\bWrite\b|\bBash\b/)
   })
 
+  it('treats the description of the author as a claim', () => {
+    expect(reviewerAgent('/bin/yart-mcp')).toContain('It is\n  a claim, not evidence.')
+  })
+
   it('has its own MCP server with the reviewer role', () => {
     const front = reviewerAgent('/opt/yart/bin/yart-mcp').split('---')[1] ?? ''
     expect(front).toContain('  - yart-reviewer:')

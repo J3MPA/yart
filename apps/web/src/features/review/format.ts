@@ -1,5 +1,5 @@
 import { describeAuthor, latestSubmission, reviewProgress } from '@yart/core'
-import type { Review, ReviewVerdict } from '@yart/core'
+import type { Review, ReviewSubmission, ReviewVerdict } from '@yart/core'
 import { aiPhase, type AiPhase } from './ai-review'
 
 /** Sufficient characters of a hash to identify it, which is all that a list needs. */
@@ -60,6 +60,26 @@ export const VERDICT_LABEL: Record<ReviewVerdict, string> = {
   approved: 'approved',
   changes_requested: 'changes requested',
   commented: 'commented',
+}
+
+/**
+ * The round of a verdict that the agent moved the review after, or null for a
+ * verdict on the current head. The round is 0 when the head of the verdict is
+ * not a round of the review.
+ */
+export const earlierRound = (review: Review, submission: ReviewSubmission): number | null =>
+  submission.head_sha === review.head_sha ? null : review.rounds.indexOf(submission.head_sha) + 1
+
+/**
+ * The label of the banner for a verdict of the person. A verdict on an earlier
+ * round does not describe the code on the screen. Thus the label names that
+ * round, and does not show the verdict alone.
+ */
+export const personVerdictLabel = (review: Review, submission: ReviewSubmission): string => {
+  const verdict = VERDICT_LABEL[submission.verdict]
+  const round = earlierRound(review, submission)
+  if (round === null) return verdict
+  return `Your verdict on ${round > 0 ? `round ${round}` : 'an earlier round'} · ${verdict}`
 }
 
 export type StatusTone = 'plain' | 'approved' | 'changes' | 'working' | 'ready' | 'ai'

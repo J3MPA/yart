@@ -26,9 +26,10 @@ import { useActiveFile } from './use-active-file'
 import {
   describeAiVerdict,
   describeRange,
+  earlierRound,
+  personVerdictLabel,
   relativeTime,
   repositoryName,
-  VERDICT_LABEL,
 } from './format'
 import {
   useAddSubmissionCommentMutation,
@@ -36,7 +37,15 @@ import {
   useGetReviewDiffSinceQuery,
   useGetReviewQuery,
 } from './review-api'
-import { defaultRange, headSideOnly, roundOf, sinceHead, type DiffRange } from './round-range'
+import {
+  defaultRange,
+  headSideOnly,
+  openThreadsOutside,
+  roundOf,
+  sinceHead,
+  type DiffRange,
+} from './round-range'
+import { OutsideView } from './outside-view'
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import { useAiRoundLimit } from './use-ai-round-limit'
@@ -163,10 +172,9 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   // The banner shows the latest verdict, also after the agent moved the review.
   // The answer of the agent to it is often the summary of the new round.
   const submission = latestSubmission(review)
-  const earlier_round =
-    submission !== null && submission.head_sha !== review.head_sha
-      ? review.rounds.indexOf(submission.head_sha) + 1
-      : null
+  // A verdict on an earlier round keeps no verdict color. A green approval
+  // would else show on a round that nobody reviewed.
+  const earlier = submission !== null && earlierRound(review, submission) !== null
   const phase = aiPhase(review, round_limit)
 
   const held = local.drafts.length
@@ -176,6 +184,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const shown_threads = range === 'since' ? headSideOnly(threads_by_anchor) : threads_by_anchor
   const shown_drafting: Drafting =
     range === 'since' ? { ...drafting, by_anchor: headSideOnly(drafting.by_anchor) } : drafting
+  const outside = range === 'since' ? openThreadsOutside(review.threads, shown) : []
   const tab = (value: DiffRange) =>
     [styles.tab, range === value ? styles.tab_selected : ''].filter(Boolean).join(' ')
 
@@ -234,16 +243,26 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         <div
           className={[
             styles.verdict_banner,
-            phase === null ? VERDICT_CLASS[submission.verdict] : styles.verdict_ai,
+            phase !== null
+              ? styles.verdict_ai
+              : earlier
+                ? styles.verdict_earlier
+                : VERDICT_CLASS[submission.verdict],
           ]
             .filter(Boolean)
             .join(' ')}
         >
           {phase === null ? (
-            <div className={styles.verdict_label}>
-              {earlier_round !== null && earlier_round > 0 && `Round ${earlier_round} · `}
-              {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
-            </div>
+            <>
+              <div className={styles.verdict_label}>
+                {personVerdictLabel(review, submission)} · {relativeTime(submission.created_at)}
+              </div>
+              {earlier && (
+                <div className={styles.verdict_next}>
+                  Round {review.rounds.length} has no verdict yet.
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div className={styles.verdict_label}>
@@ -309,6 +328,15 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           summary={summary}
           onSummaryChange={setSummary}
           onDone={() => setSubmitting(false)}
+        />
+      )}
+
+      {outside.length > 0 && (
+        <OutsideView
+          review_id={review_id}
+          threads={outside}
+          drafting={drafting}
+          onShowAll={() => setRangeChoice('all')}
         />
       )}
 

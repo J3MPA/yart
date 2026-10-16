@@ -42,7 +42,9 @@ export {
   type HunkRange,
 } from './hunks.ts'
 export {
+  AUTHOR_QUIET_MS,
   authorHasAnswered,
+  authorIsDone,
   currentSubmission,
   latestSubmission,
   reviewProgress,
