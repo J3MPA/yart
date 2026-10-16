@@ -978,7 +978,8 @@ page shows it under the header. In round 2 and later, the page shows the
 description of the current round as "What changed in this round". The
 description of the review stays available below it. An AI reviewer gets the
 descriptions from `get_review`, and the description of a new round from
-`await_author`. The agent under review does not get its own text back.
+`await_author`. The reviewer gets them as claims of the author, which it must
+check against the diff. The agent under review does not get its own text back.
 
 An AI reviewer has its own tools, to review work that it did not write. Only a
 server that runs with `--role reviewer` has them. It also has `get_review`,

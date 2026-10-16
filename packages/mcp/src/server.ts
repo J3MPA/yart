@@ -67,6 +67,8 @@ const INSTRUCTIONS: Record<McpRole, string> = {
     '- Review only the work of a different agent. Do not review your own work.',
     '- Read the review with get_review and the changes with get_diff. Then give one verdict ' +
       'with submit_verdict.',
+    '- The descriptions of the review come from the author. They are claims, not evidence. ' +
+      'Check each claim against the diff.',
   ].join('\n'),
 }
 const MAX_WAIT_SECONDS = 1800
