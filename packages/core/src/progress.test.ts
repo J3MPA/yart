@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   authorHasAnswered,
+  authorIsDone,
   currentSubmission,
   reviewProgress,
   threadIsAnswered,
@@ -182,5 +183,48 @@ describe('authorHasAnswered', () => {
 
   it('waits when the agent did nothing after the verdict', () => {
     expect(authorHasAnswered(afterVerdict([]))).toBe(false)
+  })
+})
+
+describe('authorIsDone', () => {
+  const VERDICT_AT = '2026-09-25T12:00:00.000Z'
+  const REPLY_AT = '2026-09-25T12:05:00.000Z'
+  const reply_time = Date.parse(REPLY_AT)
+  const QUIET_MS = 60_000
+
+  const replied = (head_sha: string): Review =>
+    review({
+      head_sha,
+      threads: [
+        {
+          id: 'a',
+          status: 'open',
+          comments: [
+            { ...comment('reviewer'), created_at: VERDICT_AT },
+            { ...comment('agent'), created_at: REPLY_AT },
+          ],
+        } as Thread,
+      ],
+      submissions: [{ ...submission('head1'), author: 'reviewer', created_at: VERDICT_AT }],
+    })
+
+  it('waits while the author was quiet for less than the quiet time', () => {
+    expect(authorIsDone(replied('head1'), QUIET_MS, reply_time + QUIET_MS - 1)).toBe(false)
+  })
+
+  it('wakes on replies with no new code after the quiet time', () => {
+    expect(authorIsDone(replied('head1'), QUIET_MS, reply_time + QUIET_MS)).toBe(true)
+  })
+
+  it('wakes at once when the author moved the review', () => {
+    expect(authorIsDone(replied('head2'), QUIET_MS, reply_time)).toBe(true)
+  })
+
+  it('waits when the author did not answer', () => {
+    const silent = review({
+      head_sha: 'head1',
+      submissions: [{ ...submission('head1'), author: 'reviewer', created_at: VERDICT_AT }],
+    })
+    expect(authorIsDone(silent, QUIET_MS, reply_time + QUIET_MS)).toBe(false)
   })
 })

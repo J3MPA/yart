@@ -273,12 +273,13 @@ claude --mcp-config '{"mcpServers":{"yart-reviewer":{"command":"yart-mcp","args"
 > await_author.
 
 That session waits for the author with `await_author` between rounds. It
-continues when the author moves the review, or when the author answered each
-open comment of the reviewer. An answer alone can mean that the author
-disagrees, and that also needs an answer. The first reply does not wake the
-reviewer, because the author replies to each comment before it moves the review.
-In each later round, the reviewer reads only the new changes with
-`get_diff` and `since_last_verdict`.
+continues at once when the author moves the review. It also continues when the
+author answered each open comment of the reviewer, and then wrote nothing for one
+minute. An answer alone can mean that the author disagrees, and that also needs
+an answer. The author replies to each comment before it moves the review. Thus
+the replies alone wake the reviewer only after that minute. When the code did not
+change, the result tells the reviewer so. In each later round, the reviewer reads
+only the new changes with `get_diff` and `since_last_verdict`.
 
 When the review comes to you, a **Review history** panel at the top shows the
 exchange round by round. Each round starts with the verdict of the reviewer and
