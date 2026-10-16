@@ -4,7 +4,9 @@ import { aiPhase } from './ai-review'
 import {
   describeAiVerdict,
   describeStatus,
+  earlierRound,
   isPersonsTurn,
+  personVerdictLabel,
   relativeTime,
   repositoryName,
   shortSha,
@@ -265,5 +267,27 @@ describe('repositoryName', () => {
 
   it('ignores a trailing slash', () => {
     expect(repositoryName('/Users/someone/projects/yart/')).toBe('yart')
+  })
+})
+
+describe('personVerdictLabel', () => {
+  const rounds = review({ rounds: ['head1', 'head2'], head_sha: 'head2' })
+
+  it('shows the verdict alone on the current head', () => {
+    const on_head = verdict('approved', 'head2')
+    expect(earlierRound(rounds, on_head)).toBeNull()
+    expect(personVerdictLabel(rounds, on_head)).toBe('approved')
+  })
+
+  it('names the round of a verdict on an earlier round', () => {
+    const before = verdict('approved', 'head1')
+    expect(earlierRound(rounds, before)).toBe(1)
+    expect(personVerdictLabel(rounds, before)).toBe('Your verdict on round 1 · approved')
+  })
+
+  it('names no number when the head of the verdict is not a round', () => {
+    expect(personVerdictLabel(rounds, verdict('changes_requested', 'gone'))).toBe(
+      'Your verdict on an earlier round · changes requested',
+    )
   })
 })

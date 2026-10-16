@@ -26,9 +26,10 @@ import { useActiveFile } from './use-active-file'
 import {
   describeAiVerdict,
   describeRange,
+  earlierRound,
+  personVerdictLabel,
   relativeTime,
   repositoryName,
-  VERDICT_LABEL,
 } from './format'
 import {
   useAddSubmissionCommentMutation,
@@ -171,10 +172,9 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   // The banner shows the latest verdict, also after the agent moved the review.
   // The answer of the agent to it is often the summary of the new round.
   const submission = latestSubmission(review)
-  const earlier_round =
-    submission !== null && submission.head_sha !== review.head_sha
-      ? review.rounds.indexOf(submission.head_sha) + 1
-      : null
+  // A verdict on an earlier round keeps no verdict color. A green approval
+  // would else show on a round that nobody reviewed.
+  const earlier = submission !== null && earlierRound(review, submission) !== null
   const phase = aiPhase(review, round_limit)
 
   const held = local.drafts.length
@@ -243,16 +243,26 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
         <div
           className={[
             styles.verdict_banner,
-            phase === null ? VERDICT_CLASS[submission.verdict] : styles.verdict_ai,
+            phase !== null
+              ? styles.verdict_ai
+              : earlier
+                ? styles.verdict_earlier
+                : VERDICT_CLASS[submission.verdict],
           ]
             .filter(Boolean)
             .join(' ')}
         >
           {phase === null ? (
-            <div className={styles.verdict_label}>
-              {earlier_round !== null && earlier_round > 0 && `Round ${earlier_round} · `}
-              {VERDICT_LABEL[submission.verdict]} · {relativeTime(submission.created_at)}
-            </div>
+            <>
+              <div className={styles.verdict_label}>
+                {personVerdictLabel(review, submission)} · {relativeTime(submission.created_at)}
+              </div>
+              {earlier && (
+                <div className={styles.verdict_next}>
+                  Round {review.rounds.length} has no verdict yet.
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div className={styles.verdict_label}>
