@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { Review } from '@yart/core'
-import { daemonUrl } from './auth.ts'
+import { daemonUrl, uiUrl } from './auth.ts'
 import { authHeaders, foreignMessage, probeDaemon, type Probe } from './probe.ts'
 
 export type { DaemonHealth } from './probe.ts'
@@ -34,7 +34,7 @@ export const signInUrl = async (port: number, state_dir: string, path = '/'): Pr
   })
   if (!response.ok) throw new Error(`The daemon refused a sign-in link (${response.status}).`)
   const { code } = (await response.json()) as { code: string }
-  return `${daemonUrl(port)}/sign-in?code=${code}&next=${encodeURIComponent(path)}`
+  return `${uiUrl(port)}/sign-in?code=${code}&next=${encodeURIComponent(path)}`
 }
 
 const waitFor = async (check: () => Promise<boolean>, timeout_ms: number): Promise<boolean> => {

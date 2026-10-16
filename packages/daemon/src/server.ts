@@ -16,7 +16,7 @@ import {
   type ReviewVerdict,
   type Thread,
 } from '@yart/core'
-import { healthProof, makeToken, sameSecret } from './auth.ts'
+import { healthProof, isUiHost, makeToken, sameSecret, uiUrl } from './auth.ts'
 import { buildReviewDiff } from './diff.ts'
 import { GitError, readBlob } from './git.ts'
 import { Repositories } from './repositories.ts'
@@ -161,8 +161,17 @@ const parseDescription = (value: unknown): string | null => {
 /** Only the person or an AI reviewer gives a verdict. The agent under review does not. */
 const SUBMITTERS: ReadonlySet<string> = new Set(['human', 'reviewer'])
 
-/** The names of this computer that a request to the daemon can use. */
+/**
+ * The names of this computer that a request to the daemon can use. The names of
+ * the web UI, such as `yart-7777.localhost`, are also allowed.
+ */
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** The port in a `Host` header, or null when it has none. */
+const hostPort = (host: string): number | null => {
+  const match = /:(\d{1,5})$/.exec(host.trim())
+  return match === null ? null : Number(match[1])
+}
 
 /** The name in a `Host` header, without the port, in lowercase. */
 export const hostName = (host: string): string => {
@@ -371,11 +380,34 @@ export const createServer = ({
    */
   app.use('*', async (context, next) => {
     const host = context.req.header('host')
-    if (host !== undefined && !LOCAL_HOSTS.has(hostName(host))) {
+    if (host !== undefined && !LOCAL_HOSTS.has(hostName(host)) && !isUiHost(hostName(host))) {
       return context.json<ErrorBody>(
         { error: `yart answers only requests to localhost, not to ${hostName(host)}.` },
         403,
       )
+    }
+    await next()
+  })
+
+  /**
+   * Sends a page of the browser to the name of the web UI.
+   *
+   * The sign-in sets the cookie of the person for the name in the address bar.
+   * On `127.0.0.1` or `localhost`, the browser would send that cookie to each
+   * web server on this computer. Thus a page on a different name goes to the
+   * name of the UI first. An old link to `127.0.0.1` also still works.
+   */
+  app.use('*', async (context, next) => {
+    const host = context.req.header('host')
+    const path = context.req.path
+    const page =
+      (context.req.method === 'GET' || context.req.method === 'HEAD') &&
+      !path.startsWith('/api/') &&
+      path !== '/health'
+    const port = host === undefined ? null : hostPort(host)
+    if (page && host !== undefined && port !== null && !isUiHost(hostName(host))) {
+      const url = new URL(context.req.url)
+      return context.redirect(`${uiUrl(port)}${url.pathname}${url.search}`, 307)
     }
     await next()
   })
@@ -471,6 +503,7 @@ export const createServer = ({
     if (expires_at === undefined || expires_at <= Date.now()) {
       return context.html(SIGN_IN_FAILED, 403)
     }
+    // No Domain attribute. Thus the cookie goes only to the name of the UI.
     setCookie(context, auth.cookie_name, auth.ui_token, {
       path: '/',
       // eslint-disable-next-line @typescript-eslint/naming-convention -- Hono's option name

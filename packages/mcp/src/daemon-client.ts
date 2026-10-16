@@ -10,6 +10,7 @@ import {
   defaultStateDir,
   foreignMessage,
   probeDaemon,
+  uiUrl,
   type Review,
 } from '@yart/daemon'
 
@@ -214,8 +215,9 @@ export class DaemonClient {
     return Buffer.from(await response.arrayBuffer()).toString('base64')
   }
 
+  /** The page of a review, on the name of the web UI. */
   reviewUrl(review_id: string): string {
-    return `${this.base_url}/reviews/${review_id}`
+    return `${uiUrl(this.port)}/reviews/${review_id}`
   }
 
   /**

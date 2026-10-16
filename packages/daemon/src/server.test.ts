@@ -937,6 +937,7 @@ describe('the Host header', () => {
     expect((await withHost('127.0.0.1:7777')).status).toBe(200)
     expect((await withHost('[::1]:7777')).status).toBe(200)
     expect((await withHost('LOCALHOST')).status).toBe(200)
+    expect((await withHost('yart-7777.localhost:7777')).status).toBe(200)
   })
 
   it('refuses a request that a browser sent to a different name', async () => {
@@ -947,6 +948,24 @@ describe('the Host header', () => {
 
   it('refuses a name that only starts like this computer', async () => {
     expect((await withHost('localhost.evil.example')).status).toBe(403)
+    expect((await withHost('yart-7777.localhost.evil.example')).status).toBe(403)
+    expect((await withHost('evil.yart-7777.localhost')).status).toBe(403)
+  })
+
+  it('sends a page on a different name to the name of the web UI', async () => {
+    const page = await app.request('/reviews/x?y=1', { headers: { host: '127.0.0.1:7777' } })
+    expect(page.status).toBe(307)
+    expect(page.headers.get('location')).toBe('http://yart-7777.localhost:7777/reviews/x?y=1')
+    const sign_in = await app.request('/sign-in?code=c', { headers: { host: 'localhost:5173' } })
+    expect(sign_in.headers.get('location')).toBe('http://yart-5173.localhost:5173/sign-in?code=c')
+  })
+
+  it('serves a page on the name of the web UI, and the API on each name', async () => {
+    const page = await app.request('/', { headers: { host: 'yart-7777.localhost:7777' } })
+    expect(page.status).not.toBe(307)
+    expect((await withHost('127.0.0.1:7777')).status).toBe(200)
+    const health = await app.request('/health', { headers: { host: '127.0.0.1:7777' } })
+    expect(health.status).toBe(200)
   })
 
   it('reads the name without the port', () => {
@@ -1146,6 +1165,8 @@ describe('authentication', () => {
     expect(cookie).toContain(`${auth.cookie_name}=${auth.ui_token}`)
     expect(cookie).toContain('HttpOnly')
     expect(cookie).toContain('SameSite=Strict')
+    // Host-only: the cookie goes only to the name in the address bar.
+    expect(cookie).not.toMatch(/domain=/i)
     expect((await raw.request(`/sign-in?code=${code}`)).status).toBe(403)
     expect((await raw.request('/sign-in?code=nope')).status).toBe(403)
   })

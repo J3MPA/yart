@@ -199,7 +199,7 @@ describe('start_review', () => {
   it('opens a review and reports the changed files', async () => {
     const rendered = await call('start_review', { base, head: 'HEAD' })
     expect(rendered).toContain('modified  a.txt')
-    expect(rendered).not.toContain(`http://127.0.0.1:${port}/reviews/`)
+    expect(rendered).not.toContain(`http://yart-${port}.localhost:${port}/reviews/`)
   })
 
   it('reports a bad revision as a tool error rather than throwing', async () => {
@@ -289,7 +289,7 @@ describe('opening the review', () => {
   it('shows a new review to the person who has to read it', async () => {
     const rendered = await call('start_review', { base })
     const review_id = idFrom(rendered)
-    expect(opened).toEqual([`http://127.0.0.1:${port}/reviews/${review_id}`])
+    expect(opened).toEqual([`http://yart-${port}.localhost:${port}/reviews/${review_id}`])
     expect(rendered).toContain('yart opened the review')
   })
 
@@ -313,7 +313,7 @@ describe('opening the review', () => {
     const result = await quiet_client.callTool({ name: 'start_review', arguments: { base } })
     const rendered = (result.content as { text: string }[])[0]?.text ?? ''
     expect(rendered).toContain('Ask the person to open the URL')
-    expect(rendered).toContain(`http://127.0.0.1:${port}/reviews/`)
+    expect(rendered).toContain(`http://yart-${port}.localhost:${port}/reviews/`)
     expect(opened).toEqual([])
 
     await quiet_client.close()

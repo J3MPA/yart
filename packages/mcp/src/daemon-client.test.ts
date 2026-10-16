@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, get, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { listenTestDaemon, type TestDaemon } from '@yart/daemon/test-daemon'
 import { TestRepo } from '@yart/daemon/test-repo'
@@ -100,10 +100,17 @@ describe('the daemon', () => {
     expect(link.origin).toBe('http://localhost:5173')
     expect(link.pathname).toBe('/sign-in')
     expect(link.searchParams.get('next')).toBe('/reviews/abc?x=1')
-    const signed_in = await fetch(
-      `${daemon.url}/sign-in?code=${link.searchParams.get('code')}&next=%2F`,
-      { redirect: 'manual' },
-    )
-    expect(signed_in.status).toBe(303)
+    // A browser sends the name of the UI in Host. A fetch cannot set Host.
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      get(
+        `${daemon.url}/sign-in?code=${link.searchParams.get('code')}&next=%2F`,
+        { headers: { host: `yart-${daemon.port}.localhost:${daemon.port}` } },
+        (response) => {
+          response.resume()
+          resolve(response.statusCode)
+        },
+      ).on('error', reject)
+    })
+    expect(status).toBe(303)
   })
 })
