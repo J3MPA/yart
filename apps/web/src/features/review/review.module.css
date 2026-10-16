@@ -541,6 +541,11 @@
   border-left-color: var(--yart-color-border-strong);
 }
 
+/* A verdict on an earlier round does not describe the code on the screen. */
+.verdict_earlier {
+  border-left-color: var(--yart-color-border);
+}
+
 /* An AI verdict is not the verdict of the person. Thus it has no verdict color. */
 .verdict_ai {
   border-left-color: var(--yart-color-accent);
