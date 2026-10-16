@@ -110,7 +110,11 @@ beforeEach(async () => {
   // a browser on the computer of the person who runs them.
   opened = []
   client = await connect({ openBrowser: (url) => opened.push(url) })
-  reviewer_client = await connect({ role: 'reviewer', openBrowser: () => undefined })
+  reviewer_client = await connect({
+    role: 'reviewer',
+    openBrowser: () => undefined,
+    author_quiet_ms: 0,
+  })
 })
 
 afterEach(async () => {
@@ -602,9 +606,35 @@ describe('an AI reviewer', () => {
       thread_id: threadIdFrom(author_view.split('Open comments')[1] ?? ''),
       body: 'I think TARGET is right here.',
     })
-    expect(await review('await_author', { review_id: id, timeout_seconds: 1 })).toContain(
-      'The author answered',
+    const answered = await review('await_author', { review_id: id, timeout_seconds: 1 })
+    expect(answered).toContain('The author answered, but did not change the code.')
+    expect(answered).toContain('call await_author again')
+  })
+
+  it('waits for a quiet time after replies, but wakes at once on new work', async () => {
+    const patient = await connect({ role: 'reviewer', openBrowser: () => undefined })
+    const id = idFrom(await call('start_review', { base, head: 'HEAD' }))
+    await callOn(patient, 'submit_verdict', {
+      review_id: id,
+      verdict: 'changes_requested',
+      comments: [{ path: 'a.txt', line: 2, body: 'rename this' }],
+    })
+    const author_view = await call('await_review', { review_id: id, timeout_seconds: 1 })
+    await call('reply_to_thread', {
+      review_id: id,
+      thread_id: threadIdFrom(author_view.split('Open comments')[1] ?? ''),
+      body: 'Renamed it. I commit it now.',
+    })
+    expect(await callOn(patient, 'await_author', { review_id: id, timeout_seconds: 1 })).toContain(
+      'did not answer',
     )
+
+    repo.write('a.txt', 'alpha\nrenamed\n')
+    repo.commit('rename')
+    await call('advance_review', { review_id: id, head: 'HEAD' })
+    const answered = await callOn(patient, 'await_author', { review_id: id, timeout_seconds: 1 })
+    expect(answered).toContain('The author answered. Do these steps')
+    await patient.close()
   })
 
   it('waits until the author answered each of its comments, and wakes one time', async () => {

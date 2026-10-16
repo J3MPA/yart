@@ -153,11 +153,16 @@ export interface McpServerOptions extends DaemonClientOptions {
    * option.
    */
   openBrowser?: (url: string) => void
+  /**
+   * How long the author must be quiet before replies with no new code wake the
+   * AI reviewer. The default is `AUTHOR_QUIET_MS`. Tests make it shorter.
+   */
+  author_quiet_ms?: number
 }
 
 export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
   const daemon = new DaemonClient(options)
-  const delivered = new Delivered()
+  const delivered = new Delivered(options.author_quiet_ms)
   /** Uploads images, and remembers them. The agent does not need its own images back. */
   const upload = async (review_id: string, paths: readonly string[] | undefined) => {
     const ids = await daemon.uploadImages(review_id, paths)
@@ -790,9 +795,10 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
       toolConfig({
         title: 'Wait for the author to answer',
         description:
-          'For an AI reviewer. Wait until the author answers your last verdict: the author moves ' +
-          'the review onto new work, or answers a comment. If the time stops first, you get the ' +
-          'open comments. That is not an error. Call it again to wait more.',
+          'For an AI reviewer. Wait until the author answers your last verdict. The author ' +
+          'moves the review onto new work, or answers each of your comments and then writes ' +
+          'nothing for one minute. If the time stops first, you get the open comments. That is ' +
+          'not an error. Call it again to wait more.',
         input_schema: {
           review_id: z.string(),
           timeout_seconds: z
@@ -842,10 +848,14 @@ export const createMcpServer = (options: McpServerOptions = {}): McpServer => {
                 answered.head_sha === verdict.head_sha ? 'none' : 'round',
               ),
               '',
-              'The author answered. Do these steps: read the new changes with get_diff and ' +
-                'since_last_verdict, and read the ' +
-                'answers above. Resolve each fixed comment with resolve_thread. Give your next ' +
-                'verdict with submit_verdict.',
+              answered.head_sha === verdict.head_sha
+                ? 'The author answered, but did not change the code. The diff is the same as at ' +
+                  'your last verdict. Read the answers above. If an answer says that the author ' +
+                  'will change the code, call await_author again. Else resolve each settled ' +
+                  'comment with resolve_thread, and give your next verdict with submit_verdict.'
+                : 'The author answered. Do these steps: read the new changes with get_diff and ' +
+                  'since_last_verdict, and read the answers above. Resolve each fixed comment ' +
+                  'with resolve_thread. Give your next verdict with submit_verdict.',
             ].join('\n'),
             images,
           )

@@ -35,6 +35,12 @@ export const threadIsAnswered = (thread: Thread): boolean => {
   return last !== undefined && last.author === 'agent'
 }
 
+/** The comments of the agent after a verdict, on the threads and on the verdict. */
+const agentCommentsAfter = (review: Review, verdict: ReviewSubmission) =>
+  [...review.threads.flatMap((thread) => thread.comments), ...verdict.comments].filter(
+    (comment) => comment.author === 'agent' && comment.created_at > verdict.created_at,
+  )
+
 /**
  * Tells if the agent under review completed its answer to the last verdict of
  * an AI reviewer. Then the turn goes to the reviewer.
@@ -49,17 +55,43 @@ export const authorHasAnswered = (review: Review): boolean => {
   const verdict = latestSubmission(review)
   if (verdict === null || submissionAuthor(verdict) !== 'reviewer') return false
   if (review.head_sha !== verdict.head_sha) return true
-  const spoken = [
-    ...review.threads.flatMap((thread) => thread.comments),
-    ...verdict.comments,
-  ].filter((comment) => comment.author === 'agent')
-  if (!spoken.some((comment) => comment.created_at > verdict.created_at)) return false
+  if (agentCommentsAfter(review, verdict).length === 0) return false
   return review.threads.every(
     (thread) =>
       thread.status !== 'open' ||
       !thread.comments.some((comment) => comment.author === 'reviewer') ||
       threadIsAnswered(thread),
   )
+}
+
+/**
+ * How long the agent must be quiet before replies with no new code wake the AI
+ * reviewer. The agent usually replies to each comment first. Then it runs the
+ * tests, commits and moves the review. These steps can take a minute.
+ */
+export const AUTHOR_QUIET_MS = 60_000
+
+/**
+ * Tells if the AI reviewer can look at the answer of the agent now.
+ *
+ * A move to new work wakes the reviewer at once. Replies with no new code wake
+ * it only after the agent was quiet for `quiet_ms`. Without this wait, the
+ * reviewer could wake after the last reply, before the move, and judge the old
+ * code. An agent that only disagrees, and changes no code, still wakes the
+ * reviewer after the wait.
+ */
+export const authorIsDone = (
+  review: Review,
+  quiet_ms: number = AUTHOR_QUIET_MS,
+  now: number = Date.now(),
+): boolean => {
+  if (!authorHasAnswered(review)) return false
+  const verdict = latestSubmission(review) as ReviewSubmission
+  if (review.head_sha !== verdict.head_sha) return true
+  const last = Math.max(
+    ...agentCommentsAfter(review, verdict).map((comment) => Date.parse(comment.created_at)),
+  )
+  return now - last >= quiet_ms
 }
 
 /**

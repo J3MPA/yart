@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { serve } from '@hono/node-server'
 import type { Server } from 'node:http'
-import { authorHasAnswered, latestSubmission, submissionAuthor } from '@yart/core'
+import { authorIsDone, latestSubmission, submissionAuthor } from '@yart/core'
 import { daemonUrl, LOOPBACK, makeToken, writeToken } from './auth.ts'
 import { daemonHealth, signInUrl, startDaemon, stopDaemon, waitForReview } from './control.ts'
 import { findRepoRoot, GitError } from './git.ts'
@@ -286,7 +286,7 @@ const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
       state_dir,
       review_id,
       timeout_ms,
-      done: authorHasAnswered,
+      done: (review) => authorIsDone(review),
     })
     if (answered === null) {
       process.stdout.write(
@@ -295,8 +295,11 @@ const awaitVerdict = async (argv: readonly string[]): Promise<number> => {
       return 2
     }
     process.stdout.write(
-      `yart: the author answered on ${review_id}. Read the new changes with get_diff and ` +
-        'since_last_verdict, and the answers with get_review.\n',
+      answered.head_sha === verdict.head_sha
+        ? `yart: the author answered on ${review_id}, but did not change the code. Read the ` +
+            'answers with get_review. Then give your next verdict with submit_verdict.\n'
+        : `yart: the author answered on ${review_id}. Read the new changes with get_diff and ` +
+            'since_last_verdict, and the answers with get_review.\n',
     )
     return 0
   }
