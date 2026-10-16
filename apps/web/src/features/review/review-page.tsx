@@ -36,7 +36,15 @@ import {
   useGetReviewDiffSinceQuery,
   useGetReviewQuery,
 } from './review-api'
-import { defaultRange, headSideOnly, roundOf, sinceHead, type DiffRange } from './round-range'
+import {
+  defaultRange,
+  headSideOnly,
+  openThreadsOutside,
+  roundOf,
+  sinceHead,
+  type DiffRange,
+} from './round-range'
+import { OutsideView } from './outside-view'
 import { describeQueryError } from './query-error'
 import { countOpen, groupThreadsByAnchor } from './thread-anchors'
 import { useAiRoundLimit } from './use-ai-round-limit'
@@ -176,6 +184,7 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
   const shown_threads = range === 'since' ? headSideOnly(threads_by_anchor) : threads_by_anchor
   const shown_drafting: Drafting =
     range === 'since' ? { ...drafting, by_anchor: headSideOnly(drafting.by_anchor) } : drafting
+  const outside = range === 'since' ? openThreadsOutside(review.threads, shown) : []
   const tab = (value: DiffRange) =>
     [styles.tab, range === value ? styles.tab_selected : ''].filter(Boolean).join(' ')
 
@@ -309,6 +318,15 @@ export const ReviewPage = ({ review_id }: ReviewPageProps) => {
           summary={summary}
           onSummaryChange={setSummary}
           onDone={() => setSubmitting(false)}
+        />
+      )}
+
+      {outside.length > 0 && (
+        <OutsideView
+          review_id={review_id}
+          threads={outside}
+          drafting={drafting}
+          onShowAll={() => setRangeChoice('all')}
         />
       )}
 
