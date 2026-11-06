@@ -89,25 +89,33 @@ const confirm = async (question: string): Promise<boolean> => {
   return answer.trim().toLowerCase() === 'y'
 }
 
-/** The id of the run of the release workflow for the tag, or null when it does not start. */
-const findReleaseRun = async (tag: string): Promise<string | null> => {
+/** The ids of the runs of the release workflow for a tag, newest first. */
+const releaseRunIds = async (tag: string): Promise<string[]> => {
+  const ids = await run('gh', [
+    'run',
+    'list',
+    '--workflow',
+    RELEASE_WORKFLOW,
+    '--branch',
+    tag,
+    '--json',
+    'databaseId',
+    '--jq',
+    '.[].databaseId',
+  ])
+  return ids === '' ? [] : ids.split('\n')
+}
+
+/**
+ * The id of the run that the push of the tag started, or null when no run
+ * starts. A tag that was pushed before has older runs with the same name. Thus
+ * only a run that was not there before the push counts.
+ */
+const findReleaseRun = async (tag: string, earlier: ReadonlySet<string>) => {
   const stop_at = Date.now() + RUN_SEARCH_MS
   while (Date.now() < stop_at) {
-    const id = await run('gh', [
-      'run',
-      'list',
-      '--workflow',
-      RELEASE_WORKFLOW,
-      '--branch',
-      tag,
-      '--limit',
-      '1',
-      '--json',
-      'databaseId',
-      '--jq',
-      '.[0].databaseId // ""',
-    ])
-    if (id !== '') return id
+    const id = (await releaseRunIds(tag)).find((candidate) => !earlier.has(candidate))
+    if (id !== undefined) return id
     await delay(3000)
   }
   return null
@@ -143,11 +151,12 @@ const main = async () => {
   if (!(await testOnThisMac(sha))) fail('the tests failed on this Mac.')
 
   if (!(await confirm(`Push the tag ${tag}? This publishes the release.`))) fail('stopped.')
+  const earlier = new Set(await releaseRunIds(tag))
   await run('git', ['tag', tag, sha])
   await run('git', ['push', 'origin', tag])
   say(`Pushed ${tag}.`)
 
-  const run_id = await findReleaseRun(tag)
+  const run_id = await findReleaseRun(tag, earlier)
   if (run_id === null) fail('the release workflow did not start. Look at the Actions tab.')
   const watched = await runVisible(
     'gh',
